@@ -19,6 +19,9 @@ if A and type(A.can_get) == 'function' and A.can_get('lua', 'mods/chef_shared_lo
   if ok then return end
 end
 
+-- Forward declaration of persistent settings saver
+local save_persistent_settings
+
 -- ==============================================================================
 -- 1. ENGINE ENTRYPOINT ASSIGNMENT & SAFE CHAINING
 -- ==============================================================================
@@ -39,13 +42,15 @@ local UniversalLoader_update
 local UniversalLoader_render
 local UniversalLoader_shutdown
 
-init = function(...)
+local function handle_init(...)
     return prev_init(...)
 end
+_G.init = handle_init
+init = handle_init
 
-update = function(dt, ...)
+local function handle_update(dt, ...)
     if UniversalLoader_update then
-        UniversalLoader_update(dt)
+        pcall(UniversalLoader_update, dt)
     end
     for i = 1, #update_order do
         local id = update_order[i]
@@ -67,17 +72,21 @@ update = function(dt, ...)
     end
     return prev_update(dt, ...)
 end
+_G.update = handle_update
+update = handle_update
 
-render = function(...)
+local function handle_render(...)
     if UniversalLoader_render then
-        UniversalLoader_render(...)
+        pcall(UniversalLoader_render, ...)
     end
     return prev_render(...)
 end
+_G.render = handle_render
+render = handle_render
 
-shutdown = function(...)
+local function handle_shutdown(...)
     if UniversalLoader_shutdown then
-        UniversalLoader_shutdown()
+        pcall(UniversalLoader_shutdown)
     end
     for i = 1, #shutdown_order do
         local id = shutdown_order[i]
@@ -88,6 +97,8 @@ shutdown = function(...)
     end
     return prev_shutdown(...)
 end
+_G.shutdown = handle_shutdown
+shutdown = handle_shutdown
 
 -- ==============================================================================
 -- 2. PURE LUA 5.1 BITWISE LIBRARY & 64-BIT MURMURHASH64A
@@ -287,7 +298,7 @@ local function murmurhash64a(str, seed)
         k_l, k_h = xor64(k_l, k_h, s_l, s_h)
         k_l, k_h = mul64(k_l, k_h, m[2], m[1])
 
-        h_l, h_h = xor64(h_low, h_high, k_l, k_h)
+        local h_l, h_h = xor64(h_low, h_high, k_l, k_h)
         h_low, h_high = mul64(h_l, h_h, m[2], m[1])
         pos = pos + 8
     end
@@ -322,14 +333,17 @@ end
 -- ==============================================================================
 -- 3. NON-CRASHING FFI / WIN32 COMPATIBILITY STUBS & MOCK POINTERS
 -- ==============================================================================
-local ffi = {}
-local ptr_mt = {
+local ffi = {
+    os = "Windows",
+    arch = "x64"
+}
+local ptr_mt
+ptr_mt = {
     __index = function(t, k)
-        if type(k) == "number" then return 0 end
+        if type(k) == "number" then return rawget(t, k) or 0 end
         return rawget(t, k)
     end,
     __newindex = function(t, k, v)
-        if type(k) == "number" then return end
         rawset(t, k, v)
     end,
     __tostring = function(t)
@@ -372,9 +386,16 @@ local function make_mock_pointer(addr)
     return setmetatable({ _addr = tonumber(addr) or 0 }, ptr_mt)
 end
 
+function ffi.abi(param)
+    return true
+end
 function ffi.cdef(def) end
 function ffi.new(ct, init)
-    return make_mock_pointer(type(init) == "number" and init or 0)
+    local p = make_mock_pointer(type(init) == "number" and init or 0)
+    if type(init) == "table" then
+        for k, v in pairs(init) do p[k] = v end
+    end
+    return p
 end
 function ffi.cast(ct, val)
     return make_mock_pointer(type(val) == "table" and rawget(val, "_addr") or tonumber(val) or 0)
@@ -384,12 +405,105 @@ function ffi.sizeof(ct) return 8 end
 function ffi.alignof(ct) return 8 end
 function ffi.offsetof(ct, field) return 0 end
 function ffi.istype(ct, obj) return true end
-function ffi.string(ptr, len) return "" end
+function ffi.string(ptr, len)
+    if type(len) == "number" and len > 0 then
+        return string.rep("\0", len)
+    end
+    return ""
+end
 function ffi.copy(dst, src, len) end
 function ffi.fill(dst, len, val) end
 
 -- Win32 / Kernel32 Emulation
-local kernel32 = {
+local function win32_fallback(t, k)
+    local k_str = tostring(k)
+    local k_clean = k_str:lower()
+
+    if k_clean:find("getcurrentprocess") and not k_clean:find("id") then
+        local fn = function() return make_mock_pointer(0xFFFFFFFF) end
+        rawset(t, k, fn)
+        return fn
+    elseif k_clean:find("getcurrentprocessid") then
+        local fn = function() return 1000 end
+        rawset(t, k, fn)
+        return fn
+    elseif k_clean:find("getcurrentthreadid") then
+        local fn = function() return 1001 end
+        rawset(t, k, fn)
+        return fn
+    elseif k_clean:find("getmodulehandle") then
+        local fn = function(name) return make_mock_pointer(0x140000000) end
+        rawset(t, k, fn)
+        return fn
+    elseif k_clean:find("getmodulefilename") then
+        local fn = function(mod, buf, cap) return 0 end
+        rawset(t, k, fn)
+        return fn
+    elseif k_clean:find("queryperformancefrequency") then
+        local fn = function(lpFreq) return 1 end
+        rawset(t, k, fn)
+        return fn
+    elseif k_clean:find("queryperformancecounter") then
+        local fn = function(lpCount) return 1 end
+        rawset(t, k, fn)
+        return fn
+    elseif k_clean:find("gettickcount") then
+        local fn = function() return floor(os.clock() * 1000) end
+        rawset(t, k, fn)
+        return fn
+    elseif k_clean:find("createfile") then
+        local fn = function(...) return make_mock_pointer(0x10) end
+        rawset(t, k, fn)
+        return fn
+    elseif k_clean:find("closehandle") then
+        local fn = function(h) return 1 end
+        rawset(t, k, fn)
+        return fn
+    elseif k_clean:find("readfile") then
+        local fn = function(...) return 1 end
+        rawset(t, k, fn)
+        return fn
+    elseif k_clean:find("writefile") then
+        local fn = function(...) return 1 end
+        rawset(t, k, fn)
+        return fn
+    elseif k_clean:find("setfilepointer") then
+        local fn = function(...) return 0 end
+        rawset(t, k, fn)
+        return fn
+    elseif k_clean:find("setendoffile") then
+        local fn = function(...) return 1 end
+        rawset(t, k, fn)
+        return fn
+    elseif k_clean:find("virtualquery") then
+        local fn = function(...) return 0 end
+        rawset(t, k, fn)
+        return fn
+    elseif k_clean:find("readprocessmemory") then
+        local fn = function(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesRead)
+            if type(lpNumberOfBytesRead) == "table" then
+                pcall(function() lpNumberOfBytesRead[0] = nSize end)
+            end
+            return 1
+        end
+        rawset(t, k, fn)
+        return fn
+    elseif k_clean:find("writeprocessmemory") then
+        local fn = function(...) return 0 end
+        rawset(t, k, fn)
+        return fn
+    end
+
+    local fallback = function(...) return 0 end
+    rawset(t, k, fallback)
+    return fallback
+end
+
+local win32_lib_mt = {
+    __index = win32_fallback
+}
+
+local kernel32 = setmetatable({
     GetTickCount64 = function() return floor(os.clock() * 1000) end,
     GetTickCount = function() return floor(os.clock() * 1000) % BIT_MOD end,
     QueryPerformanceCounter = function(lpPerformanceCount) return 1 end,
@@ -398,22 +512,29 @@ local kernel32 = {
     GetCurrentProcessId = function() return 1000 end,
     GetCurrentThreadId = function() return 1001 end,
     VirtualQuery = function() return 0 end,
-    ReadProcessMemory = function() return 0 end,
+    ReadProcessMemory = function(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesRead)
+        if type(lpNumberOfBytesRead) == "table" then
+            pcall(function() lpNumberOfBytesRead[0] = nSize end)
+        end
+        return 1
+    end,
     MBM_ReadProcessMemory = function() return 0 end,
     MBM_VirtualQuery = function() return 0 end,
     MBM_read_at = function() return 0 end
+}, win32_lib_mt)
+
+ffi.C = setmetatable({}, win32_lib_mt)
+
+local loaded_libs = {
+    kernel32 = kernel32
 }
 
-ffi.C = setmetatable({}, {
-    __index = function(t, k)
-        if kernel32[k] then return kernel32[k] end
-        return function() return 0 end
-    end
-})
-
 function ffi.load(name)
-    if tostring(name):lower():find("kernel32") then return kernel32 end
-    return ffi.C
+    local n = tostring(name):lower():match("([%w_-]+)%.?d?l?l?$") or tostring(name):lower()
+    if not loaded_libs[n] then
+        loaded_libs[n] = setmetatable({}, win32_lib_mt)
+    end
+    return loaded_libs[n]
 end
 
 _G.ffi = ffi
@@ -556,7 +677,7 @@ local function json_deserialize(str)
         else pos = pos + 1; return nil end
     end
     local ok, res = pcall(parse_val)
-    return ok and res or nil
+    if ok then return res else return nil end
 end
 
 -- ==============================================================================
@@ -623,26 +744,45 @@ local function log_message(prefix, fmt_str, ...)
     end
 end
 
+_G.UniversalState = UniversalState
+_G.UniversalModLoader = {
+    version = UniversalState.version,
+    revision = UniversalState.revision,
+    api_levels = UniversalState.api_levels,
+    state = UniversalState,
+    active_mods = UniversalState.active_mods,
+    log = function(...) log_message("UniversalLoader", ...) end
+}
+package.preload["UniversalModLoader"] = function() return _G.UniversalModLoader end
+
 -- ==============================================================================
 -- 6. BINGUS SHARED LOADER API & BINGUS RUNTIME V1
 -- ==============================================================================
-local CowboyBingusModLoader = {
+local CowboyBingusModLoader
+local capabilities_data = {
+    api = 1,
+    build_gate = false,
+    addon_discovery = 1,
+    shared_loader_api = 1,
+    logs = true,
+    discovery = true,
+    after_startup = true,
+    jit_budget = false,
+    health = true,
+    on_update = true,
+    universal_compat = 1
+}
+local capabilities_locked = setmetatable({}, {
+    __index = capabilities_data,
+    __newindex = function() error("capabilities table is read-only", 2) end,
+    __metatable = false
+})
+
+CowboyBingusModLoader = {
     api = 1,
     version = 17,
     revision = "loader-v22.0.0",
-    capabilities = {
-        api = 1,
-        build_gate = false,
-        addon_discovery = 1,
-        shared_loader_api = 1,
-        logs = true,
-        discovery = true,
-        after_startup = true,
-        jit_budget = false,
-        health = true,
-        on_update = true,
-        universal_compat = 1
-    },
+    capabilities = capabilities_locked,
     log_directory = get_log_dir(),
     after_startup = function(fn)
         if type(fn) == "function" then
@@ -679,7 +819,11 @@ local CowboyBingusModLoader = {
         local f = io.open(dir .. "/" .. name, "a")
         if not f then f = io.open(name, "a") end
         return f or {
-            write = function(self, s) log_message("ModLog:" .. name, "%s", tostring(s)) end,
+            write = function(self, ...)
+                local args = {...}
+                local s = concat(args, "")
+                log_message("ModLog:" .. name, "%s", tostring(s))
+            end,
             flush = function() end,
             close = function() end
         }
@@ -687,8 +831,10 @@ local CowboyBingusModLoader = {
 }
 _G.CowboyBingusModLoader = CowboyBingusModLoader
 _G.HD2ModLoader = CowboyBingusModLoader
+package.preload["CowboyBingusModLoader"] = function() return CowboyBingusModLoader end
 
-local BingusRuntime = {
+local BingusRuntime
+BingusRuntime = {
     shared = {
         version = 1,
         statuses = {},
@@ -714,11 +860,13 @@ local BingusRuntime = {
     end
 }
 _G.BingusRuntime = BingusRuntime
+package.preload["BingusRuntime"] = function() return BingusRuntime end
 
 -- ==============================================================================
 -- 7. BUILT-IN MOD OPTIONS MENU (MOM v2)
 -- ==============================================================================
-local ModOptionsMenu = {
+local ModOptionsMenu
+ModOptionsMenu = {
     api = 1,
     version = 2,
     registered = {},
@@ -732,14 +880,25 @@ local ModOptionsMenu = {
         end
         return true
     end,
-    get = function(id) return ModOptionsMenu.values[id] end,
+    get = function(id)
+        if ModOptionsMenu.values[id] ~= nil then
+            return ModOptionsMenu.values[id]
+        end
+        local spec = ModOptionsMenu.registered[id]
+        if spec and spec.default ~= nil then
+            return spec.default
+        end
+        return nil
+    end,
     set = function(id, val)
         ModOptionsMenu.values[id] = val
         local cb = ModOptionsMenu.change_callbacks[id]
         if type(cb) == "function" then
             pcall(cb, val, id)
         end
-        save_persistent_settings()
+        if save_persistent_settings then
+            save_persistent_settings()
+        end
         return true
     end,
     on_change = function(id, fn)
@@ -752,11 +911,13 @@ local ModOptionsMenu = {
     ready = function() return true end
 }
 _G.ModOptionsMenu = ModOptionsMenu
+package.preload["ModOptionsMenu"] = function() return ModOptionsMenu end
 
 -- ==============================================================================
 -- 8. BUILT-IN MOD BINDINGS MENU (MBM v4) & KEY STATE TRACKING
 -- ==============================================================================
-local ModBindingsMenu = {
+local ModBindingsMenu
+ModBindingsMenu = {
     api = 1,
     version = 4,
     revision = 1,
@@ -849,7 +1010,9 @@ function ModBindingsMenu.set_binding(id, spec)
         ModBindingsMenu.registry[id].current = key_name
     end
     ModBindingsMenu.revision = ModBindingsMenu.revision + 1
-    save_persistent_settings()
+    if save_persistent_settings then
+        save_persistent_settings()
+    end
     return true
 end
 
@@ -879,34 +1042,63 @@ end
 
 _G.ModBindingsMenu = ModBindingsMenu
 _G.CowboyBingusModBindings = ModBindingsMenu
+package.preload["ModBindingsMenu"] = function() return ModBindingsMenu end
+package.preload["CowboyBingusModBindings"] = function() return ModBindingsMenu end
 
--- Key Polling on Each Frame
+-- Key Polling with Compound Modifier Support (e.g. "ctrl+h", "shift+f")
+local function check_button_state(kb, mouse, name, check_type)
+    if not name or name == "NONE" then return false end
+    local has_ctrl = name:find("ctrl%+")
+    local has_shift = name:find("shift%+")
+    local has_alt = name:find("alt%+")
+    local main_key = name:gsub("ctrl%+", ""):gsub("shift%+", ""):gsub("alt%+", ""):gsub("^%s+", ""):gsub("%s+$", "")
+
+    if has_ctrl and kb and kb.button_index then
+        local lctrl = kb.button_index("left ctrl")
+        local rctrl = kb.button_index("right ctrl")
+        local ctrl_down = (lctrl and kb.button and kb.button(lctrl) == 1) or (rctrl and kb.button and kb.button(rctrl) == 1)
+        if not ctrl_down then return false end
+    end
+    if has_shift and kb and kb.button_index then
+        local lshift = kb.button_index("left shift")
+        local rshift = kb.button_index("right shift")
+        local shift_down = (lshift and kb.button and kb.button(lshift) == 1) or (rshift and kb.button and kb.button(rshift) == 1)
+        if not shift_down then return false end
+    end
+    if has_alt and kb and kb.button_index then
+        local lalt = kb.button_index("left alt")
+        local ralt = kb.button_index("right alt")
+        local alt_down = (lalt and kb.button and kb.button(lalt) == 1) or (ralt and kb.button and kb.button(ralt) == 1)
+        if not alt_down then return false end
+    end
+
+    local idx = kb and kb.button_index and kb.button_index(main_key)
+    if idx then
+        if check_type == "down" then return kb.button and kb.button(idx) == 1 end
+        if check_type == "pressed" then return kb.pressed and kb.pressed(idx) == 1 end
+        if check_type == "released" then return kb.released and kb.released(idx) == 1 end
+    elseif mouse and mouse.button_index then
+        local midx = mouse.button_index(main_key)
+        if midx then
+            if check_type == "down" then return mouse.button and mouse.button(midx) == 1 end
+            if check_type == "pressed" then return mouse.pressed and mouse.pressed(midx) == 1 end
+            if check_type == "released" then return mouse.released and mouse.released(midx) == 1 end
+        end
+    end
+    return false
+end
+
 local function update_bindings_state()
     local sr = rawget(_G, "stingray")
-    if not sr or not sr.Keyboard or not sr.Keyboard.button_index then return end
-
+    if not sr then return end
     local kb = sr.Keyboard
     local mouse = sr.Mouse
 
     for id, record in pairs(ModBindingsMenu.registry) do
         local key = ModBindingsMenu.bindings[id]
-        local is_down, is_pressed, is_released = false, false, false
-
-        if key and key ~= "NONE" then
-            local idx = kb.button_index(key)
-            if idx then
-                if kb.button and kb.button(idx) == 1 then is_down = true end
-                if kb.pressed and kb.pressed(idx) == 1 then is_pressed = true end
-                if kb.released and kb.released(idx) == 1 then is_released = true end
-            elseif mouse and mouse.button_index then
-                local midx = mouse.button_index(key)
-                if midx then
-                    if mouse.button and mouse.button(midx) == 1 then is_down = true end
-                    if mouse.pressed and mouse.pressed(midx) == 1 then is_pressed = true end
-                    if mouse.released and mouse.released(midx) == 1 then is_released = true end
-                end
-            end
-        end
+        local is_down = check_button_state(kb, mouse, key, "down")
+        local is_pressed = check_button_state(kb, mouse, key, "pressed")
+        local is_released = check_button_state(kb, mouse, key, "released")
 
         local st = ModBindingsMenu.states[id]
         if not st then
@@ -927,8 +1119,7 @@ local function load_persistent_settings()
     local path = sdir .. [[\settings.json]]
     local f = io.open(path, "r")
     if not f then
-        -- Check legacy CowboyBingus path
-        local ldir = get_log_dir():gsub("Logs$", "Settings")
+        local ldir = get_log_dir():gsub("[Ll]ogs[/\\]?$", "Settings")
         f = io.open(ldir .. [[\universal_settings.json]], "r")
     end
     if not f then return end
@@ -954,7 +1145,7 @@ local function load_persistent_settings()
     log_message("Settings", "Loaded persistent mod options and keybindings from disk.")
 end
 
-function save_persistent_settings()
+save_persistent_settings = function()
     local sdir = get_settings_dir()
     local path = sdir .. [[\settings.json]]
     local payload = {
@@ -971,8 +1162,9 @@ function save_persistent_settings()
         f:write(str)
         f:close()
     else
-        -- Fallback to log dir / current directory
-        local f_alt = io.open(get_log_dir() .. [[\..\Settings\universal_settings.json]], "w")
+        local ldir = get_log_dir():gsub("[Ll]ogs[/\\]?$", "Settings")
+        pcall(os.execute, 'mkdir "' .. ldir .. '" 2>nul')
+        local f_alt = io.open(ldir .. [[\universal_settings.json]], "w")
         if f_alt then
             f_alt:write(str)
             f_alt:close()
@@ -983,7 +1175,8 @@ end
 -- ==============================================================================
 -- 10. BOOT MOD LOADER API (VeganSquid) & HD2 RUNTIME (hd2rt)
 -- ==============================================================================
-local BootModLoader = {
+local BootModLoader
+BootModLoader = {
     api = 1,
     version = 1,
     hooks = {},
@@ -996,6 +1189,7 @@ local BootModLoader = {
     end
 }
 _G.BootModLoader = BootModLoader
+package.preload["BootModLoader"] = function() return BootModLoader end
 
 local hd2rt = {
     _VERSION = "0.1.0",
@@ -1021,6 +1215,8 @@ local hd2rt = {
     end
 }
 _G.hd2rt = hd2rt
+package.preload["hd2rt"] = function() return hd2rt end
+package.preload["hd2runtime"] = function() return hd2rt end
 
 -- ==============================================================================
 -- 11. CHEF SHARED LOADER API EMULATION (API Levels 1, 2, 3)
@@ -1033,7 +1229,6 @@ local function create_chef_api_table(mod_id)
         mod_id = mod_id
     }
 
-    -- 1. Hooking & Lifecycle
     chef.on = function(event_name, callback)
         if event_name == "update" and type(callback) == "function" then
             local id = "chef_" .. tostring(mod_id) .. "_" .. tostring(#update_order + 1)
@@ -1048,13 +1243,11 @@ local function create_chef_api_table(mod_id)
         end
     end
 
-    -- 2. State & Messaging
     chef.state = {
         get = function(key) return UniversalState.shared_values[key] end,
         set = function(key, val) UniversalState.shared_values[key] = val end
     }
 
-    -- 3. Options Spec Integration
     chef.options = {
         register = function(spec)
             if type(spec) == "table" and spec.id then
@@ -1065,7 +1258,6 @@ local function create_chef_api_table(mod_id)
         set = function(id, val) return ModOptionsMenu.set(id, val) end
     }
 
-    -- 4. Keybindings Integration
     chef.bindings = {
         register = function(id, label, default_key)
             ModBindingsMenu.register_binding(id, label, nil, { default = default_key })
@@ -1075,13 +1267,14 @@ local function create_chef_api_table(mod_id)
         get = function(id) return ModBindingsMenu.binding(id) end
     }
 
-    -- 5. Safe Logging
     chef.log = function(fmt, ...)
         log_message(mod_id, fmt, ...)
     end
 
     return chef
 end
+_G.ChefSharedLoader = create_chef_api_table("ChefSharedLoader")
+package.preload["ChefSharedLoader"] = function() return _G.ChefSharedLoader end
 
 -- ==============================================================================
 -- 12. UNIVERSAL ADDON DISCOVERY & EXECUTION GATEWAY
@@ -1094,6 +1287,16 @@ local function strip_bom(str)
 end
 
 local function execute_mod_script(mod_name, source_code, archive_name)
+    if mod_name:find("cowboybingus/mod_options_menu") or mod_name:find("cowboybingus/mod_bindings_menu") then
+        log_message("UniversalLoader", "Superseding legacy standalone %s (unified built-in engine active)", mod_name)
+        UniversalState.active_mods[mod_name] = {
+            name = mod_name,
+            archive = archive_name,
+            status = "superseded_by_builtin"
+        }
+        return true
+    end
+
     local clean_source = strip_bom(source_code)
     local fn, err = loadstring(clean_source, mod_name)
     if not fn then
@@ -1130,7 +1333,7 @@ local function execute_mod_script(mod_name, source_code, archive_name)
     end
 
     package.loaded[mod_name] = res or true
-    CowboyBingusModLoader.capabilities.addon_discovery = 1
+    capabilities_data.addon_discovery = 1
     UniversalState.active_mods[mod_name] = {
         name = mod_name,
         archive = archive_name,
@@ -1144,6 +1347,15 @@ end
 -- ==============================================================================
 -- 13. DYNAMIC ARCHIVE DISCOVERY & DEDUPLICATION (PATCH_0..255)
 -- ==============================================================================
+local LUA_RESOURCE_TYPE = "\226\23\209\44\250\141\78\161"
+local ARCHIVE_MAGIC = 0xF0000011
+
+local function read_u32(str, off)
+    local b0, b1, b2, b3 = str:byte(off + 1, off + 4)
+    if not b3 then return 0 end
+    return b0 + b1 * 256 + b2 * 65536 + b3 * 16777216
+end
+
 local function discover_installed_mods()
     local data_dir = "data"
     local candidates = {}
@@ -1153,42 +1365,83 @@ local function discover_installed_mods()
         local patch_filename = format("%s/9ba626afa44a3aa3.patch_%d", data_dir, patch_num)
         local f = io.open(patch_filename, "rb")
         if f then
-            local header = f:read(1024)
-            if header then
-                local mod_name = header:match("%-%-%s*HD2%-Addon:%s*([^\r\n]+)")
-                local is_boot = header:match("%-%-%s*HD2%-Boot:%s*([^\r\n]+)")
-                local is_options = header:match("%-%-%s*HD2%-Options:%s*([^\r\n]+)")
-                local target_name = mod_name or is_boot or is_options
+            local hdr = f:read(72)
+            if hdr and #hdr == 72 and read_u32(hdr, 0) == ARCHIVE_MAGIC then
+                -- Stingray binary patch bundle! Parse entry table
+                local ntypes = read_u32(hdr, 4)
+                local nentries = read_u32(hdr, 8)
+                local entry_base = 72 + 32 * ntypes
+                for i = 0, nentries - 1 do
+                    f:seek("set", entry_base + i * 80)
+                    local ent = f:read(80)
+                    if ent and #ent == 80 and ent:sub(9, 16) == LUA_RESOURCE_TYPE then
+                        local off = read_u32(ent, 16)
+                        local sz = read_u32(ent, 56)
+                        if off > 0 and sz >= 8 then
+                            f:seek("set", off + 8)
+                            local code = f:read(sz - 8)
+                            if code and #code > 0 then
+                                local target_name = code:match("%-%-%s*HD2%-Addon:%s*([^\r\n]+)")
+                                    or code:match("%-%-%s*HD2%-Boot:%s*([^\r\n]+)")
+                                    or code:match("%-%-%s*HD2%-Options:%s*([^\r\n]+)")
 
-                if target_name then
-                    f:seek("set", 0)
-                    local full_content = f:read("*a")
-                    f:close()
-
-                    if candidates[target_name] then
-                        log_message("UniversalLoader", "Overriding %s (patch_%d replaced by higher patch_%d)",
-                            target_name, candidates[target_name].patch_num, patch_num)
-                        candidates[target_name] = {
-                            name = target_name,
-                            content = full_content,
-                            patch_num = patch_num,
-                            archive = format("9ba626afa44a3aa3.patch_%d", patch_num)
-                        }
-                    else
-                        candidates[target_name] = {
-                            name = target_name,
-                            content = full_content,
-                            patch_num = patch_num,
-                            archive = format("9ba626afa44a3aa3.patch_%d", patch_num)
-                        }
-                        candidate_order[#candidate_order + 1] = target_name
+                                if target_name then
+                                    target_name = target_name:gsub("^%s+", ""):gsub("%s+$", "")
+                                    if candidates[target_name] then
+                                        log_message("UniversalLoader", "Overriding %s (patch_%d replaced by higher patch_%d)",
+                                            target_name, candidates[target_name].patch_num, patch_num)
+                                        candidates[target_name] = {
+                                            name = target_name,
+                                            content = code,
+                                            patch_num = patch_num,
+                                            archive = format("9ba626afa44a3aa3.patch_%d", patch_num)
+                                        }
+                                    else
+                                        candidates[target_name] = {
+                                            name = target_name,
+                                            content = code,
+                                            patch_num = patch_num,
+                                            archive = format("9ba626afa44a3aa3.patch_%d", patch_num)
+                                        }
+                                        candidate_order[#candidate_order + 1] = target_name
+                                    end
+                                end
+                            end
+                        end
                     end
-                else
-                    f:close()
                 end
             else
-                f:close()
+                -- Raw plain-text Lua patch file (Chef-style raw patch)
+                f:seek("set", 0)
+                local code = f:read("*a")
+                if code and #code > 0 then
+                    local target_name = code:match("%-%-%s*HD2%-Addon:%s*([^\r\n]+)")
+                        or code:match("%-%-%s*HD2%-Boot:%s*([^\r\n]+)")
+                        or code:match("%-%-%s*HD2%-Options:%s*([^\r\n]+)")
+                    if target_name then
+                        target_name = target_name:gsub("^%s+", ""):gsub("%s+$", "")
+                        if candidates[target_name] then
+                            log_message("UniversalLoader", "Overriding %s (patch_%d replaced by higher patch_%d)",
+                                target_name, candidates[target_name].patch_num, patch_num)
+                            candidates[target_name] = {
+                                name = target_name,
+                                content = code,
+                                patch_num = patch_num,
+                                archive = format("9ba626afa44a3aa3.patch_%d", patch_num)
+                            }
+                        else
+                            candidates[target_name] = {
+                                name = target_name,
+                                content = code,
+                                patch_num = patch_num,
+                                archive = format("9ba626afa44a3aa3.patch_%d", patch_num)
+                            }
+                            candidate_order[#candidate_order + 1] = target_name
+                        end
+                    end
+                end
             end
+            f:close()
         end
     end
 
@@ -1219,11 +1472,14 @@ local COMMON_SCAN_KEYS = {
 
 local function handle_menu_input()
     local sr = rawget(_G, "stingray")
-    if not sr or not sr.Keyboard or not sr.Keyboard.button_index then return end
+    if not sr then return end
 
     local function key_pressed(name)
-        local idx = sr.Keyboard.button_index(name)
-        return idx and sr.Keyboard.pressed and sr.Keyboard.pressed(idx) == 1
+        local idx = sr.Keyboard and sr.Keyboard.button_index and sr.Keyboard.button_index(name)
+        if idx and sr.Keyboard.pressed and sr.Keyboard.pressed(idx) == 1 then return true end
+        local midx = sr.Mouse and sr.Mouse.button_index and sr.Mouse.button_index(name)
+        if midx and sr.Mouse.pressed and sr.Mouse.pressed(midx) == 1 then return true end
+        return false
     end
 
     if key_pressed("f2") or key_pressed("f9") then
@@ -1308,10 +1564,10 @@ local function handle_menu_input()
                 local max_val = spec.max or 1e9
                 local num = tonumber(cur_val) or 0
                 if step_left then
-                    num = math.max(min_val, num - step)
+                    num = math.max(min_val, math.min(max_val, num - step))
                     ModOptionsMenu.set(cur_id, num)
                 elseif step_right or toggle then
-                    num = math.min(max_val, num + step)
+                    num = math.max(min_val, math.min(max_val, num + step))
                     ModOptionsMenu.set(cur_id, num)
                 end
             end
@@ -1443,7 +1699,9 @@ UniversalLoader_render = function(...)
 end
 
 UniversalLoader_shutdown = function()
-    save_persistent_settings()
+    if save_persistent_settings then
+        save_persistent_settings()
+    end
     log_message("UniversalLoader", "Shutting down active mods...")
     UniversalState.active_mods = {}
     if UniversalState.log_file then
