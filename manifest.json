@@ -1,0 +1,17 @@
+{
+  "Version": 1,
+  "Guid": "8c41f92e-3990-4c6e-8260-93a8d9d52b11",
+  "Name": "Helldivers 2 Universal Mod Loader - v22.0.0",
+  "Description": "Unified pure-Lua 5.1 mod loader combining Bingus, Chef, BootModLoader, and HD2Runtime with built-in Options & Bindings menus.",
+  "Options": [
+    {
+      "Name": "Universal Mod Loader - v22.0.0",
+      "Description": "Unified pure-Lua 5.1 mod loader combining Bingus, Chef, BootModLoader, and HD2Runtime with built-in Options & Bindings menus.",
+      "Include": [
+        "data"
+      ],
+      "Image": "thumbnail.png"
+    }
+  ],
+  "IconPath": "thumbnail.png"
+}
