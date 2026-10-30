@@ -7,14 +7,14 @@ Unifies all four Helldivers 2 modding standards into a single engine boot loader
   2. Chef Shared Loader (API Levels 1, 2, 3, HD2-Addon, HD2-Boot, HD2-Options, cooperative handoff)
   3. Boot Mod Loader (VeganSquid API 1)
   4. HD2 Lua Runtime (hd2rt / 0.1.0)
-  5. Built-in Mod Options Menu (MOM v2) with 1-based choice indexing, slider snapping, & localization callables
-  6. Built-in Mod Bindings Menu (MBM v4) with pure Stingray Keyboard/Mouse input polling
+  5. Built-in Mod Options Menu (MOM v3) with 1-based choice indexing, slider snapping, localization callables, & legacy ModOptionsMenu.values migration
+  6. Built-in Mod Bindings Menu (MBM v4) with Stingray button_id/button_index polyfill & boolean/numeric polling
 
 Features in v22.0.0:
-- Built-in Mod Options (MOM v2) & Mod Bindings (MBM v4): Replaces standalone mod_options_menu and
+- Built-in Mod Options (MOM v3) & Mod Bindings (MBM v4): Replaces standalone mod_options_menu and
   mod_bindings_menu mods with an integrated pure-Lua engine and retained Stingray Screen-GUI renderer.
 - Persistent Settings & Bindings: Automatically saves mod options and keybinds to
-  %LOCALAPPDATA%/UniversalModLoader/settings.json, persisting player settings across sessions.
+  %LOCALAPPDATA%/UniversalModLoader/settings.json and syncs legacy ModOptionsMenu.values across sessions.
 - Interactive 3-Tab In-Game Mod UI Overlay (F2 / F9):
   - Tab 1: Mod Options (filter by mod with Q/E or PgUp/PgDn, adjust toggles/sliders/choices with
     Left/Right/Enter, reset to default with Backspace, and read full option descriptions).

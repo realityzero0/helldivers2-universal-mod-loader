@@ -1,13 +1,13 @@
 -- Universal Mod Loader v22.0.0 for Helldivers 2 (Steam Builds 25988413 / 26088801+ / Lua 5.1)
 -- Replaces engine boot resource 0xF476DF93691895FA in bundle 9ba626afa44a3aa3
--- Unifies 4 Major Modding Standards + Built-in Mod Options & Mod Bindings Menus:
---   1. Bingus Shared Loader (CowboyBingus / v17 / v20 / v21 / API 1)
+-- Unifies All Helldivers 2 Modding Standards + Built-in Mod Options & Mod Bindings Menus:
+--   1. Bingus Shared Loader (CowboyBingus / v17 / v20 / v21 / API 1 + BingusRuntime v1)
 --   2. Chef Shared Loader (Th3chef / API Levels 1, 2, 3)
 --   3. Boot Mod Loader (VeganSquid / API 1)
 --   4. HD2 Lua Runtime (hd2rt / 0.1.0)
---   5. Built-in Mod Options Menu (MOM v2)
---   6. Built-in Mod Bindings Menu (MBM v4) with pure Stingray Keyboard/Mouse polling
--- Pure Lua 5.1 compliant (Zero native FFI crashes, EAC-safe, Circuit-Breaker protected).
+--   5. Built-in Mod Options Menu (MOM v2 / v3) with legacy ModOptionsMenu.values migration
+--   6. Built-in Mod Bindings Menu (MBM v4) with Stingray button_id / button_index polling
+-- Pure Lua 5.1 compliant (Zero native FFI crashes, Lua 5.2 goto transpiler, EAC-safe, Circuit-Breaker protected).
 -- License: Zero-Clause BSD (0BSD)
 
 -- 0. Cooperative handoff to Chef Shared Loader if installed with higher patch priority
@@ -19,8 +19,9 @@ if A and type(A.can_get) == 'function' and A.can_get('lua', 'mods/chef_shared_lo
   if ok then return end
 end
 
--- Forward declaration of persistent settings saver
+-- Forward declarations
 local save_persistent_settings
+local update_bindings_state
 
 -- ==============================================================================
 -- 1. ENGINE ENTRYPOINT ASSIGNMENT & SAFE CHAINING
@@ -36,6 +37,8 @@ local update_order = {}
 local update_hook_errors = {}
 local shutdown_hooks = {}
 local shutdown_order = {}
+local handle_update_ran = false
+local bindings_polled_this_frame = false
 
 -- Forward declaration of UniversalLoader lifecycle callbacks
 local UniversalLoader_update
@@ -49,6 +52,7 @@ _G.init = handle_init
 init = handle_init
 
 local function handle_update(dt, ...)
+    handle_update_ran = true
     if UniversalLoader_update then
         local u_ok, u_err = pcall(UniversalLoader_update, dt)
         if not u_ok then
@@ -73,6 +77,7 @@ local function handle_update(dt, ...)
             end
         end
     end
+    bindings_polled_this_frame = false
     return prev_update(dt, ...)
 end
 _G.update = handle_update
@@ -265,8 +270,8 @@ _G.tonumber = safe_tonumber
 tonumber = safe_tonumber
 
 local native_bit = rawget(_G, "bit")
-if type(native_bit) ~= "table" and package and package.preload and type(package.preload["bit"]) == "function" then
-    local ok, res = pcall(package.preload["bit"])
+if type(native_bit) ~= "table" then
+    local ok, res = pcall(require, "bit")
     if ok and type(res) == "table" then native_bit = res end
 end
 if type(native_bit) == "table" and type(native_bit.band) == "function" then
@@ -277,6 +282,7 @@ if type(native_bit) == "table" and type(native_bit.band) == "function" then
 end
 _G.bit = bit
 package.preload["bit"] = function() return bit end
+package.loaded["bit"] = bit
 
 -- Pure Lua 64-bit MurmurHash64A Implementation
 local function murmurhash64a(str, seed)
@@ -360,9 +366,44 @@ local function murmurhash64a(str, seed)
     return h_low, h_high
 end
 
+local function murmur64_key(str)
+    local l, h = murmurhash64a(str, 0)
+    local b0 = l % 256
+    local b1 = floor(l / 256) % 256
+    local b2 = floor(l / 65536) % 256
+    local b3 = floor(l / 16777216) % 256
+    local b4 = h % 256
+    local b5 = floor(h / 256) % 256
+    local b6 = floor(h / 65536) % 256
+    local b7 = floor(h / 16777216) % 256
+    return char(b0, b1, b2, b3, b4, b5, b6, b7)
+end
+
 -- ==============================================================================
 -- 3. NON-CRASHING FFI / WIN32 COMPATIBILITY STUBS & MOCK POINTERS
 -- ==============================================================================
+local function u32_le(v)
+    local u = to_u32(v)
+    return char(u % 256, floor(u / 256) % 256, floor(u / 65536) % 256, floor(u / 16777216) % 256)
+end
+
+local function make_synthetic_pe_header(timestamp, image_size, checksum)
+    -- 1024-byte valid x64 PE32+ header for offline/sandboxed layout & stamp checks
+    local dos = "MZ" .. string.rep("\0", 58) .. u32_le(128) .. string.rep("\0", 64)
+    -- COFF header at offset 128 (24 bytes): 'PE\0\0', Machine=0x8664, NumberOfSections=1, TimeDateStamp, ..., SizeOfOptionalHeader=240, Characteristics=0x22
+    local coff = "PE\0\0\100\134\1\0" .. u32_le(timestamp) .. string.rep("\0", 8) .. "\240\0\34\0"
+    -- Optional header at offset 152 (240 bytes): Magic=0x020B (PE32+), SizeOfImage at +56, SizeOfHeaders at +60, CheckSum at +64
+    local opt = "\11\2" .. string.rep("\0", 54) .. u32_le(image_size) .. u32_le(1024) .. u32_le(checksum or 0) .. string.rep("\0", 172)
+    -- Section header at offset 392 (40 bytes): '.text', VirtualSize=0x1000, VirtualAddress=0x1000, Characteristics=0x60000020
+    local sec = ".text\0\0\0" .. u32_le(4096) .. u32_le(4096) .. string.rep("\0", 20) .. u32_le(0x60000020)
+    local hdr = dos .. coff .. opt .. sec
+    return hdr .. string.rep("\0", 1024 - #hdr)
+end
+
+local GAME_PE_HEADER = make_synthetic_pe_header(1790161983, 74727424, 0xECDA6F)
+local EXE_PE_HEADER  = make_synthetic_pe_header(1790149348, 60719104, 0xE48B1D)
+local MOCK_EXE_PATH  = [[C:\Program Files (x86)\Steam\steamapps\common\Helldivers 2\bin\helldivers2.exe]]
+
 local ffi = {
     os = "Windows",
     arch = "x64"
@@ -382,10 +423,17 @@ ptr_mt = {
     __tonumber = function(t)
         return rawget(t, "_addr") or 0
     end,
+    __call = function(t, ...)
+        local fn = rawget(t, "_fn")
+        if type(fn) == "function" then
+            return fn(...)
+        end
+        return 0
+    end,
     __add = function(a, b)
         local addr_a = (type(a) == "table" and rawget(a, "_addr")) or tonumber(a) or 0
         local addr_b = (type(b) == "table" and rawget(b, "_addr")) or tonumber(b) or 0
-        local res = setmetatable({ _addr = (addr_a + addr_b) % BIT_MOD }, ptr_mt)
+        local res = setmetatable({ _addr = addr_a + addr_b }, ptr_mt)
         return res
     end,
     __sub = function(a, b)
@@ -393,7 +441,7 @@ ptr_mt = {
         local addr_b = (type(b) == "table" and rawget(b, "_addr")) or tonumber(b) or 0
         local diff = addr_a - addr_b
         if type(a) == "table" and type(b) == "table" then return diff end
-        return setmetatable({ _addr = (diff + BIT_MOD) % BIT_MOD }, ptr_mt)
+        return setmetatable({ _addr = diff }, ptr_mt)
     end,
     __eq = function(a, b)
         local addr_a = (type(a) == "table" and rawget(a, "_addr")) or tonumber(a) or 0
@@ -412,8 +460,8 @@ ptr_mt = {
     end
 }
 
-local function make_mock_pointer(addr)
-    return setmetatable({ _addr = tonumber(addr) or 0 }, ptr_mt)
+local function make_mock_pointer(addr, fn)
+    return setmetatable({ _addr = tonumber(addr) or 0, _fn = fn }, ptr_mt)
 end
 
 function ffi.abi(param)
@@ -463,13 +511,64 @@ function ffi.alignof(ct) return 8 end
 function ffi.offsetof(ct, field) return 0 end
 function ffi.istype(ct, obj) return true end
 function ffi.string(ptr, len)
+    if type(ptr) == "string" then
+        return len and ptr:sub(1, len) or ptr
+    end
+    if type(ptr) == "table" and type(rawget(ptr, "_str")) == "string" then
+        local s = rawget(ptr, "_str")
+        if type(len) == "number" and len > 0 then
+            if #s >= len then return s:sub(1, len) end
+            return s .. string.rep("\0", len - #s)
+        end
+        return s
+    end
     if type(len) == "number" and len > 0 then
         return string.rep("\0", len)
     end
     return ""
 end
-function ffi.copy(dst, src, len) end
-function ffi.fill(dst, len, val) end
+function ffi.copy(dst, src, len)
+    if type(dst) == "table" and type(src) == "string" then
+        rawset(dst, "_str", len and src:sub(1, len) or src)
+    end
+end
+function ffi.fill(dst, len, val)
+    if type(dst) == "table" then
+        rawset(dst, "_str", nil)
+    end
+end
+
+local function mock_get_module_handle(name)
+    local s = name ~= nil and tostring(name):lower() or ""
+    if s:find("game") then
+        return make_mock_pointer(0x180000000)
+    elseif s:find("kernel32") then
+        return make_mock_pointer(0x7FF800000000)
+    elseif s:find("bcrypt") then
+        return make_mock_pointer(0x7FF810000000)
+    end
+    return make_mock_pointer(0x140000000)
+end
+
+local function mock_read_process_memory(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesRead)
+    local addr = (type(lpBaseAddress) == "table" and rawget(lpBaseAddress, "_addr")) or tonumber(lpBaseAddress) or 0
+    local sz = tonumber(nSize) or 0
+    if type(lpBuffer) == "table" then
+        if addr >= 0x180000000 and addr < 0x180000400 then
+            local off = addr - 0x180000000
+            rawset(lpBuffer, "_str", GAME_PE_HEADER:sub(off + 1, off + sz))
+        elseif addr >= 0x140000000 and addr < 0x140000400 then
+            local off = addr - 0x140000000
+            rawset(lpBuffer, "_str", EXE_PE_HEADER:sub(off + 1, off + sz))
+        else
+            rawset(lpBuffer, "_str", nil)
+        end
+    end
+    if type(lpNumberOfBytesRead) == "table" then
+        pcall(function() lpNumberOfBytesRead[0] = sz end)
+    end
+    return 1
+end
 
 -- Win32 / Kernel32 Emulation
 local function win32_fallback(t, k)
@@ -489,9 +588,8 @@ local function win32_fallback(t, k)
         rawset(t, k, fn)
         return fn
     elseif k_clean:find("getmodulehandle") then
-        local fn = function(name) return make_mock_pointer(0x140000000) end
-        rawset(t, k, fn)
-        return fn
+        rawset(t, k, mock_get_module_handle)
+        return mock_get_module_handle
     elseif k_clean:find("getprocaddress") then
         local fn = function(hmod, proc_name)
             return win32_fallback(t, tostring(proc_name or ""))
@@ -499,7 +597,12 @@ local function win32_fallback(t, k)
         rawset(t, k, fn)
         return fn
     elseif k_clean:find("getmodulefilename") then
-        local fn = function(mod, buf, cap) return 12 end
+        local fn = function(mod, buf, cap)
+            if type(buf) == "table" then
+                rawset(buf, "_str", MOCK_EXE_PATH)
+            end
+            return #MOCK_EXE_PATH
+        end
         rawset(t, k, fn)
         return fn
     elseif k_clean:find("queryperformancefrequency") then
@@ -562,14 +665,8 @@ local function win32_fallback(t, k)
         rawset(t, k, fn)
         return fn
     elseif k_clean:find("readprocessmemory") then
-        local fn = function(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesRead)
-            if type(lpNumberOfBytesRead) == "table" then
-                pcall(function() lpNumberOfBytesRead[0] = nSize end)
-            end
-            return 1
-        end
-        rawset(t, k, fn)
-        return fn
+        rawset(t, k, mock_read_process_memory)
+        return mock_read_process_memory
     elseif k_clean:find("writeprocessmemory") then
         local fn = function(...) return 0 end
         rawset(t, k, fn)
@@ -603,13 +700,10 @@ local kernel32 = setmetatable({
     GetCurrentProcess = function() return make_mock_pointer(0xFFFFFFFF) end,
     GetCurrentProcessId = function() return 1000 end,
     GetCurrentThreadId = function() return 1001 end,
+    GetModuleHandleA = mock_get_module_handle,
+    GetModuleHandleW = mock_get_module_handle,
     VirtualQuery = function() return 0 end,
-    ReadProcessMemory = function(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesRead)
-        if type(lpNumberOfBytesRead) == "table" then
-            pcall(function() lpNumberOfBytesRead[0] = nSize end)
-        end
-        return 1
-    end,
+    ReadProcessMemory = mock_read_process_memory,
     MBM_ReadProcessMemory = function() return 0 end,
     MBM_VirtualQuery = function() return 0 end,
     MBM_read_at = function() return 0 end
@@ -630,37 +724,44 @@ function ffi.load(name)
 end
 
 local native_ffi = rawget(_G, "ffi")
-if type(native_ffi) ~= "table" and package and package.preload and type(package.preload["ffi"]) == "function" then
-    local ok, res = pcall(package.preload["ffi"])
+if type(native_ffi) ~= "table" then
+    local ok, res = pcall(require, "ffi")
     if ok and type(res) == "table" then native_ffi = res end
 end
 if type(native_ffi) == "table" and type(native_ffi.cdef) == "function" and type(native_ffi.new) == "function" then
-    pcall(native_ffi.cdef, [[
-        typedef struct {
-            void* BaseAddress;
-            void* AllocationBase;
-            uint32_t AllocationProtect;
-            uint16_t PartitionId;
-            size_t RegionSize;
-            uint32_t State;
-            uint32_t Protect;
-            uint32_t Type;
-        } MEMORY_BASIC_INFORMATION;
-        void* GetCurrentProcess(void);
-        uint32_t GetCurrentProcessId(void);
-        uint32_t GetCurrentThreadId(void);
-        uint64_t GetTickCount64(void);
-        uint32_t GetTickCount(void);
-        int QueryPerformanceCounter(int64_t* lpPerformanceCount);
-        int QueryPerformanceFrequency(int64_t* lpFrequency);
-        size_t VirtualQuery(const void* lpAddress, MEMORY_BASIC_INFORMATION* lpBuffer, size_t dwLength);
-        int ReadProcessMemory(void* hProcess, const void* lpBaseAddress, void* lpBuffer, size_t nSize, size_t* lpNumberOfBytesRead);
-    ]])
     ffi = native_ffi
 end
 
 _G.ffi = ffi
 package.preload["ffi"] = function() return ffi end
+package.loaded["ffi"] = ffi
+
+-- Lua 5.1 JIT / jit.util compatibility stubs for mods inspecting jit status
+if type(rawget(_G, "jit")) ~= "table" then
+    local mock_jit = {
+        version = "Lua 5.1.4 (UniversalModLoader)",
+        version_num = 20100,
+        os = "Windows",
+        arch = "x64",
+        status = function() return false end,
+        on = noop,
+        off = noop,
+        flush = noop,
+        opt = { start = noop }
+    }
+    _G.jit = mock_jit
+    package.preload["jit"] = function() return mock_jit end
+    package.loaded["jit"] = mock_jit
+end
+if not package.preload["jit.util"] and not package.loaded["jit.util"] then
+    local mock_jit_util = {
+        funcinfo = function() return { loc = "lua", ffid = nil, addr = 0 } end,
+        ircalladdr = function() return 0 end,
+        traceinfo = function() return nil end
+    }
+    package.preload["jit.util"] = function() return mock_jit_util end
+    package.loaded["jit.util"] = mock_jit_util
+end
 
 -- Safeguard global string metatable while supporting legacy callable log_directory()
 local string_mt = debug.getmetatable("") or {}
@@ -880,7 +981,7 @@ _G.UniversalModLoader = {
 package.preload["UniversalModLoader"] = function() return _G.UniversalModLoader end
 
 -- ==============================================================================
--- 6. BINGUS SHARED LOADER API & BINGUS RUNTIME V1
+-- 6. BINGUS SHARED LOADER API & BINGUS RUNTIME V1 (V17 / V20 / V21 PARITY)
 -- ==============================================================================
 local CowboyBingusModLoader
 local capabilities_data = {
@@ -908,34 +1009,67 @@ CowboyBingusModLoader = {
     revision = "loader-v22.0.0",
     capabilities = capabilities_locked,
     log_directory = get_log_dir(),
+    modules = {},
+    addons = UniversalState.addons,
+    health = {
+        header = {},
+        changes = {}
+    },
+    build = {
+        supported = true,
+        enforce = false,
+        status = "universal"
+    },
+    jit = {
+        managed = false,
+        status = "lua51"
+    },
+    register_module = function(name, value)
+        if type(name) ~= "string" or name == "" then return false end
+        CowboyBingusModLoader.modules[name] = value
+        return true
+    end,
+    register_addon = function(name, info)
+        if type(name) ~= "string" or name == "" then return false end
+        UniversalState.addons[name] = type(info) == "table" and info or { status = "registered" }
+        return true
+    end,
     after_startup = function(fn)
         if type(fn) == "function" then
             table.insert(UniversalState.after_startup_cbs, fn)
+            return true
         end
+        return false
     end,
     on_update = function(id, fn)
         if type(id) == "string" and id ~= "" then
             if fn == nil then
                 update_hooks[id] = nil
+                return true
             elseif type(fn) == "function" then
                 if update_hooks[id] == nil then
                     update_order[#update_order + 1] = id
                 end
                 update_hooks[id] = fn
+                return true
             end
         end
+        return false
     end,
     on_shutdown = function(id, fn)
         if type(id) == "string" and id ~= "" then
             if fn == nil then
                 shutdown_hooks[id] = nil
+                return true
             elseif type(fn) == "function" then
                 if shutdown_hooks[id] == nil then
                     shutdown_order[#shutdown_order + 1] = id
                 end
                 shutdown_hooks[id] = fn
+                return true
             end
         end
+        return false
     end,
     open_log = function(name)
         if type(name) ~= "string" or not name:match("^[%w_%-]+%.log$") then return nil end
@@ -957,38 +1091,108 @@ CowboyBingusModLoader = {
 _G.CowboyBingusModLoader = CowboyBingusModLoader
 _G.HD2ModLoader = CowboyBingusModLoader
 package.preload["CowboyBingusModLoader"] = function() return CowboyBingusModLoader end
+package.loaded["CowboyBingusModLoader"] = CowboyBingusModLoader
 
 local BingusRuntime
-BingusRuntime = {
-    shared = {
-        version = 1,
-        statuses = {},
-        on = function(event, fn)
-            if event == "update" and type(fn) == "function" then
-                local id = "bingus_rt_" .. tostring(#update_order + 1)
-                update_order[#update_order + 1] = id
-                update_hooks[id] = fn
-            elseif event == "shutdown" and type(fn) == "function" then
-                local id = "bingus_rt_shut_" .. tostring(#shutdown_order + 1)
-                shutdown_order[#shutdown_order + 1] = id
-                shutdown_hooks[id] = fn
-            end
+local bingus_statuses = {}
+local bingus_shared_table = setmetatable({
+    version = 1,
+    statuses = bingus_statuses,
+    on = function(event, fn)
+        if event == "update" and type(fn) == "function" then
+            local id = "bingus_rt_" .. tostring(#update_order + 1)
+            update_order[#update_order + 1] = id
+            update_hooks[id] = fn
+        elseif event == "shutdown" and type(fn) == "function" then
+            local id = "bingus_rt_shut_" .. tostring(#shutdown_order + 1)
+            shutdown_order[#shutdown_order + 1] = id
+            shutdown_hooks[id] = fn
         end
-    },
-    guard = function(name, fn)
+    end
+}, {
+    __call = function(self, env)
+        return CowboyBingusModLoader
+    end
+})
+
+BingusRuntime = {
+    api = 1,
+    version = 1,
+    statuses = bingus_statuses,
+    hashes = {},
+    versions = {},
+    hash_reads = {},
+    shared = bingus_shared_table,
+    guard = function(spec_or_name, fn)
+        if type(spec_or_name) == "table" then
+            local spec = spec_or_name
+            local name = tostring(spec.name or "addon")
+            local step = spec.step
+            local after = spec.after
+            local on_stop = spec.stop
+            local stopped = false
+            local status = {
+                state = "starting",
+                calls = 0,
+                errors = 0,
+                last_error = nil
+            }
+            bingus_statuses[name] = status
+            local function stop_guard(reason)
+                if stopped then return end
+                stopped = true
+                status.state = "stopped"
+                status.last_error = reason
+                CowboyBingusModLoader.on_update(name, nil)
+                if type(on_stop) == "function" then pcall(on_stop, reason) end
+            end
+            local function run_step(...)
+                if stopped then return end
+                status.calls = status.calls + 1
+                if type(step) == "function" then
+                    local ok, err = pcall(step, ...)
+                    if not ok then
+                        status.errors = status.errors + 1
+                        status.last_error = tostring(err)
+                        log_message("BingusGuard", "Error in %s: %s", name, tostring(err))
+                        if status.errors >= 20 then stop_guard(tostring(err)) end
+                        return
+                    end
+                end
+                if type(after) == "function" then
+                    pcall(after, ...)
+                end
+                status.state = "running"
+            end
+            local function install()
+                CowboyBingusModLoader.on_update(name, run_step)
+                if type(on_stop) == "function" then
+                    CowboyBingusModLoader.on_shutdown(name, function() stop_guard("shutdown") end)
+                end
+                status.state = "ready"
+                return true
+            end
+            return {
+                status = status,
+                install = install,
+                stop = stop_guard,
+                running = function() return not stopped end
+            }
+        end
         return function(...)
             local ok, err = pcall(fn, ...)
             if not ok then
-                log_message("BingusGuard", "Error in %s: %s", tostring(name), tostring(err))
+                log_message("BingusGuard", "Error in %s: %s", tostring(spec_or_name), tostring(err))
             end
         end
     end
 }
 _G.BingusRuntime = BingusRuntime
 package.preload["BingusRuntime"] = function() return BingusRuntime end
+package.loaded["BingusRuntime"] = BingusRuntime
 
 -- ==============================================================================
--- 7. BUILT-IN MOD OPTIONS MENU (MOM v2)
+-- 7. BUILT-IN MOD OPTIONS MENU (MOM v2 / v3)
 -- ==============================================================================
 local function resolve_text(v, fallback)
     if type(v) == "function" then
@@ -1067,8 +1271,10 @@ end
 local ModOptionsMenu
 ModOptionsMenu = {
     api = 1,
-    version = 2,
+    version = 3,
     revision = 1,
+    max_mods = 112,
+    max_options = 256,
     registered = {},
     order = {},
     values = {},
@@ -1082,8 +1288,8 @@ ModOptionsMenu = {
         end
         ModOptionsMenu.registered[id] = spec
         ModOptionsMenu.values[id] = normalize_option_value(spec, ModOptionsMenu.values[id])
-        if type(spec.on_change) == "function" and ModOptionsMenu.change_callbacks[id] == nil then
-            ModOptionsMenu.change_callbacks[id] = spec.on_change
+        if type(spec.on_change) == "function" then
+            ModOptionsMenu.on_change(id, spec.on_change)
         end
         ModOptionsMenu.revision = (ModOptionsMenu.revision or 1) + 1
         return true
@@ -1101,9 +1307,15 @@ ModOptionsMenu = {
         local norm = spec and normalize_option_value(spec, val) or val
         ModOptionsMenu.values[id] = norm
         ModOptionsMenu.revision = (ModOptionsMenu.revision or 1) + 1
-        local cb = ModOptionsMenu.change_callbacks[id]
-        if type(cb) == "function" then
-            pcall(cb, norm, id)
+        local cbs = ModOptionsMenu.change_callbacks[id]
+        if type(cbs) == "function" then
+            pcall(cbs, norm, id)
+        elseif type(cbs) == "table" then
+            for i = 1, #cbs do
+                if type(cbs[i]) == "function" then
+                    pcall(cbs[i], norm, id)
+                end
+            end
         end
         if save_persistent_settings then
             save_persistent_settings()
@@ -1117,7 +1329,20 @@ ModOptionsMenu = {
     end,
     on_change = function(id, fn)
         if type(id) == "string" and type(fn) == "function" then
-            ModOptionsMenu.change_callbacks[id] = fn
+            local existing = ModOptionsMenu.change_callbacks[id]
+            if type(existing) == "function" then
+                if existing ~= fn then
+                    ModOptionsMenu.change_callbacks[id] = { existing, fn }
+                end
+            elseif type(existing) == "table" then
+                local found = false
+                for i = 1, #existing do
+                    if existing[i] == fn then found = true; break end
+                end
+                if not found then existing[#existing + 1] = fn end
+            else
+                ModOptionsMenu.change_callbacks[id] = { fn }
+            end
             return true
         end
         return false
@@ -1126,6 +1351,7 @@ ModOptionsMenu = {
 }
 _G.ModOptionsMenu = ModOptionsMenu
 package.preload["ModOptionsMenu"] = function() return ModOptionsMenu end
+package.loaded["ModOptionsMenu"] = ModOptionsMenu
 
 -- ==============================================================================
 -- 8. BUILT-IN MOD BINDINGS MENU (MBM v4) & KEY STATE TRACKING
@@ -1136,6 +1362,11 @@ ModBindingsMenu = {
     version = 4,
     revision = 1,
     capacity = 256,
+    extended = {
+        devices = { "keyboard", "mouse", "controller" },
+        triggers = { "press", "release", "hold" },
+        count = 0
+    },
     registry = {},
     order = {},
     bindings = {},
@@ -1203,6 +1434,7 @@ function ModBindingsMenu.register_binding(id, label, slot, options)
         ModBindingsMenu.bindings[id] = current_key
     end
     ModBindingsMenu.states[id] = { down = false, pressed = false, released = false }
+    ModBindingsMenu.extended.count = #ModBindingsMenu.order
     ModBindingsMenu.revision = ModBindingsMenu.revision + 1
     return true
 end
@@ -1217,15 +1449,26 @@ function ModBindingsMenu.is_down(id)
     local st = ModBindingsMenu.states[id]
     return st and st.down or false
 end
+ModBindingsMenu.down = ModBindingsMenu.is_down
 
 function ModBindingsMenu.is_pressed(id)
     local st = ModBindingsMenu.states[id]
     return st and st.pressed or false
 end
+ModBindingsMenu.was_pressed = ModBindingsMenu.is_pressed
+ModBindingsMenu.pressed = ModBindingsMenu.is_pressed
+
+function ModBindingsMenu.is_released(id)
+    local st = ModBindingsMenu.states[id]
+    return st and st.released or false
+end
+ModBindingsMenu.was_released = ModBindingsMenu.is_released
+ModBindingsMenu.released = ModBindingsMenu.is_released
 
 function ModBindingsMenu.binding(id)
     return ModBindingsMenu.bindings[id] or "NONE"
 end
+ModBindingsMenu.get_binding = ModBindingsMenu.binding
 
 function ModBindingsMenu.set_binding(id, spec)
     local key_name
@@ -1276,6 +1519,49 @@ _G.ModBindingsMenu = ModBindingsMenu
 _G.CowboyBingusModBindings = ModBindingsMenu
 package.preload["ModBindingsMenu"] = function() return ModBindingsMenu end
 package.preload["CowboyBingusModBindings"] = function() return ModBindingsMenu end
+package.loaded["ModBindingsMenu"] = ModBindingsMenu
+package.loaded["CowboyBingusModBindings"] = ModBindingsMenu
+
+-- Stingray Input Compatibility: Helldivers 2 exposes Keyboard.button_id / Mouse.button_id
+-- while some mods call button_index, and pressed()/button() may return true OR 1 (> 0).
+local function ensure_input_compat(sr)
+    if type(sr) ~= "table" then return end
+    for _, dev_name in ipairs({ "Keyboard", "Mouse", "Pad1", "Pad2", "Pad3", "Pad4" }) do
+        local dev = rawget(sr, dev_name)
+        if type(dev) == "table" then
+            local bid = rawget(dev, "button_id")
+            local bidx = rawget(dev, "button_index")
+            if type(bid) == "function" and bidx == nil then
+                pcall(rawset, dev, "button_index", bid)
+            elseif type(bidx) == "function" and bid == nil then
+                pcall(rawset, dev, "button_id", bidx)
+            end
+        end
+    end
+end
+
+local function is_input_active(v)
+    return v == true or (type(v) == "number" and v > 0)
+end
+
+local function resolve_button_id(dev, name)
+    if type(dev) ~= "table" or type(name) ~= "string" or name == "" then return nil end
+    local fn = rawget(dev, "button_id") or rawget(dev, "button_index")
+    if type(fn) ~= "function" then return nil end
+    local ok, idx = pcall(fn, name)
+    if ok and idx ~= nil then
+        return idx
+    end
+    return nil
+end
+
+local function query_device_button(dev, idx, method_name)
+    if type(dev) ~= "table" or idx == nil then return false end
+    local fn = rawget(dev, method_name)
+    if type(fn) ~= "function" then return false end
+    local ok, res = pcall(fn, idx)
+    return ok and is_input_active(res)
+end
 
 -- Key Polling with Compound Modifier Support (e.g. "ctrl+h", "shift+f")
 local function check_button_state(kb, mouse, name, check_type)
@@ -1285,48 +1571,48 @@ local function check_button_state(kb, mouse, name, check_type)
     local has_alt = name:find("alt%+")
     local main_key = name:gsub("ctrl%+", ""):gsub("shift%+", ""):gsub("alt%+", ""):gsub("^%s+", ""):gsub("%s+$", "")
 
-    if has_ctrl and kb and kb.button_index then
-        local lctrl = kb.button_index("left ctrl")
-        local rctrl = kb.button_index("right ctrl")
-        local ctrl_down = (lctrl and kb.button and kb.button(lctrl) == 1) or (rctrl and kb.button and kb.button(rctrl) == 1)
+    if has_ctrl and kb then
+        local lctrl = resolve_button_id(kb, "left ctrl")
+        local rctrl = resolve_button_id(kb, "right ctrl")
+        local ctrl_down = query_device_button(kb, lctrl, "button") or query_device_button(kb, rctrl, "button")
         if not ctrl_down then return false end
     end
-    if has_shift and kb and kb.button_index then
-        local lshift = kb.button_index("left shift")
-        local rshift = kb.button_index("right shift")
-        local shift_down = (lshift and kb.button and kb.button(lshift) == 1) or (rshift and kb.button and kb.button(rshift) == 1)
+    if has_shift and kb then
+        local lshift = resolve_button_id(kb, "left shift")
+        local rshift = resolve_button_id(kb, "right shift")
+        local shift_down = query_device_button(kb, lshift, "button") or query_device_button(kb, rshift, "button")
         if not shift_down then return false end
     end
-    if has_alt and kb and kb.button_index then
-        local lalt = kb.button_index("left alt")
-        local ralt = kb.button_index("right alt")
-        local alt_down = (lalt and kb.button and kb.button(lalt) == 1) or (ralt and kb.button and kb.button(ralt) == 1)
+    if has_alt and kb then
+        local lalt = resolve_button_id(kb, "left alt")
+        local ralt = resolve_button_id(kb, "right alt")
+        local alt_down = query_device_button(kb, lalt, "button") or query_device_button(kb, ralt, "button")
         if not alt_down then return false end
     end
 
-    local idx = kb and kb.button_index and kb.button_index(main_key)
-    if idx then
-        if check_type == "down" then return kb.button and kb.button(idx) == 1 end
-        if check_type == "pressed" then return kb.pressed and kb.pressed(idx) == 1 end
-        if check_type == "released" then return kb.released and kb.released(idx) == 1 end
-    elseif mouse and mouse.button_index then
-        local midx = mouse.button_index(main_key)
-        if midx then
-            if check_type == "down" then return mouse.button and mouse.button(midx) == 1 end
-            if check_type == "pressed" then return mouse.pressed and mouse.pressed(midx) == 1 end
-            if check_type == "released" then return mouse.released and mouse.released(midx) == 1 end
+    local method = (check_type == "down" and "button") or check_type
+    local idx = resolve_button_id(kb, main_key)
+    if idx ~= nil then
+        return query_device_button(kb, idx, method)
+    elseif mouse then
+        local midx = resolve_button_id(mouse, main_key)
+        if midx ~= nil then
+            return query_device_button(mouse, midx, method)
         end
     end
     return false
 end
 
-local function update_bindings_state()
+update_bindings_state = function()
+    if bindings_polled_this_frame then return end
+    bindings_polled_this_frame = true
     local sr = rawget(_G, "stingray")
     if not sr then return end
+    ensure_input_compat(sr)
     local kb = sr.Keyboard
     local mouse = sr.Mouse
 
-    for id, record in pairs(ModBindingsMenu.registry) do
+    for id in pairs(ModBindingsMenu.registry) do
         local key = ModBindingsMenu.bindings[id]
         local is_down = check_button_state(kb, mouse, key, "down")
         local is_pressed = check_button_state(kb, mouse, key, "pressed")
@@ -1334,19 +1620,63 @@ local function update_bindings_state()
 
         local st = ModBindingsMenu.states[id]
         if not st then
-            st = {}
+            st = { down = false, pressed = false, released = false }
             ModBindingsMenu.states[id] = st
         end
+        local prev_down = st.down == true
         st.down = is_down
-        st.pressed = is_pressed
-        st.released = is_released
+        st.pressed = is_pressed or (is_down and not prev_down)
+        st.released = is_released or (not is_down and prev_down)
     end
 end
 
 -- ==============================================================================
--- 9. PERSISTENT SETTINGS STORAGE (SAVE / LOAD)
+-- 9. PERSISTENT SETTINGS STORAGE (SAVE / LOAD + LEGACY MOM MIGRATION)
 -- ==============================================================================
+local function load_legacy_mom_values()
+    local ldir = get_log_dir()
+    local f = io.open(ldir .. [[\ModOptionsMenu.values]], "r")
+    if not f then return 0 end
+    local count = 0
+    for line in f:lines() do
+        local k, v = line:match("^([^\t\r\n]+)\t([^\r\n]*)$")
+        if k and v ~= nil then
+            if v == "true" then
+                ModOptionsMenu.values[k] = true
+            elseif v == "false" then
+                ModOptionsMenu.values[k] = false
+            else
+                local num = tonumber(v)
+                ModOptionsMenu.values[k] = (num ~= nil) and num or v
+            end
+            count = count + 1
+        end
+    end
+    f:close()
+    return count
+end
+
+local function save_legacy_mom_values()
+    local ldir = get_log_dir()
+    local f = io.open(ldir .. [[\ModOptionsMenu.values]], "w")
+    if not f then return end
+    local keys = {}
+    for k in pairs(ModOptionsMenu.values) do
+        keys[#keys + 1] = tostring(k)
+    end
+    sort(keys)
+    for i = 1, #keys do
+        local k = keys[i]
+        local v = ModOptionsMenu.values[k]
+        if type(v) == "boolean" or type(v) == "number" or type(v) == "string" then
+            f:write(format("%s\t%s\n", k, tostring(v)))
+        end
+    end
+    f:close()
+end
+
 local function load_persistent_settings()
+    local legacy_count = load_legacy_mom_values()
     local sdir = get_settings_dir()
     local path = sdir .. [[\settings.json]]
     local f = io.open(path, "r")
@@ -1354,7 +1684,12 @@ local function load_persistent_settings()
         local ldir = get_log_dir():gsub("[Ll]ogs[/\\]?$", "Settings")
         f = io.open(ldir .. [[\universal_settings.json]], "r")
     end
-    if not f then return end
+    if not f then
+        if legacy_count > 0 then
+            log_message("Settings", "Imported %d legacy ModOptionsMenu values from disk.", legacy_count)
+        end
+        return
+    end
     local content = f:read("*a")
     f:close()
     if not content or content == "" then return end
@@ -1402,6 +1737,7 @@ save_persistent_settings = function()
             f_alt:close()
         end
     end
+    pcall(save_legacy_mom_values)
 end
 
 -- ==============================================================================
@@ -1518,7 +1854,29 @@ local function strip_bom(str)
     return str
 end
 
+-- Automatically transpile simple Lua 5.2+ `if <cond> then goto <label> end ... ::<label>::`
+-- forward-continue patterns into Lua 5.1 `if not (<cond>) then ... end` blocks when
+-- running under Helldivers 2's PUC-Rio Lua 5.1.4 VM (preserves exact line numbers).
+local function transpile_lua52_goto(str)
+    if type(str) ~= "string" or not str:find("::", 1, true) then
+        return str
+    end
+    local out = str
+    for label in str:gmatch("::([%a_][%w_]*)%s*::") do
+        local goto_pat = "(if%s+)([^\r\n]-)(%s+then%s+)goto%s+" .. label .. "%s+end"
+        local label_pat = "::" .. label .. "%s*::"
+        if out:find(goto_pat) and out:find(label_pat) then
+            out = out:gsub(goto_pat, "%1not (%2)%3"):gsub(label_pat, "end")
+        end
+    end
+    return out
+end
+
 local function execute_mod_script(mod_name, source_code, archive_name)
+    if UniversalState.active_mods[mod_name] and UniversalState.active_mods[mod_name].status == "loaded" then
+        return true
+    end
+
     if mod_name:find("cowboybingus/mod_options_menu") or mod_name:find("cowboybingus/mod_bindings_menu") then
         log_message("UniversalLoader", "Superseding legacy standalone %s (unified built-in engine active)", mod_name)
         UniversalState.active_mods[mod_name] = {
@@ -1526,11 +1884,25 @@ local function execute_mod_script(mod_name, source_code, archive_name)
             archive = archive_name,
             status = "superseded_by_builtin"
         }
+        BingusRuntime.statuses[mod_name] = "superseded_by_builtin"
+        package.loaded[mod_name] = mod_name:find("mod_options_menu") and ModOptionsMenu or ModBindingsMenu
         return true
     end
 
     local clean_source = strip_bom(source_code)
-    local fn, err = loadstring(clean_source, mod_name)
+    local fn, err = loadstring(clean_source, "@" .. mod_name)
+    if not fn and clean_source:find("::", 1, true) then
+        local transpiled = transpile_lua52_goto(clean_source)
+        if transpiled ~= clean_source then
+            local fn2, err2 = loadstring(transpiled, "@" .. mod_name)
+            if fn2 then
+                fn, err = fn2, nil
+                log_message("UniversalLoader", "Transpiled Lua 5.2 goto/label syntax for %s (Lua 5.1 VM compatibility)", mod_name)
+            else
+                err = err2
+            end
+        end
+    end
     if not fn then
         log_message("UniversalLoader", "Failed to compile %s: %s", mod_name, tostring(err))
         UniversalState.failed_mods[mod_name] = {
@@ -1539,6 +1911,7 @@ local function execute_mod_script(mod_name, source_code, archive_name)
             status = "compile_error",
             error = tostring(err)
         }
+        BingusRuntime.statuses[mod_name] = "compile_error: " .. tostring(err)
         return false, err
     end
 
@@ -1548,8 +1921,10 @@ local function execute_mod_script(mod_name, source_code, archive_name)
         ChefSharedLoader = mod_chef_api,
         HD2ModLoader = CowboyBingusModLoader,
         CowboyBingusModLoader = CowboyBingusModLoader,
+        BingusRuntime = BingusRuntime,
         ModOptionsMenu = ModOptionsMenu,
         ModBindingsMenu = ModBindingsMenu,
+        CowboyBingusModBindings = ModBindingsMenu,
         BootModLoader = BootModLoader,
         hd2rt = hd2rt,
         bit = bit,
@@ -1573,6 +1948,7 @@ local function execute_mod_script(mod_name, source_code, archive_name)
             status = "runtime_error",
             error = tostring(res)
         }
+        BingusRuntime.statuses[mod_name] = "runtime_error: " .. tostring(res)
         return false, res
     end
 
@@ -1583,6 +1959,8 @@ local function execute_mod_script(mod_name, source_code, archive_name)
         archive = archive_name,
         status = "loaded"
     }
+    BingusRuntime.statuses[mod_name] = "ok"
+    CowboyBingusModLoader.modules[mod_name] = UniversalState.active_mods[mod_name]
 
     log_message("UniversalLoader", "Successfully loaded %s from %s", mod_name, archive_name or "patch")
     return true
@@ -1592,7 +1970,96 @@ end
 -- 13. DYNAMIC ARCHIVE DISCOVERY & DEDUPLICATION (PATCH_0..255)
 -- ==============================================================================
 local LUA_RESOURCE_TYPE = "\226\23\209\44\250\141\78\161"
+local BOOT_RESOURCE_KEY = "\250\149\24\105\147\223\118\244" -- 0xF476DF93691895FA
+local BOOT_NAME_KEY = murmur64_key("core/app/boot")
 local ARCHIVE_MAGIC = 0xF0000011
+
+local KNOWN_MOD_NAMES = {
+    "mods/cowboybingus/mod_options_menu",
+    "mods/cowboybingus/mod_bindings_menu",
+    "mods/cowboybingus/warbond_desk",
+    "mods/cowboybingus/warbond_desk_options",
+    "mods/warbond_desk/main",
+    "mods/cowboybingus/trajectory_hud",
+    "mods/cowboybingus/trajectory_hud_options",
+    "mods/cowboybingus/minimap_hud",
+    "mods/cowboybingus/minimap_hud_options",
+    "mods/cowboybingus/resupply_hud",
+    "mods/cowboybingus/resupply_hud_options",
+    "mods/cowboybingus/eagle_hud",
+    "mods/cowboybingus/eagle_hud_options",
+    "mods/engle/eagle_hud_probe",
+    "mods/cowboybingus/headlamp",
+    "mods/cowboybingus/headlamp_options",
+    "mods/patpatpatrick/helmet_headlamp",
+    "mods/cowboybingus/experimental_minimap",
+    "mods/cowboybingus/experimental_minimap_options",
+    "mods/chef/seaf_artillery_loadout",
+    "mods/chef/seaf_artillery_loadout_options",
+    "mods/chef/smarter_guard_dogs_and_sentries",
+    "mods/chef/smarter_guard_dogs_and_sentries_options",
+    "mods/chef/smarter_guard_dogs_and_sentries_dogs",
+    "mods/chef/smarter_guard_dogs_and_sentries_sentries",
+    "mods/chef/smarter_guard_dogs_and_sentries_tesla",
+    "mods/chef/smarter_guard_dogs_and_sentries_armor",
+    "mods/chef/smarter_guard_dogs_and_sentries_priority",
+    "mods/chef/smarter_guard_dogs_and_sentries_ping",
+    "mods/chef/smarter_guard_dogs_and_sentries_safety",
+    "mods/chef/smarter_guard_dogs_and_sentries_teammates",
+    "mods/chef/smarter_guard_dogs_and_sentries_sentry_safety",
+    "mods/chef/smarter_guard_dogs_and_sentries_seaf_safety",
+    "mods/chef/smarter_guard_dogs_and_sentries_laser",
+    "mods/chef/smarter_guard_dogs_and_sentries_glow",
+    "mods/chef/smarter_guard_dogs_and_sentries_laser_invert",
+    "mods/chef/smarter_guard_dogs_and_sentries_brightness",
+    "mods/chef/smarter_guard_dogs_and_sentries_marker",
+    "mods/chef/smarter_guard_dogs_and_sentries_marker_opacity",
+    "mods/chef/smarter_guard_dogs_and_sentries_marker_size",
+    "mods/chef/reticle_ammo_hud",
+    "mods/chef/reticle_ammo_hud_options",
+    "mods/reticle_ammo/hud",
+    "mods/reticle_ammo/preset_style",
+    "mods/reticle_ammo/preset_hotkey",
+    "mods/reticle_ammo/preset_size",
+    "mods/reticle_ammo/preset_position",
+    "mods/reticle_ammo/preset_visibility",
+    "mods/reticle_ammo/preset_numbers",
+    "mods/reticle_ammo/preset_ring",
+    "mods/reticle_ammo/preset_vehicles",
+    "mods/reticle_ammo/preset_ammotype",
+    "mods/reticle_ammo/preset_prompts",
+    "mods/reticle_ammo/preset_rpm",
+    "mods/reticle_ammo/preset_labels",
+    "mods/reticle_ammo/preset_items",
+    "mods/reticle_ammo/preset_switch",
+    "mods/chef/vehicle_seat_switch",
+    "mods/chef/vehicle_seat_switch_options",
+    "mods/vehicle_seat_tools/vehicle_seat_switch",
+    "mods/chef/mortar_hud",
+    "mods/chef/mortar_hud_options",
+    "mods/mortar/mortar_hud",
+    "mods/retrox/sentry_hud",
+    "mods/arena_local/mech_part_hud",
+    "mods/driverhud/driver_hud",
+    "mods/chef/pelican_hud",
+    "mods/chef/pelican_hud_options",
+    "mods/chef/hellpod_hud",
+    "mods/chef/hellpod_hud_options",
+    "mods/chef/sentry_hud",
+    "mods/chef/sentry_hud_options",
+    "mods/chef/shield_hud",
+    "mods/chef/shield_hud_options",
+    "mods/chef/sample_radar",
+    "mods/chef/sample_radar_options",
+    "mods/chef/stratagem_hero",
+    "mods/chef/stratagem_hero_options"
+}
+
+local KNOWN_HASH_TO_NAME = {}
+for i = 1, #KNOWN_MOD_NAMES do
+    local nm = KNOWN_MOD_NAMES[i]
+    KNOWN_HASH_TO_NAME[murmur64_key(nm)] = nm
+end
 
 local function read_u32(str, off)
     local b0, b1, b2, b3 = str:byte(off + 1, off + 4)
@@ -1600,10 +2067,128 @@ local function read_u32(str, off)
     return b0 + b1 * 256 + b2 * 65536 + b3 * 16777216
 end
 
+local function resolve_data_dir()
+    local candidates_dirs = { "data", "../data", "../../data" }
+    local pkg_path = package and package.path or ""
+    for pattern in pkg_path:gmatch("[^;]+") do
+        local root = pattern:match("^(.*)[/\\]data[/\\]") or pattern:match("^(.*)[/\\]bin[/\\]")
+        if root and #root > 0 then
+            candidates_dirs[#candidates_dirs + 1] = root .. "/data"
+        end
+    end
+    for i = 1, #candidates_dirs do
+        local d = candidates_dirs[i]
+        for probe_idx = 0, 5 do
+            local f = io.open(format("%s/9ba626afa44a3aa3.patch_%d", d, probe_idx), "rb")
+            if f then
+                f:close()
+                return d
+            end
+        end
+    end
+    return "data"
+end
+
+local function is_boot_loader_script(code, target_name, key8)
+    if key8 == BOOT_RESOURCE_KEY or key8 == BOOT_NAME_KEY then
+        if type(code) ~= "string" or (not code:find("%-%-%s*HD2%-Addon:") and not code:find("%-%-%s*HD2%-Options:")) then
+            return true
+        end
+    end
+    if type(code) ~= "string" then return false end
+    if code:find("UniversalModLoader", 1, true) and code:find("discover_installed_mods", 1, true) then
+        return true
+    end
+    if code:find("%-%-%s*HD2%-Boot:") then
+        return true
+    end
+    if target_name and (
+        target_name == "core/app/boot"
+        or target_name:find("bingus_shared_loader", 1, true)
+        or target_name:find("chef_shared_loader", 1, true)
+        or target_name:find("boot_mod_loader", 1, true)
+    ) then
+        return true
+    end
+    return false
+end
+
+local function is_preset_resource(code, target_name)
+    if type(target_name) == "string" and target_name:find("/preset_", 1, true) then
+        return true
+    end
+    if type(code) == "string" and code:find("Reticle Ammo HUD preset", 1, true) then
+        return true
+    end
+    return false
+end
+
+local function extract_declared_mod_name(code, key8, patch_num, entry_idx)
+    if type(code) ~= "string" then return nil end
+    local target_name = code:match("%-%-%s*HD2%-Addon:%s*([^\r\n]+)")
+        or code:match("%-%-%s*HD2%-Boot:%s*([^\r\n]+)")
+        or code:match("%-%-%s*HD2%-Options:%s*([^\r\n]+)")
+        or code:match("%-%-%s*@mod%s+([^\r\n]+)")
+        or code:match("%-%-%s*Mod:%s*([^\r\n]+)")
+        or code:match('BingusRuntime%.guard%(%s*{[^}]*name%s*=%s*["\'](mods/[^"\']+)["\']')
+        or code:match('BingusRuntime%.guard%(%s*["\'](mods/[^"\']+)["\']')
+        or code:match('MOD_ID%s*=%s*["\'](mods/[^"\']+)["\']')
+        or code:match('MOD_NAME%s*=%s*["\'](mods/[^"\']+)["\']')
+
+    if target_name then
+        return target_name:gsub("^%s+", ""):gsub("%s+$", "")
+    end
+    if key8 and KNOWN_HASH_TO_NAME[key8] then
+        return KNOWN_HASH_TO_NAME[key8]
+    end
+    if key8 and key8 ~= BOOT_RESOURCE_KEY and key8 ~= BOOT_NAME_KEY then
+        return format("mods/custom/patch_%d_entry_%d", patch_num or 0, entry_idx or 0)
+    end
+    return nil
+end
+
 local function discover_installed_mods()
-    local data_dir = "data"
+    local data_dir = resolve_data_dir()
     local candidates = {}
     local candidate_order = {}
+    local preset_modules = {}
+
+    local function register_candidate(target_name, code, patch_num, key8)
+        if is_boot_loader_script(code, target_name, key8) then
+            return
+        end
+        if not target_name or #target_name == 0 then return end
+        if is_preset_resource(code, target_name) then
+            preset_modules[target_name] = code
+            package.preload[target_name] = function()
+                local fn = loadstring(strip_bom(code), "@" .. target_name)
+                if fn then
+                    local ok, res = pcall(fn)
+                    if ok then return res end
+                end
+                return nil
+            end
+            return
+        end
+        if candidates[target_name] then
+            log_message("UniversalLoader", "Overriding %s (patch_%d replaced by higher patch_%d)",
+                target_name, candidates[target_name].patch_num, patch_num)
+            candidates[target_name] = {
+                name = target_name,
+                content = code,
+                patch_num = patch_num,
+                archive = format("9ba626afa44a3aa3.patch_%d", patch_num)
+            }
+        else
+            candidates[target_name] = {
+                name = target_name,
+                content = code,
+                patch_num = patch_num,
+                archive = format("9ba626afa44a3aa3.patch_%d", patch_num)
+            }
+            candidate_order[#candidate_order + 1] = target_name
+        end
+    end
 
     for patch_num = 0, 255 do
         local patch_filename = format("%s/9ba626afa44a3aa3.patch_%d", data_dir, patch_num)
@@ -1619,37 +2204,15 @@ local function discover_installed_mods()
                     f:seek("set", entry_base + i * 80)
                     local ent = f:read(80)
                     if ent and #ent == 80 and ent:sub(9, 16) == LUA_RESOURCE_TYPE then
+                        local key8 = ent:sub(1, 8)
                         local off = read_u32(ent, 16)
                         local sz = read_u32(ent, 56)
                         if off > 0 and sz >= 8 then
                             f:seek("set", off + 8)
                             local code = f:read(sz - 8)
                             if code and #code > 0 then
-                                local target_name = code:match("%-%-%s*HD2%-Addon:%s*([^\r\n]+)")
-                                    or code:match("%-%-%s*HD2%-Boot:%s*([^\r\n]+)")
-                                    or code:match("%-%-%s*HD2%-Options:%s*([^\r\n]+)")
-
-                                if target_name then
-                                    target_name = target_name:gsub("^%s+", ""):gsub("%s+$", "")
-                                    if candidates[target_name] then
-                                        log_message("UniversalLoader", "Overriding %s (patch_%d replaced by higher patch_%d)",
-                                            target_name, candidates[target_name].patch_num, patch_num)
-                                        candidates[target_name] = {
-                                            name = target_name,
-                                            content = code,
-                                            patch_num = patch_num,
-                                            archive = format("9ba626afa44a3aa3.patch_%d", patch_num)
-                                        }
-                                    else
-                                        candidates[target_name] = {
-                                            name = target_name,
-                                            content = code,
-                                            patch_num = patch_num,
-                                            archive = format("9ba626afa44a3aa3.patch_%d", patch_num)
-                                        }
-                                        candidate_order[#candidate_order + 1] = target_name
-                                    end
-                                end
+                                local target_name = extract_declared_mod_name(code, key8, patch_num, i)
+                                register_candidate(target_name, code, patch_num, key8)
                             end
                         end
                     end
@@ -1659,35 +2222,53 @@ local function discover_installed_mods()
                 f:seek("set", 0)
                 local code = f:read("*a")
                 if code and #code > 0 then
-                    local target_name = code:match("%-%-%s*HD2%-Addon:%s*([^\r\n]+)")
-                        or code:match("%-%-%s*HD2%-Boot:%s*([^\r\n]+)")
-                        or code:match("%-%-%s*HD2%-Options:%s*([^\r\n]+)")
-                    if target_name then
-                        target_name = target_name:gsub("^%s+", ""):gsub("%s+$", "")
-                        if candidates[target_name] then
-                            log_message("UniversalLoader", "Overriding %s (patch_%d replaced by higher patch_%d)",
-                                target_name, candidates[target_name].patch_num, patch_num)
-                            candidates[target_name] = {
-                                name = target_name,
-                                content = code,
-                                patch_num = patch_num,
-                                archive = format("9ba626afa44a3aa3.patch_%d", patch_num)
-                            }
-                        else
-                            candidates[target_name] = {
-                                name = target_name,
-                                content = code,
-                                patch_num = patch_num,
-                                archive = format("9ba626afa44a3aa3.patch_%d", patch_num)
-                            }
-                            candidate_order[#candidate_order + 1] = target_name
-                        end
-                    end
+                    local target_name = extract_declared_mod_name(code, nil, patch_num, 0)
+                    register_candidate(target_name, code, patch_num, nil)
                 end
             end
             f:close()
         end
     end
+
+    -- Register on-demand package.preload loaders and stingray.Application.can_get compatibility
+    -- so mods that call require("mods/..._options") during startup resolve immediately without duplicate runs.
+    for target_name, item in pairs(candidates) do
+        if not package.preload[target_name] then
+            local mod_item = item
+            package.preload[target_name] = function()
+                if not package.loaded[mod_item.name] then
+                    execute_mod_script(mod_item.name, mod_item.content, mod_item.archive)
+                end
+                return package.loaded[mod_item.name]
+            end
+        end
+    end
+
+    local sr = rawget(_G, "stingray")
+    if sr and type(sr.Application) == "table" and type(sr.Application.can_get) == "function" and not sr.Application._uml_can_get_wrapped then
+        local orig_can_get = sr.Application.can_get
+        sr.Application._uml_can_get_wrapped = true
+        sr.Application.can_get = function(res_type, res_name, ...)
+            if res_type == "lua" and type(res_name) == "string" then
+                if candidates[res_name] or preset_modules[res_name] or package.loaded[res_name] or package.preload[res_name] or UniversalState.active_mods[res_name] then
+                    return true
+                end
+            end
+            return orig_can_get(res_type, res_name, ...)
+        end
+    end
+
+    -- Sort execution order so sub-modules (`<parent>_*`, e.g. `warbond_desk_options`) run before `<parent>` (`warbond_desk`)
+    local orig_idx = {}
+    for idx, nm in ipairs(candidate_order) do
+        orig_idx[nm] = idx
+    end
+    table.sort(candidate_order, function(a, b)
+        if a == b then return false end
+        if a:sub(1, #b + 1) == (b .. "_") then return true end
+        if b:sub(1, #a + 1) == (a .. "_") then return false end
+        return (orig_idx[a] or 0) < (orig_idx[b] or 0)
+    end)
 
     for _, target_name in ipairs(candidate_order) do
         local item = candidates[target_name]
@@ -1698,7 +2279,7 @@ local function discover_installed_mods()
 
     local mod_count = 0
     for _ in pairs(UniversalState.active_mods) do mod_count = mod_count + 1 end
-    log_message("UniversalLoader", "Discovered & Registered %d unique mods from game archives.", mod_count)
+    log_message("UniversalLoader", "Discovered & Registered %d unique mods from %s.", mod_count, data_dir)
 end
 
 -- ==============================================================================
@@ -1974,12 +2555,13 @@ end
 local function handle_menu_input()
     local sr = rawget(_G, "stingray")
     if not sr then return end
+    ensure_input_compat(sr)
 
     local function key_pressed(name)
-        local idx = sr.Keyboard and sr.Keyboard.button_index and sr.Keyboard.button_index(name)
-        if idx and sr.Keyboard.pressed and sr.Keyboard.pressed(idx) == 1 then return true end
-        local midx = sr.Mouse and sr.Mouse.button_index and sr.Mouse.button_index(name)
-        if midx and sr.Mouse.pressed and sr.Mouse.pressed(midx) == 1 then return true end
+        local idx = resolve_button_id(sr.Keyboard, name)
+        if idx ~= nil and query_device_button(sr.Keyboard, idx, "pressed") then return true end
+        local midx = resolve_button_id(sr.Mouse, name)
+        if midx ~= nil and query_device_button(sr.Mouse, midx, "pressed") then return true end
         return false
     end
 
@@ -2502,7 +3084,7 @@ local function draw_menu_overlay()
                     draw_text(err_lines[li], 405, 820 + (li - 1) * 24, 14, 245, 120, 120, 255, 970)
                 end
             elseif sel_mod.status == "superseded_by_builtin" then
-                draw_text("Standalone menu archive automatically superseded by Universal Mod Loader's built-in MOM v2 / MBM v4 engine.",
+                draw_text("Standalone menu archive automatically superseded by Universal Mod Loader's built-in MOM v3 / MBM v4 engine.",
                     405, 825, 14, 140, 210, 245, 255, 970)
             else
                 draw_text("Mod compiled and initialized cleanly inside isolated multi-standard sandbox (Bingus / Chef / BML / HD2RT).",
@@ -2551,11 +3133,31 @@ end
 -- 16. STARTUP INITIALIZATION
 -- ==============================================================================
 log_message("UniversalLoader", "Starting Universal Mod Loader (%s)", UniversalState.revision)
-log_message("UniversalLoader", "Standards Active: Bingus (API 1) | Chef (API 3) | BootModLoader (API 1) | HD2Runtime (0.1.0)")
+log_message("UniversalLoader", "Standards Active: Bingus (API 1 / Runtime v1) | Chef (API 3) | BootModLoader (API 1) | HD2Runtime (0.1.0)")
 
 load_persistent_settings()
 discover_installed_mods()
 
 for _, cb in ipairs(UniversalState.after_startup_cbs) do
     pcall(cb)
+end
+
+-- If any loaded mod replaced _G.update directly (e.g., SmarterGuardDogsAndSentries or VehicleSeatSwitch),
+-- wrap the outermost _G.update so ModBindingsMenu polling happens at the start of every frame BEFORE
+-- outer mod wrappers run, and guarantee handle_update runs even if a mod wrapper omits chaining.
+if type(rawget(_G, "update")) == "function" and rawget(_G, "update") ~= handle_update then
+    local outer_mod_update = rawget(_G, "update")
+    local function master_update(dt, ...)
+        handle_update_ran = false
+        bindings_polled_this_frame = false
+        pcall(update_bindings_state)
+        local ok, res = pcall(outer_mod_update, dt, ...)
+        if not handle_update_ran then
+            pcall(handle_update, dt, ...)
+        end
+        bindings_polled_this_frame = false
+        if ok then return res end
+    end
+    _G.update = master_update
+    update = master_update
 end
