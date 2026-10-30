@@ -284,6 +284,243 @@ _G.bit = bit
 package.preload["bit"] = function() return bit end
 package.loaded["bit"] = bit
 
+-- Lua 5.2 / 5.3 Standard Library Polyfills (bit32, table.pack/unpack, utf8)
+local bit32 = {
+    band = function(...)
+        local n = select("#", ...)
+        if n == 0 then return 0xFFFFFFFF end
+        return to_u32(bit.band(...))
+    end,
+    bor = function(...)
+        local n = select("#", ...)
+        if n == 0 then return 0 end
+        return to_u32(bit.bor(...))
+    end,
+    bxor = function(...)
+        local n = select("#", ...)
+        if n == 0 then return 0 end
+        return to_u32(bit.bxor(...))
+    end,
+    bnot = function(x) return to_u32(bit.bnot(x)) end,
+    lshift = function(x, disp)
+        disp = tonumber(disp) or 0
+        if disp < 0 then return to_u32(bit.rshift(x, -disp)) end
+        if disp >= 32 then return 0 end
+        return to_u32(bit.lshift(x, disp))
+    end,
+    rshift = function(x, disp)
+        disp = tonumber(disp) or 0
+        if disp < 0 then return to_u32(bit.lshift(x, -disp)) end
+        if disp >= 32 then return 0 end
+        return to_u32(bit.rshift(x, disp))
+    end,
+    arshift = function(x, disp)
+        disp = tonumber(disp) or 0
+        if disp < 0 then return to_u32(bit.lshift(x, -disp)) end
+        return to_u32(bit.arshift(x, disp))
+    end,
+    btest = function(...)
+        local n = select("#", ...)
+        if n == 0 then return true end
+        return to_u32(bit.band(...)) ~= 0
+    end,
+    extract = function(n, field, width)
+        width = tonumber(width) or 1
+        field = tonumber(field) or 0
+        local u = to_u32(n)
+        return floor(u / (2 ^ field)) % (2 ^ width)
+    end,
+    replace = function(n, v, field, width)
+        width = tonumber(width) or 1
+        field = tonumber(field) or 0
+        local u = to_u32(n)
+        local mask = (2 ^ width - 1) * (2 ^ field)
+        local cleared = to_u32(bit.band(u, bit.bnot(mask)))
+        local ins = (to_u32(v) % (2 ^ width)) * (2 ^ field)
+        return to_u32(bit.bor(cleared, ins))
+    end,
+    lrotate = function(x, disp) return to_u32(bit.rol(x, disp)) end,
+    rrotate = function(x, disp) return to_u32(bit.ror(x, disp)) end
+}
+_G.bit32 = rawget(_G, "bit32") or bit32
+package.preload["bit32"] = function() return _G.bit32 end
+package.loaded["bit32"] = _G.bit32
+
+if type(table.unpack) ~= "function" then
+    table.unpack = unpack
+end
+if type(table.pack) ~= "function" then
+    table.pack = function(...)
+        return { n = select("#", ...), ... }
+    end
+end
+
+local utf8_lib
+utf8_lib = {
+    charpattern = "[\0-\127\194-\244][\128-\191]*",
+    char = function(...)
+        local out = {}
+        local n = select("#", ...)
+        for i = 1, n do
+            local cp = floor(tonumber(select(i, ...)) or 0)
+            if cp < 0 or cp > 0x10FFFF then
+                out[#out + 1] = "?"
+            elseif cp <= 0x7F then
+                out[#out + 1] = char(cp)
+            elseif cp <= 0x7FF then
+                out[#out + 1] = char(0xC0 + floor(cp / 64), 0x80 + (cp % 64))
+            elseif cp <= 0xFFFF then
+                out[#out + 1] = char(
+                    0xE0 + floor(cp / 4096),
+                    0x80 + (floor(cp / 64) % 64),
+                    0x80 + (cp % 64)
+                )
+            else
+                out[#out + 1] = char(
+                    0xF0 + floor(cp / 262144),
+                    0x80 + (floor(cp / 4096) % 64),
+                    0x80 + (floor(cp / 64) % 64),
+                    0x80 + (cp % 64)
+                )
+            end
+        end
+        return concat(out)
+    end,
+    codepoint = function(s, i, j)
+        s = tostring(s or "")
+        local len = #s
+        i = i or 1
+        if i < 0 then i = len + 1 + i end
+        j = j or i
+        if j < 0 then j = len + 1 + j end
+        local res = {}
+        local pos = i
+        while pos <= j and pos <= len do
+            local b1 = byte(s, pos)
+            if not b1 then break end
+            if b1 < 0x80 then
+                res[#res + 1] = b1
+                pos = pos + 1
+            elseif b1 >= 0xC2 and b1 <= 0xDF then
+                local b2 = byte(s, pos + 1) or 0x80
+                res[#res + 1] = (b1 - 0xC0) * 64 + (b2 - 0x80)
+                pos = pos + 2
+            elseif b1 >= 0xE0 and b1 <= 0xEF then
+                local b2 = byte(s, pos + 1) or 0x80
+                local b3 = byte(s, pos + 2) or 0x80
+                res[#res + 1] = (b1 - 0xE0) * 4096 + (b2 - 0x80) * 64 + (b3 - 0x80)
+                pos = pos + 3
+            elseif b1 >= 0xF0 and b1 <= 0xF4 then
+                local b2 = byte(s, pos + 1) or 0x80
+                local b3 = byte(s, pos + 2) or 0x80
+                local b4 = byte(s, pos + 3) or 0x80
+                res[#res + 1] = (b1 - 0xF0) * 262144 + (b2 - 0x80) * 4096 + (b3 - 0x80) * 64 + (b4 - 0x80)
+                pos = pos + 4
+            else
+                res[#res + 1] = b1
+                pos = pos + 1
+            end
+        end
+        return unpack(res)
+    end,
+    len = function(s, i, j)
+        s = tostring(s or "")
+        local len = #s
+        i = i or 1
+        if i < 0 then i = len + 1 + i end
+        j = j or len
+        if j < 0 then j = len + 1 + j end
+        local count = 0
+        local pos = i
+        while pos <= j and pos <= len do
+            local b1 = byte(s, pos)
+            if not b1 then break end
+            count = count + 1
+            if b1 < 0x80 then pos = pos + 1
+            elseif b1 >= 0xC2 and b1 <= 0xDF then pos = pos + 2
+            elseif b1 >= 0xE0 and b1 <= 0xEF then pos = pos + 3
+            elseif b1 >= 0xF0 and b1 <= 0xF4 then pos = pos + 4
+            else pos = pos + 1 end
+        end
+        return count
+    end,
+    codes = function(s)
+        s = tostring(s or "")
+        local len = #s
+        local pos = 1
+        return function()
+            if pos > len then return nil end
+            local cur = pos
+            local b1 = byte(s, pos)
+            local cp = b1
+            if b1 < 0x80 then
+                pos = pos + 1
+            elseif b1 >= 0xC2 and b1 <= 0xDF then
+                local b2 = byte(s, pos + 1) or 0x80
+                cp = (b1 - 0xC0) * 64 + (b2 - 0x80)
+                pos = pos + 2
+            elseif b1 >= 0xE0 and b1 <= 0xEF then
+                local b2 = byte(s, pos + 1) or 0x80
+                local b3 = byte(s, pos + 2) or 0x80
+                cp = (b1 - 0xE0) * 4096 + (b2 - 0x80) * 64 + (b3 - 0x80)
+                pos = pos + 3
+            elseif b1 >= 0xF0 and b1 <= 0xF4 then
+                local b2 = byte(s, pos + 1) or 0x80
+                local b3 = byte(s, pos + 2) or 0x80
+                local b4 = byte(s, pos + 3) or 0x80
+                cp = (b1 - 0xF0) * 262144 + (b2 - 0x80) * 4096 + (b3 - 0x80) * 64 + (b4 - 0x80)
+                pos = pos + 4
+            else
+                pos = pos + 1
+            end
+            return cur, cp
+        end
+    end,
+    offset = function(s, n, i)
+        s = tostring(s or "")
+        local len = #s
+        n = tonumber(n) or 1
+        i = i or ((n >= 0) and 1 or (len + 1))
+        if i < 0 then i = len + 1 + i end
+        if n == 0 then
+            while i > 1 do
+                local b = byte(s, i)
+                if not b or b < 0x80 or b >= 0xC0 then break end
+                i = i - 1
+            end
+            return i
+        elseif n > 0 then
+            local pos = i
+            local rem = n - 1
+            while rem > 0 and pos <= len do
+                local b1 = byte(s, pos)
+                if not b1 then return nil end
+                if b1 < 0x80 then pos = pos + 1
+                elseif b1 >= 0xC2 and b1 <= 0xDF then pos = pos + 2
+                elseif b1 >= 0xE0 and b1 <= 0xEF then pos = pos + 3
+                elseif b1 >= 0xF0 and b1 <= 0xF4 then pos = pos + 4
+                else pos = pos + 1 end
+                rem = rem - 1
+            end
+            return (pos <= len + 1) and pos or nil
+        else
+            local pos = i
+            local rem = -n
+            while rem > 0 and pos > 1 do
+                repeat
+                    pos = pos - 1
+                    local b = byte(s, pos)
+                until pos <= 1 or not b or b < 0x80 or b >= 0xC0
+                rem = rem - 1
+            end
+            return (rem == 0) and pos or nil
+        end
+    end
+}
+_G.utf8 = rawget(_G, "utf8") or utf8_lib
+package.preload["utf8"] = function() return _G.utf8 end
+package.loaded["utf8"] = _G.utf8
+
 -- Pure Lua 64-bit MurmurHash64A Implementation
 local function murmurhash64a(str, seed)
     seed = seed or 0
@@ -723,6 +960,7 @@ function ffi.load(name)
     return loaded_libs[n]
 end
 
+local has_native_ffi = false
 local native_ffi = rawget(_G, "ffi")
 if type(native_ffi) ~= "table" then
     local ok, res = pcall(require, "ffi")
@@ -730,6 +968,7 @@ if type(native_ffi) ~= "table" then
 end
 if type(native_ffi) == "table" and type(native_ffi.cdef) == "function" and type(native_ffi.new) == "function" then
     ffi = native_ffi
+    has_native_ffi = true
 end
 
 _G.ffi = ffi
@@ -1928,6 +2167,8 @@ local function execute_mod_script(mod_name, source_code, archive_name)
         BootModLoader = BootModLoader,
         hd2rt = hd2rt,
         bit = bit,
+        bit32 = _G.bit32,
+        utf8 = _G.utf8,
         ffi = ffi
     }, {
         __index = _G,
@@ -2283,7 +2524,7 @@ local function discover_installed_mods()
 end
 
 -- ==============================================================================
--- 14. INTERACTIVE IN-GAME OVERLAY (F2 / F9 / 3-TAB STINGRAY SCREEN-GUI)
+-- 14. INTERACTIVE ESCAPE-MENU "MODS" TAB & 3-COLUMN SETTINGS UI (MOUSE + KEYBOARD)
 -- ==============================================================================
 local UI_FONT = "core/performance_hud/debug"
 local UI_GFX = {
@@ -2303,6 +2544,171 @@ local COMMON_SCAN_KEYS = {
     "up", "down", "left", "right", "insert", "home", "end", "page up", "page down",
     "mouse_middle", "mouse_extra_1", "mouse_extra_2"
 }
+
+-- Escape-Menu Top-Bar "MODS [F2]" Tab Button Geometry (1920x1080 Canvas)
+local ESC_TOP_MODS_BTN = { x = 1150, y = 36, w = 190, h = 44 }
+
+-- Win32 Cursor State (used when native LuaJIT FFI is active in Helldivers 2)
+local win32_cursor_state = nil
+local function init_win32_cursor()
+    if win32_cursor_state ~= nil then return win32_cursor_state end
+    if not has_native_ffi then
+        win32_cursor_state = false
+        return false
+    end
+    local ok, state = pcall(function()
+        for _, decl in ipairs({
+            "void *GetForegroundWindow(void);",
+            "uint32_t GetWindowThreadProcessId(void *, void *);",
+            "uint32_t GetCurrentProcessId(void);",
+            "int GetCursorPos(void *);",
+            "int ScreenToClient(void *, void *);",
+            "int GetClientRect(void *, void *);"
+        }) do
+            pcall(ffi.cdef, decl)
+        end
+        local u32 = ffi.load("user32")
+        local k32 = ffi.load("kernel32")
+        return {
+            user32 = u32,
+            own_pid = k32.GetCurrentProcessId(),
+            pid_buf = ffi.new("uint32_t[1]"),
+            pt_buf = ffi.new("int32_t[2]"),
+            rc_buf = ffi.new("int32_t[4]")
+        }
+    end)
+    win32_cursor_state = (ok and type(state) == "table") and state or false
+    return win32_cursor_state
+end
+
+local function get_screen_resolution(sr)
+    local W, H = 1920, 1080
+    if sr and sr.Gui and type(sr.Gui.resolution) == "function" then
+        local ok, rw, rh = pcall(sr.Gui.resolution)
+        if ok and type(rw) == "number" and type(rh) == "number" and rw > 0 and rh > 0 then
+            W, H = rw, rh
+        end
+    end
+    return W, H
+end
+
+local function is_cursor_shown(sr)
+    if not sr or type(sr.Window) ~= "table" then return false end
+    if type(sr.Window.show_cursor) == "function" then
+        local ok, shown = pcall(sr.Window.show_cursor)
+        if ok and shown == true then return true end
+    end
+    if type(sr.Window.has_cursor) == "function" then
+        local ok, shown = pcall(sr.Window.has_cursor)
+        if ok and shown == true then return true end
+    end
+    return false
+end
+
+local function get_mouse_canvas_pos(sr)
+    local W, H = get_screen_resolution(sr)
+    local scale = H / 1080
+    local ox = floor((W - 1920 * scale) * 0.5)
+    local raw_x, raw_y = nil, nil
+
+    -- 1. Try Win32 ScreenToClient (exact top-down client coordinates in Helldivers 2)
+    local w32 = init_win32_cursor()
+    if w32 then
+        pcall(function()
+            local u = w32.user32
+            local win = u.GetForegroundWindow()
+            if win ~= nil and win ~= ffi.NULL then
+                if u.GetWindowThreadProcessId(win, ffi.cast("void *", w32.pid_buf)) ~= 0
+                    and tonumber(w32.pid_buf[0]) == tonumber(w32.own_pid)
+                then
+                    if u.GetCursorPos(ffi.cast("void *", w32.pt_buf)) ~= 0
+                        and u.ScreenToClient(win, ffi.cast("void *", w32.pt_buf)) ~= 0
+                        and u.GetClientRect(win, ffi.cast("void *", w32.rc_buf)) ~= 0
+                    then
+                        local cw = tonumber(w32.rc_buf[2] - w32.rc_buf[0]) or 0
+                        local ch = tonumber(w32.rc_buf[3] - w32.rc_buf[1]) or 0
+                        if cw > 0 and ch > 0 then
+                            local px = tonumber(w32.pt_buf[0]) * W / cw
+                            local py = tonumber(w32.pt_buf[1]) * H / ch
+                            if px >= 0 and py >= 0 and px <= W and py <= H then
+                                raw_x, raw_y = px, py
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    end
+
+    -- 2. Fallback to Stingray Mouse.axis("cursor")
+    if (raw_x == nil or raw_y == nil) and sr and type(sr.Mouse) == "table" then
+        pcall(function()
+            local m = sr.Mouse
+            if type(m.axis) == "function" then
+                local aid = (type(m.axis_id) == "function") and m.axis_id("cursor") or "cursor"
+                if aid ~= nil then
+                    local v = m.axis(aid)
+                    if v ~= nil then
+                        local vx, vy
+                        if type(sr.Vector3) == "table" and type(sr.Vector3.x) == "function" then
+                            vx, vy = sr.Vector3.x(v), sr.Vector3.y(v)
+                        elseif type(v) == "table" then
+                            vx = v.x or v[1]
+                            vy = v.y or v[2]
+                        end
+                        if type(vx) == "number" and type(vy) == "number" then
+                            if vx >= 0 and vx <= 1 and vy >= 0 and vy <= 1 and (vx > 0 or vy > 0) and W > 1 and H > 1 then
+                                vx = vx * W
+                                vy = vy * H
+                            end
+                            raw_x, raw_y = vx, vy
+                        end
+                    end
+                end
+            end
+        end)
+    end
+
+    if raw_x == nil or raw_y == nil or scale <= 0 then
+        return nil, nil
+    end
+    local cx = (raw_x - ox) / scale
+    local cy = raw_y / scale
+    return cx, cy
+end
+
+local function get_mouse_wheel_delta(sr)
+    if not sr or type(sr.Mouse) ~= "table" then return 0 end
+    local m = sr.Mouse
+    if type(m.axis) == "function" then
+        local ok, wy = pcall(function()
+            local aid = (type(m.axis_id) == "function") and m.axis_id("wheel") or "wheel"
+            if aid == nil then return 0 end
+            local v = m.axis(aid)
+            if v == nil then return 0 end
+            if type(sr.Vector3) == "table" and type(sr.Vector3.y) == "function" then
+                return sr.Vector3.y(v)
+            elseif type(v) == "table" then
+                return v.y or v[2] or 0
+            elseif type(v) == "number" then
+                return v
+            end
+            return 0
+        end)
+        if ok and type(wy) == "number" and wy ~= 0 and wy == wy and math.abs(wy) < math.huge then
+            return wy
+        end
+    end
+    local w_up = resolve_button_id(m, "wheel_up")
+    if w_up ~= nil and query_device_button(m, w_up, "pressed") then return 1 end
+    local w_dn = resolve_button_id(m, "wheel_down")
+    if w_dn ~= nil and query_device_button(m, w_dn, "pressed") then return -1 end
+    return 0
+end
+
+local function pt_in_rect(cx, cy, x, y, w, h)
+    return cx ~= nil and cy ~= nil and cx >= x and cx <= (x + w) and cy >= y and cy <= (y + h)
+end
 
 local function is_stingray_retained_gui(sr)
     return sr and sr.World and type(sr.World.create_screen_gui) == "function"
@@ -2489,28 +2895,18 @@ local function format_option_value(spec, val)
     local otype = spec.type
     if otype == "toggle" or otype == "boolean" or (otype == nil and type(val) == "boolean") then
         if val == true then
-            return "[  ON  ]", 90, 235, 130
+            return "ON", 90, 235, 130
         else
-            return "[ OFF  ]", 200, 110, 110
+            return "OFF", 200, 110, 110
         end
     elseif otype == "choice" or (type(spec.choices) == "table" and #spec.choices > 0) then
         local count = #spec.choices
         local idx = normalize_option_value(spec, val)
         local choice_lbl = resolve_text(spec.choices[idx], tostring(idx))
-        return format("< %s (%d/%d) >", choice_lbl, idx, count), 245, 210, 85
+        return format("%s (%d/%d)", choice_lbl, idx, count), 245, 210, 85
     elseif otype == "slider" or otype == "number" or type(val) == "number" then
         local num = tonumber(val) or 0
-        local min_v = tonumber(spec.min)
-        local max_v = tonumber(spec.max)
-        if min_v and max_v and max_v > min_v then
-            local ratio = (num - min_v) / (max_v - min_v)
-            if ratio < 0 then ratio = 0 elseif ratio > 1 then ratio = 1 end
-            local filled = floor(ratio * 10 + 0.5)
-            local bar = string.rep("#", filled) .. string.rep("-", 10 - filled)
-            return format("[%s] %s", bar, tostring(num)), 110, 210, 250
-        else
-            return format("< %s >", tostring(num)), 110, 210, 250
-        end
+        return tostring(num), 110, 210, 250
     end
     return tostring(val), 220, 225, 235
 end
@@ -2552,6 +2948,41 @@ local function wrap_text_lines(text, max_chars, max_lines)
     return lines
 end
 
+local function step_option_value(cur_id, dir)
+    local spec = ModOptionsMenu.registered[cur_id]
+    if not spec then return end
+    local cur_val = ModOptionsMenu.get(cur_id)
+    local otype = spec.type
+    if otype == "toggle" or otype == "boolean" or (otype == nil and type(cur_val) == "boolean") then
+        ModOptionsMenu.set(cur_id, not cur_val)
+    elseif otype == "choice" or (type(spec.choices) == "table" and #spec.choices > 0) then
+        local count = #spec.choices
+        local cur_idx = normalize_option_value(spec, cur_val)
+        if dir >= 0 then
+            cur_idx = (cur_idx % count) + 1
+        else
+            cur_idx = cur_idx - 1
+            if cur_idx < 1 then cur_idx = count end
+        end
+        ModOptionsMenu.set(cur_id, cur_idx)
+    elseif otype == "slider" or otype == "number" or type(cur_val) == "number" then
+        local step = tonumber(spec.step) or 1
+        local num = tonumber(cur_val) or 0
+        ModOptionsMenu.set(cur_id, snap_slider_value(spec, num + (dir >= 0 and step or -step)))
+    end
+end
+
+local function set_slider_from_ratio(cur_id, ratio)
+    local spec = ModOptionsMenu.registered[cur_id]
+    if not spec then return end
+    local min_v = tonumber(spec.min)
+    local max_v = tonumber(spec.max)
+    if not min_v or not max_v or max_v <= min_v then return end
+    if ratio < 0 then ratio = 0 elseif ratio > 1 then ratio = 1 end
+    local raw_val = min_v + ratio * (max_v - min_v)
+    ModOptionsMenu.set(cur_id, snap_slider_value(spec, raw_val))
+end
+
 local function handle_menu_input()
     local sr = rawget(_G, "stingray")
     if not sr then return end
@@ -2562,23 +2993,90 @@ local function handle_menu_input()
         if idx ~= nil and query_device_button(sr.Keyboard, idx, "pressed") then return true end
         local midx = resolve_button_id(sr.Mouse, name)
         if midx ~= nil and query_device_button(sr.Mouse, midx, "pressed") then return true end
+        if type(sr.Pad1) == "table" then
+            local pidx = resolve_button_id(sr.Pad1, name)
+            if pidx ~= nil and query_device_button(sr.Pad1, pidx, "pressed") then return true end
+        end
         return false
     end
 
+    local function mouse_btn_pressed(btn_name, alt_name)
+        local m = sr.Mouse
+        if type(m) ~= "table" then return false end
+        local idx = resolve_button_id(m, btn_name)
+        if idx ~= nil and query_device_button(m, idx, "pressed") then return true end
+        if alt_name then
+            local aidx = resolve_button_id(m, alt_name)
+            if aidx ~= nil and query_device_button(m, aidx, "pressed") then return true end
+        end
+        return false
+    end
+
+    local function mouse_btn_down(btn_name, alt_name)
+        local m = sr.Mouse
+        if type(m) ~= "table" then return false end
+        local idx = resolve_button_id(m, btn_name)
+        if idx ~= nil and query_device_button(m, idx, "button") then return true end
+        if alt_name then
+            local aidx = resolve_button_id(m, alt_name)
+            if aidx ~= nil and query_device_button(m, aidx, "button") then return true end
+        end
+        return false
+    end
+
+    local cx, cy = get_mouse_canvas_pos(sr)
+    local mouse_moved = false
+    if cx ~= nil and cy ~= nil then
+        if UniversalState.last_mouse_cx == nil or UniversalState.last_mouse_cy == nil
+            or math.abs(cx - UniversalState.last_mouse_cx) >= 1.0
+            or math.abs(cy - UniversalState.last_mouse_cy) >= 1.0
+        then
+            mouse_moved = true
+            UniversalState.last_mouse_cx = cx
+            UniversalState.last_mouse_cy = cy
+        end
+    end
+
+    local lclick = mouse_btn_pressed("left", "mouse_left")
+    local ldown = mouse_btn_down("left", "mouse_left")
+    local rclick = mouse_btn_pressed("right", "mouse_right")
+    local wheel = get_mouse_wheel_delta(sr)
+
+    if not ldown then
+        UniversalState.dragging_slider_id = nil
+    end
+
+    -- Hotkey toggle (F2 / F9) works anywhere
     if key_pressed("f2") or key_pressed("f9") then
         UniversalState.menu_visible = not UniversalState.menu_visible
         UniversalState.menu_rebind_id = nil
+        UniversalState.dragging_slider_id = nil
         if not UniversalState.menu_visible then
             ui_gfx_clear(sr)
         end
         return
     end
 
-    if not UniversalState.menu_visible then return end
+    -- When MODS screen is closed, check if Escape Menu cursor is active for Top-Bar "MODS [F2]" Tab Button
+    if not UniversalState.menu_visible then
+        if is_cursor_shown(sr) then
+            local hov = pt_in_rect(cx, cy, ESC_TOP_MODS_BTN.x, ESC_TOP_MODS_BTN.y, ESC_TOP_MODS_BTN.w, ESC_TOP_MODS_BTN.h)
+            UniversalState.hover_esc_mods_btn = hov
+            if hov and lclick then
+                UniversalState.menu_visible = true
+                UniversalState.menu_rebind_id = nil
+                UniversalState.dragging_slider_id = nil
+                return
+            end
+        else
+            UniversalState.hover_esc_mods_btn = false
+        end
+        return
+    end
 
     -- Rebind Mode Active in Tab 2
     if UniversalState.menu_rebind_id then
-        if key_pressed("escape") then
+        if key_pressed("escape") or rclick then
             UniversalState.menu_rebind_id = nil
             return
         elseif key_pressed("delete") or key_pressed("backspace") then
@@ -2599,11 +3097,42 @@ local function handle_menu_input()
 
     if key_pressed("escape") then
         UniversalState.menu_visible = false
+        UniversalState.dragging_slider_id = nil
         ui_gfx_clear(sr)
         return
     end
 
-    -- Tab switching (1: Mod Options, 2: Key Bindings, 3: Loaded Mods)
+    -- Continue active slider drag if left mouse button is held down
+    if UniversalState.dragging_slider_id and ldown and cx ~= nil then
+        local ratio = (cx - 1028) / 190
+        set_slider_from_ratio(UniversalState.dragging_slider_id, ratio)
+        return
+    end
+
+    -- Top Header Bar Mouse Clicks (Y=36..80)
+    if lclick and cy ~= nil and cy >= 34 and cy <= 82 then
+        -- Native Escape-Menu Tabs: [ GAME ] (105..250), [ SOCIAL ] (260..415), [ OPTIONS ] (425..590)
+        if (cx >= 105 and cx <= 590) or (cx >= 1605 and cx <= 1815) then
+            UniversalState.menu_visible = false
+            UniversalState.dragging_slider_id = nil
+            ui_gfx_clear(sr)
+            return
+        elseif cx >= 810 and cx <= 1070 then
+            UniversalState.menu_tab = 1
+            UniversalState.menu_selected = 1
+            return
+        elseif cx >= 1080 and cx <= 1330 then
+            UniversalState.menu_tab = 2
+            UniversalState.menu_selected = 1
+            return
+        elseif cx >= 1340 and cx <= 1590 then
+            UniversalState.menu_tab = 3
+            UniversalState.menu_selected = 1
+            return
+        end
+    end
+
+    -- Keyboard Tab Switching (Tab / 1 / 2 / 3)
     if key_pressed("tab") then
         UniversalState.menu_tab = ((UniversalState.menu_tab or 1) % 3) + 1
         UniversalState.menu_selected = 1
@@ -2622,22 +3151,74 @@ local function handle_menu_input()
         return
     end
 
-    -- TAB 1: MOD OPTIONS
-    if UniversalState.menu_tab == 1 then
-        local categories, by_cat = get_mod_option_categories()
-        local cat_idx = UniversalState.menu_mod_filter or 1
-        if cat_idx < 1 or cat_idx > #categories then
-            cat_idx = 1
-            UniversalState.menu_mod_filter = 1
+    local categories, by_cat = get_mod_option_categories()
+    local cat_idx = UniversalState.menu_mod_filter or 1
+    if cat_idx < 1 or cat_idx > #categories then
+        cat_idx = 1
+        UniversalState.menu_mod_filter = 1
+    end
+
+    -- Left Column (X=105..495): Category Sidebar Clicks & Wheel
+    local cat_page_size = 12
+    local cat_page = floor((cat_idx - 1) / cat_page_size)
+    local cat_start = cat_page * cat_page_size + 1
+    local cat_end = min(#categories, cat_start + cat_page_size - 1)
+
+    if cx ~= nil and cx >= 105 and cx <= 495 then
+        if wheel > 0 and #categories > 0 then
+            cat_idx = cat_idx - 1
+            if cat_idx < 1 then cat_idx = #categories end
+            UniversalState.menu_mod_filter = cat_idx
+            UniversalState.menu_tab = 1
+            UniversalState.menu_selected = 1
+            return
+        elseif wheel < 0 and #categories > 0 then
+            cat_idx = (cat_idx % #categories) + 1
+            UniversalState.menu_mod_filter = cat_idx
+            UniversalState.menu_tab = 1
+            UniversalState.menu_selected = 1
+            return
         end
 
-        if key_pressed("q") or key_pressed("page up") then
+        if lclick then
+            for ci = cat_start, cat_end do
+                local ry = 152 + (ci - cat_start) * 60
+                if pt_in_rect(cx, cy, 115, ry, 370, 54) then
+                    UniversalState.menu_mod_filter = ci
+                    UniversalState.menu_tab = 1
+                    UniversalState.menu_selected = 1
+                    return
+                end
+            end
+            -- Left column bottom [< PREV (Q)] / [(E) NEXT >] buttons
+            if pt_in_rect(cx, cy, 115, 885, 180, 44) and #categories > 0 then
+                cat_idx = cat_idx - 1
+                if cat_idx < 1 then cat_idx = #categories end
+                UniversalState.menu_mod_filter = cat_idx
+                UniversalState.menu_tab = 1
+                UniversalState.menu_selected = 1
+                return
+            elseif pt_in_rect(cx, cy, 305, 885, 180, 44) and #categories > 0 then
+                cat_idx = (cat_idx % #categories) + 1
+                UniversalState.menu_mod_filter = cat_idx
+                UniversalState.menu_tab = 1
+                UniversalState.menu_selected = 1
+                return
+            end
+        end
+    end
+
+    -- ==========================================================================
+    -- TAB 1: MOD OPTIONS INPUT
+    -- ==========================================================================
+    if (UniversalState.menu_tab or 1) == 1 then
+        if key_pressed("q") or key_pressed("left_shoulder") then
             cat_idx = cat_idx - 1
             if cat_idx < 1 then cat_idx = #categories end
             UniversalState.menu_mod_filter = cat_idx
             UniversalState.menu_selected = 1
             return
-        elseif key_pressed("e") or key_pressed("page down") then
+        elseif key_pressed("e") or key_pressed("right_shoulder") then
             cat_idx = (cat_idx % #categories) + 1
             UniversalState.menu_mod_filter = cat_idx
             UniversalState.menu_selected = 1
@@ -2646,74 +3227,184 @@ local function handle_menu_input()
 
         local active_cat = categories[cat_idx] or "ALL MODS"
         local opt_keys = by_cat[active_cat] or {}
-        if #opt_keys == 0 then return end
-
-        if key_pressed("up") then
-            UniversalState.menu_selected = math.max(1, (UniversalState.menu_selected or 1) - 1)
-        elseif key_pressed("down") then
-            UniversalState.menu_selected = math.min(#opt_keys, (UniversalState.menu_selected or 1) + 1)
-        end
+        local total = #opt_keys
+        if total == 0 then return end
 
         local sel = UniversalState.menu_selected or 1
-        if sel > #opt_keys then sel = #opt_keys; UniversalState.menu_selected = sel end
+        if sel > total then sel = total; UniversalState.menu_selected = sel end
+        local page_size = 12
+        local page = floor((sel - 1) / page_size)
+        local start_idx = page * page_size + 1
+        local end_idx = min(total, start_idx + page_size - 1)
+
+        -- Mouse Wheel in Center/Right Columns
+        if wheel ~= 0 and (cx == nil or cx > 495) then
+            if wheel > 0 then
+                UniversalState.menu_selected = math.max(1, sel - 1)
+            else
+                UniversalState.menu_selected = math.min(total, sel + 1)
+            end
+            return
+        end
+
+        -- Center Column Header [< PAGE] / [PAGE >] Clicks
+        if lclick and pt_in_rect(cx, cy, 1095, 109, 115, 34) then
+            UniversalState.menu_selected = math.max(1, sel - page_size)
+            return
+        elseif lclick and pt_in_rect(cx, cy, 1220, 109, 115, 34) then
+            UniversalState.menu_selected = math.min(total, sel + page_size)
+            return
+        end
+
+        -- Right Column [RESET TO DEFAULT] Button Click
+        if lclick and pt_in_rect(cx, cy, 1395, 880, 400, 48) then
+            local cur_id = opt_keys[sel]
+            if cur_id then ModOptionsMenu.reset_option(cur_id) end
+            return
+        end
+
+        -- Center Column Option Rows: Hover, Left-Click, Slider Drag, Right-Click
+        if cx ~= nil and cx >= 525 and cx <= 1345 then
+            for i = start_idx, end_idx do
+                local ry = 152 + (i - start_idx) * 60
+                if pt_in_rect(cx, cy, 525, ry, 820, 54) then
+                    if mouse_moved or lclick or rclick then
+                        UniversalState.menu_selected = i
+                        sel = i
+                    end
+                    local row_id = opt_keys[i]
+                    local spec = row_id and ModOptionsMenu.registered[row_id]
+                    if rclick and row_id then
+                        ModOptionsMenu.reset_option(row_id)
+                        return
+                    elseif lclick and row_id and spec then
+                        local cur_val = ModOptionsMenu.get(row_id)
+                        local otype = spec.type
+                        if otype == "toggle" or otype == "boolean" or (otype == nil and type(cur_val) == "boolean") then
+                            if cx >= 1045 and cx <= 1180 then
+                                ModOptionsMenu.set(row_id, false)
+                            elseif cx >= 1185 and cx <= 1320 then
+                                ModOptionsMenu.set(row_id, true)
+                            else
+                                ModOptionsMenu.set(row_id, not cur_val)
+                            end
+                        elseif otype == "choice" or (type(spec.choices) == "table" and #spec.choices > 0) then
+                            if cx >= 985 and cx <= 1030 then
+                                step_option_value(row_id, -1)
+                            else
+                                step_option_value(row_id, 1)
+                            end
+                        elseif otype == "slider" or otype == "number" or type(cur_val) == "number" then
+                            local min_v = tonumber(spec.min)
+                            local max_v = tonumber(spec.max)
+                            if cx >= 985 and cx <= 1024 then
+                                step_option_value(row_id, -1)
+                            elseif min_v and max_v and max_v > min_v and cx >= 1028 and cx <= 1218 then
+                                UniversalState.dragging_slider_id = row_id
+                                set_slider_from_ratio(row_id, (cx - 1028) / 190)
+                            elseif cx >= 1222 and cx <= 1265 then
+                                step_option_value(row_id, 1)
+                            else
+                                step_option_value(row_id, 1)
+                            end
+                        end
+                        return
+                    end
+                    break
+                end
+            end
+        end
+
+        -- Keyboard / Controller Navigation
+        if key_pressed("up") or key_pressed("d_up") then
+            UniversalState.menu_selected = math.max(1, sel - 1)
+        elseif key_pressed("down") or key_pressed("d_down") then
+            UniversalState.menu_selected = math.min(total, sel + 1)
+        elseif key_pressed("page up") then
+            UniversalState.menu_selected = math.max(1, sel - page_size)
+        elseif key_pressed("page down") then
+            UniversalState.menu_selected = math.min(total, sel + page_size)
+        end
+
+        sel = UniversalState.menu_selected or 1
         local cur_id = opt_keys[sel]
         if cur_id then
-            local spec = ModOptionsMenu.registered[cur_id]
-            local cur_val = ModOptionsMenu.get(cur_id)
-            local toggle = key_pressed("enter") or key_pressed("space")
-            local step_left = key_pressed("left")
-            local step_right = key_pressed("right")
-            local reset_def = key_pressed("backspace")
-
-            if reset_def then
+            if key_pressed("backspace") then
                 ModOptionsMenu.reset_option(cur_id)
                 return
-            end
-
-            local otype = spec and spec.type
-            if otype == "toggle" or otype == "boolean" or (otype == nil and type(cur_val) == "boolean") then
-                if toggle or step_left or step_right then
-                    ModOptionsMenu.set(cur_id, not cur_val)
-                end
-            elseif otype == "choice" or (spec and type(spec.choices) == "table" and #spec.choices > 0) then
-                local count = #spec.choices
-                local cur_idx = normalize_option_value(spec, cur_val)
-                if toggle or step_right then
-                    cur_idx = (cur_idx % count) + 1
-                    ModOptionsMenu.set(cur_id, cur_idx)
-                elseif step_left then
-                    cur_idx = cur_idx - 1
-                    if cur_idx < 1 then cur_idx = count end
-                    ModOptionsMenu.set(cur_id, cur_idx)
-                end
-            elseif otype == "slider" or otype == "number" or type(cur_val) == "number" then
-                local step = tonumber(spec and spec.step) or 1
-                local num = tonumber(cur_val) or 0
-                if step_left then
-                    ModOptionsMenu.set(cur_id, snap_slider_value(spec, num - step))
-                elseif step_right or toggle then
-                    ModOptionsMenu.set(cur_id, snap_slider_value(spec, num + step))
-                end
+            elseif key_pressed("left") or key_pressed("d_left") then
+                step_option_value(cur_id, -1)
+            elseif key_pressed("right") or key_pressed("d_right") or key_pressed("enter") or key_pressed("space") then
+                step_option_value(cur_id, 1)
             end
         end
 
-    -- TAB 2: KEY BINDINGS
+    -- ==========================================================================
+    -- TAB 2: KEY BINDINGS INPUT
+    -- ==========================================================================
     elseif UniversalState.menu_tab == 2 then
         local bind_list = ModBindingsMenu.order
-        if #bind_list == 0 then return end
-
-        if key_pressed("up") then
-            UniversalState.menu_selected = math.max(1, (UniversalState.menu_selected or 1) - 1)
-        elseif key_pressed("down") then
-            UniversalState.menu_selected = math.min(#bind_list, (UniversalState.menu_selected or 1) + 1)
-        elseif key_pressed("page up") then
-            UniversalState.menu_selected = math.max(1, (UniversalState.menu_selected or 1) - 12)
-        elseif key_pressed("page down") then
-            UniversalState.menu_selected = math.min(#bind_list, (UniversalState.menu_selected or 1) + 12)
-        end
+        local total = #bind_list
+        if total == 0 then return end
 
         local sel = UniversalState.menu_selected or 1
-        if sel > #bind_list then sel = #bind_list; UniversalState.menu_selected = sel end
+        if sel > total then sel = total; UniversalState.menu_selected = sel end
+        local page_size = 12
+        local page = floor((sel - 1) / page_size)
+        local start_idx = page * page_size + 1
+        local end_idx = min(total, start_idx + page_size - 1)
+
+        if wheel ~= 0 and (cx == nil or cx > 495) then
+            if wheel > 0 then
+                UniversalState.menu_selected = math.max(1, sel - 1)
+            else
+                UniversalState.menu_selected = math.min(total, sel + 1)
+            end
+            return
+        end
+
+        if lclick and pt_in_rect(cx, cy, 1395, 880, 400, 48) then
+            local rec = bind_list[sel]
+            if rec then ModBindingsMenu.reset_binding(rec.id) end
+            return
+        end
+
+        if cx ~= nil and cx >= 525 and cx <= 1345 then
+            for i = start_idx, end_idx do
+                local ry = 152 + (i - start_idx) * 60
+                if pt_in_rect(cx, cy, 525, ry, 820, 54) then
+                    if mouse_moved or lclick or rclick then
+                        UniversalState.menu_selected = i
+                        sel = i
+                    end
+                    local rec = bind_list[i]
+                    if rclick and rec then
+                        ModBindingsMenu.reset_binding(rec.id)
+                        return
+                    elseif lclick and rec then
+                        if cx >= 1235 and cx <= 1335 then
+                            ModBindingsMenu.reset_binding(rec.id)
+                        else
+                            UniversalState.menu_rebind_id = rec.id
+                        end
+                        return
+                    end
+                    break
+                end
+            end
+        end
+
+        if key_pressed("up") or key_pressed("d_up") then
+            UniversalState.menu_selected = math.max(1, sel - 1)
+        elseif key_pressed("down") or key_pressed("d_down") then
+            UniversalState.menu_selected = math.min(total, sel + 1)
+        elseif key_pressed("page up") then
+            UniversalState.menu_selected = math.max(1, sel - page_size)
+        elseif key_pressed("page down") then
+            UniversalState.menu_selected = math.min(total, sel + page_size)
+        end
+
+        sel = UniversalState.menu_selected or 1
         local record = bind_list[sel]
         if record then
             if key_pressed("enter") or key_pressed("space") then
@@ -2723,73 +3414,76 @@ local function handle_menu_input()
             end
         end
 
-    -- TAB 3: LOADED MODS & DIAGNOSTICS
+    -- ==========================================================================
+    -- TAB 3: LOADED MODS & DIAGNOSTICS INPUT
+    -- ==========================================================================
     elseif UniversalState.menu_tab == 3 then
         local mods_list = get_loaded_mods_list()
-        if #mods_list == 0 then return end
+        local total = #mods_list
+        if total == 0 then return end
 
-        if key_pressed("up") then
-            UniversalState.menu_selected = math.max(1, (UniversalState.menu_selected or 1) - 1)
-        elseif key_pressed("down") then
-            UniversalState.menu_selected = math.min(#mods_list, (UniversalState.menu_selected or 1) + 1)
+        local sel = UniversalState.menu_selected or 1
+        if sel > total then sel = total; UniversalState.menu_selected = sel end
+        local page_size = 12
+        local page = floor((sel - 1) / page_size)
+        local start_idx = page * page_size + 1
+        local end_idx = min(total, start_idx + page_size - 1)
+
+        if wheel ~= 0 and (cx == nil or cx > 495) then
+            if wheel > 0 then
+                UniversalState.menu_selected = math.max(1, sel - 1)
+            else
+                UniversalState.menu_selected = math.min(total, sel + 1)
+            end
+            return
+        end
+
+        if lclick and pt_in_rect(cx, cy, 1095, 109, 115, 34) then
+            UniversalState.menu_selected = math.max(1, sel - page_size)
+            return
+        elseif lclick and pt_in_rect(cx, cy, 1220, 109, 115, 34) then
+            UniversalState.menu_selected = math.min(total, sel + page_size)
+            return
+        end
+
+        if cx ~= nil and cx >= 525 and cx <= 1345 then
+            for i = start_idx, end_idx do
+                local ry = 152 + (i - start_idx) * 60
+                if pt_in_rect(cx, cy, 525, ry, 820, 54) then
+                    if mouse_moved or lclick then
+                        UniversalState.menu_selected = i
+                    end
+                    break
+                end
+            end
+        end
+
+        if key_pressed("up") or key_pressed("d_up") then
+            UniversalState.menu_selected = math.max(1, sel - 1)
+        elseif key_pressed("down") or key_pressed("d_down") then
+            UniversalState.menu_selected = math.min(total, sel + 1)
         elseif key_pressed("page up") then
-            UniversalState.menu_selected = math.max(1, (UniversalState.menu_selected or 1) - 12)
+            UniversalState.menu_selected = math.max(1, sel - page_size)
         elseif key_pressed("page down") then
-            UniversalState.menu_selected = math.min(#mods_list, (UniversalState.menu_selected or 1) + 12)
+            UniversalState.menu_selected = math.min(total, sel + page_size)
         end
     end
 end
 
 local function draw_menu_overlay()
     local sr = rawget(_G, "stingray")
-    if not UniversalState.menu_visible then
+    if not sr or not sr.Gui or not sr.Gui.rect then return end
+
+    local cursor_open = is_cursor_shown(sr)
+    if not UniversalState.menu_visible and not cursor_open then
         if UI_GFX.gui or #UI_GFX.rect_ids > 0 or #UI_GFX.text_ids > 0 then
             ui_gfx_clear(sr)
         end
         return
     end
-    if not sr or not sr.Gui or not sr.Gui.rect then return end
 
     local retained_mode = is_stingray_retained_gui(sr)
-    local W, H = 1920, 1080
-    if type(sr.Gui.resolution) == "function" then
-        local ok, rw, rh = pcall(sr.Gui.resolution)
-        if ok and type(rw) == "number" and type(rh) == "number" and rw > 0 and rh > 0 then
-            W, H = rw, rh
-        end
-    end
-
-    local categories, by_cat = get_mod_option_categories()
-    local total_opts = #(by_cat["ALL MODS"] or {})
-    local total_binds = #ModBindingsMenu.order
-    local mods_list = get_loaded_mods_list()
-    local total_mods = #mods_list
-
-    if retained_mode then
-        if not ui_gfx_ensure(sr) then return end
-        local sel_bind_down = false
-        if UniversalState.menu_tab == 2 then
-            local rec = ModBindingsMenu.order[UniversalState.menu_selected or 1]
-            if rec then sel_bind_down = ModBindingsMenu.is_down(rec.id) end
-        end
-        local sig = format("%d:%d:%d:%d:%d:%s:%d:%d:%d:%s",
-            W, H,
-            UniversalState.menu_tab or 1,
-            UniversalState.menu_selected or 1,
-            UniversalState.menu_mod_filter or 1,
-            tostring(UniversalState.menu_rebind_id or ""),
-            ModOptionsMenu.revision or 1,
-            ModBindingsMenu.revision or 1,
-            total_mods,
-            tostring(sel_bind_down)
-        )
-        if UI_GFX.last_sig == sig then
-            return
-        end
-        ui_gfx_clear(sr)
-        UI_GFX.last_sig = sig
-    end
-
+    local W, H = get_screen_resolution(sr)
     local scale = H / 1080
     local ox = floor((W - 1920 * scale) * 0.5)
 
@@ -2823,127 +3517,320 @@ local function draw_menu_overlay()
         end
     end
 
-    -- Window Frame (1200x860 centered on 1920x1080 canvas at X=360, Y=110)
-    draw_rect(356, 106, 1208, 868, 235, 195, 45, 220, 955) -- Gold outer border
-    draw_rect(360, 110, 1200, 860, 14, 18, 25, 242, 956)   -- Main dark background
-    draw_rect(360, 110, 1200, 52, 24, 32, 46, 250, 958)    -- Title bar background
-    draw_rect(360, 160, 1200, 2, 235, 195, 45, 255, 959)   -- Title accent rule
-
-    draw_text("UNIVERSAL MOD LOADER v22.0.0", 385, 143, 22, 255, 215, 55, 255, 970)
-    draw_text("[F2 / F9 / Esc] Close    [Tab / 1-3] Switch Tab", 1130, 142, 15, 185, 198, 215, 255, 970)
-
-    -- 3-Tab Navigation Bar (Y=172..208)
-    local tab = UniversalState.menu_tab or 1
-    local tab_specs = {
-        { idx = 1, x = 385, w = 360, label = format("[1] MOD OPTIONS (%d)", total_opts) },
-        { idx = 2, x = 760, w = 360, label = format("[2] KEY BINDINGS (%d)", total_binds) },
-        { idx = 3, x = 1135, w = 400, label = format("[3] LOADED MODS (%d)", total_mods) }
-    }
-    for i = 1, #tab_specs do
-        local ts = tab_specs[i]
-        local active = (tab == ts.idx)
-        draw_rect(ts.x, 172, ts.w, 34, active and 48 or 24, active and 72 or 30, active and 106 or 42, 240, 960)
-        if active then
-            draw_rect(ts.x, 203, ts.w, 3, 255, 215, 55, 255, 962)
+    -- ==========================================================================
+    -- STATE 1: ESCAPE MENU OPEN (TOP-BAR "MODS [F2]" TAB BUTTON ONLY)
+    -- ==========================================================================
+    if not UniversalState.menu_visible and cursor_open then
+        local hov = UniversalState.hover_esc_mods_btn == true
+        if retained_mode then
+            if not ui_gfx_ensure(sr) then return end
+            local sig = format("ESC_TOPBAR:%d:%d:%s", W, H, tostring(hov))
+            if UI_GFX.last_sig == sig then return end
+            ui_gfx_clear(sr)
+            UI_GFX.last_sig = sig
         end
-        draw_text(ts.label, ts.x + 18, 195, 16, active and 255 or 165, active and 240 or 175, active and 180 or 190, 255, 970)
+
+        local bx, by, bw, bh = ESC_TOP_MODS_BTN.x, ESC_TOP_MODS_BTN.y, ESC_TOP_MODS_BTN.w, ESC_TOP_MODS_BTN.h
+        draw_rect(bx - 2, by - 2, bw + 4, bh + 4, 245, 205, 50, hov and 255 or 195, 955)
+        draw_rect(bx, by, bw, bh, hov and 52 or 22, hov and 68 or 28, hov and 92 or 38, 242, 956)
+        draw_rect(bx, by + bh - 3, bw, 3, 255, 215, 55, 255, 958)
+        draw_text("MODS [F2]", bx + 34, by + 29, 18, 255, hov and 245 or 215, hov and 140 or 65, 255, 970)
+        return
     end
 
     -- ==========================================================================
-    -- TAB 1: MOD OPTIONS (WITH MOD CATEGORY FILTER & DESCRIPTION PANEL)
+    -- STATE 2: FULL-SCREEN HELLDIVERS 2 3-COLUMN "MODS" TAB
+    -- ==========================================================================
+    local categories, by_cat = get_mod_option_categories()
+    local total_opts = #(by_cat["ALL MODS"] or {})
+    local total_binds = #ModBindingsMenu.order
+    local mods_list = get_loaded_mods_list()
+    local total_mods = #mods_list
+
+    if retained_mode then
+        if not ui_gfx_ensure(sr) then return end
+        local sel_bind_down = false
+        if UniversalState.menu_tab == 2 then
+            local rec = ModBindingsMenu.order[UniversalState.menu_selected or 1]
+            if rec then sel_bind_down = ModBindingsMenu.is_down(rec.id) end
+        end
+        local sig = format("MODS_3COL:%d:%d:%d:%d:%d:%s:%d:%d:%d:%s",
+            W, H,
+            UniversalState.menu_tab or 1,
+            UniversalState.menu_selected or 1,
+            UniversalState.menu_mod_filter or 1,
+            tostring(UniversalState.menu_rebind_id or ""),
+            ModOptionsMenu.revision or 1,
+            ModBindingsMenu.revision or 1,
+            total_mods,
+            tostring(sel_bind_down)
+        )
+        if UI_GFX.last_sig == sig then
+            return
+        end
+        ui_gfx_clear(sr)
+        UI_GFX.last_sig = sig
+    end
+
+    -- Outer Tactical Frame (X=85..1835, Y=24..1012 on 1920x1080 Canvas)
+    draw_rect(82, 21, 1756, 994, 235, 195, 45, 225, 954)  -- Gold outer frame
+    draw_rect(85, 24, 1750, 988, 12, 16, 22, 246, 955)    -- Deep tactical backdrop
+    draw_rect(85, 24, 1750, 66, 20, 27, 38, 252, 956)     -- Top Menu Bar backdrop
+    draw_rect(85, 90, 1750, 2, 235, 195, 45, 255, 957)    -- Top Menu gold divider
+
+    -- Top Bar Left: Native Escape-Menu Tab Return Buttons + Active [ MODS ] Tab
+    local esc_tabs = {
+        { x = 105, w = 145, label = "GAME",    active = false },
+        { x = 260, w = 155, label = "SOCIAL",  active = false },
+        { x = 425, w = 165, label = "OPTIONS", active = false },
+        { x = 600, w = 165, label = "MODS",    active = true  }
+    }
+    for i = 1, #esc_tabs do
+        local et = esc_tabs[i]
+        if et.active then
+            draw_rect(et.x, 36, et.w, 44, 58, 52, 24, 245, 958)
+            draw_rect(et.x, 76, et.w, 4, 255, 215, 55, 255, 960)
+            draw_text(et.label, et.x + 44, 65, 19, 255, 220, 65, 255, 970)
+        else
+            draw_rect(et.x, 36, et.w, 44, 26, 34, 46, 220, 958)
+            draw_text(et.label, et.x + 34, 64, 17, 165, 178, 195, 255, 970)
+        end
+    end
+
+    -- Top Bar Right: 3 Mode Sub-Tabs + [ ESC / F2 ] Close Button
+    local tab = UniversalState.menu_tab or 1
+    local mode_tabs = {
+        { idx = 1, x = 810,  w = 260, label = format("[1] MOD OPTIONS (%d)", total_opts) },
+        { idx = 2, x = 1080, w = 250, label = format("[2] KEY BINDINGS (%d)", total_binds) },
+        { idx = 3, x = 1340, w = 250, label = format("[3] LOADED MODS (%d)", total_mods) }
+    }
+    for i = 1, #mode_tabs do
+        local mt = mode_tabs[i]
+        local active = (tab == mt.idx)
+        draw_rect(mt.x, 36, mt.w, 44, active and 42 or 24, active and 66 or 32, active and 98 or 44, 240, 958)
+        if active then
+            draw_rect(mt.x, 77, mt.w, 3, 255, 215, 55, 255, 960)
+        end
+        draw_text(mt.label, mt.x + 16, 64, 15, active and 255 or 170, active and 240 or 182, active and 175 or 198, 255, 970)
+    end
+
+    -- Close Button (X=1605, W=210, Y=36, H=44)
+    draw_rect(1605, 36, 210, 44, 68, 28, 32, 235, 958)
+    draw_rect(1605, 77, 210, 3, 235, 95, 95, 255, 960)
+    draw_text("[ESC / F2] CLOSE", 1632, 64, 15, 255, 210, 210, 255, 970)
+
+    -- ==========================================================================
+    -- COLUMN 1 (LEFT SIDEBAR, X=105..495, Y=105..945): MOD CATEGORIES
+    -- ==========================================================================
+    draw_rect(105, 105, 390, 840, 16, 22, 30, 240, 956)
+    draw_rect(105, 105, 390, 40, 24, 34, 48, 250, 957)
+    draw_rect(105, 143, 390, 2, 235, 195, 45, 220, 958)
+    draw_text("MOD CATEGORIES  [Q / E]", 122, 131, 16, 255, 215, 65, 255, 970)
+
+    local cat_idx = UniversalState.menu_mod_filter or 1
+    if cat_idx < 1 or cat_idx > #categories then
+        cat_idx = 1
+        UniversalState.menu_mod_filter = 1
+    end
+    local cat_page_size = 12
+    local cat_page = floor((cat_idx - 1) / cat_page_size)
+    local cat_start = cat_page * cat_page_size + 1
+    local cat_end = min(#categories, cat_start + cat_page_size - 1)
+
+    for ci = cat_start, cat_end do
+        local cname = categories[ci]
+        local ccount = #(by_cat[cname] or {})
+        local ry = 152 + (ci - cat_start) * 60
+        local is_active_cat = (tab == 1 and ci == cat_idx)
+        local disp_cat = cname:upper()
+        if #disp_cat > 24 then disp_cat = disp_cat:sub(1, 21) .. "..." end
+
+        if is_active_cat then
+            draw_rect(115, ry, 370, 54, 46, 70, 104, 245, 958)
+            draw_rect(115, ry, 5, 54, 255, 215, 55, 255, 960)
+            draw_text(disp_cat, 132, ry + 34, 16, 255, 245, 190, 255, 970)
+            draw_text(format("(%d)", ccount), 432, ry + 34, 15, 255, 215, 65, 255, 970)
+        else
+            draw_rect(115, ry, 370, 54, 22, 28, 39, 215, 957)
+            draw_text(disp_cat, 130, ry + 34, 15, 188, 198, 214, 255, 970)
+            draw_text(format("(%d)", ccount), 432, ry + 34, 14, 140, 158, 178, 255, 970)
+        end
+    end
+
+    -- Left Column Bottom Category Prev/Next Buttons
+    draw_rect(115, 885, 180, 44, 26, 36, 52, 235, 958)
+    draw_text("< PREV [Q]", 152, 913, 15, 210, 222, 238, 255, 970)
+    draw_rect(305, 885, 180, 44, 26, 36, 52, 235, 958)
+    draw_text("[E] NEXT >", 345, 913, 15, 210, 222, 238, 255, 970)
+
+    -- ==========================================================================
+    -- COLUMN 2 (CENTER LIST, X=515..1355) & COLUMN 3 (RIGHT DESCRIPTION, X=1375..1815)
+    -- ==========================================================================
+    draw_rect(515, 105, 840, 840, 16, 22, 30, 240, 956)
+    draw_rect(515, 105, 840, 40, 24, 34, 48, 250, 957)
+    draw_rect(515, 143, 840, 2, 235, 195, 45, 220, 958)
+
+    draw_rect(1375, 105, 440, 840, 16, 22, 30, 244, 956)
+    draw_rect(1375, 105, 440, 40, 24, 34, 48, 250, 957)
+    draw_rect(1375, 105, 440, 4, 255, 215, 55, 255, 959)
+    draw_rect(1375, 143, 440, 2, 70, 105, 150, 220, 958)
+    draw_text("DESCRIPTION & DETAILS", 1395, 131, 16, 255, 215, 65, 255, 970)
+
+    -- ==========================================================================
+    -- TAB 1: MOD OPTIONS (3-COLUMN HELDDIVERS 2 SETTINGS VIEW)
     -- ==========================================================================
     if tab == 1 then
-        local cat_idx = UniversalState.menu_mod_filter or 1
-        if cat_idx < 1 or cat_idx > #categories then
-            cat_idx = 1
-            UniversalState.menu_mod_filter = 1
-        end
         local active_cat = categories[cat_idx] or "ALL MODS"
         local opt_keys = by_cat[active_cat] or {}
         local total = #opt_keys
         local sel = UniversalState.menu_selected or 1
         if sel > total then sel = math.max(1, total); UniversalState.menu_selected = sel end
 
-        -- Mod Filter Sub-Header (Y=216..250)
-        draw_rect(385, 216, 1150, 34, 22, 28, 38, 240, 960)
-        draw_text("MOD FILTER [Q / E or PgUp / PgDn]:", 402, 238, 15, 170, 185, 205, 255, 970)
-        draw_text(format("<  %s  (%d / %d Categories | %d Options)  >", active_cat, cat_idx, #categories, total),
-            720, 238, 16, 255, 215, 65, 255, 970)
-
         local page_size = 12
         local page = floor((sel - 1) / page_size)
+        local total_pages = math.max(1, math.ceil(total / page_size))
         local start_idx = page * page_size + 1
         local end_idx = min(total, start_idx + page_size - 1)
-        local y = 262
+
+        draw_text(format("%s  —  %d OPTIONS (PAGE %d / %d)", active_cat:upper(), total, page + 1, total_pages),
+            535, 131, 16, 255, 215, 65, 255, 970)
+        draw_rect(1095, 109, 115, 32, 32, 46, 66, 235, 958)
+        draw_text("< PAGE", 1122, 130, 14, 215, 225, 240, 255, 970)
+        draw_rect(1220, 109, 115, 32, 32, 46, 66, 235, 958)
+        draw_text("PAGE >", 1248, 130, 14, 215, 225, 240, 255, 970)
 
         for i = start_idx, end_idx do
             local id = opt_keys[i]
             local spec = ModOptionsMenu.registered[id]
             local val = ModOptionsMenu.get(id)
             local is_sel = (i == sel)
+            local ry = 152 + (i - start_idx) * 60
 
             local mod_prefix = resolve_text(spec and (spec.mod or spec.category or spec.mod_id), "Mod")
             local opt_label = resolve_text(spec and spec.label, id)
             local row_title = (active_cat == "ALL MODS")
-                and format("[%s]  %s", mod_prefix, opt_label)
+                and format("[%s] %s", mod_prefix, opt_label)
                 or opt_label
-            if #row_title > 62 then
-                row_title = row_title:sub(1, 59) .. "..."
+            if #row_title > 54 then
+                row_title = row_title:sub(1, 51) .. "..."
             end
-
-            local val_str, vr, vg, vb = format_option_value(spec, val)
 
             if is_sel then
-                draw_rect(385, y, 1150, 31, 40, 68, 102, 235, 961)
-                draw_rect(385, y, 4, 31, 255, 215, 55, 255, 962)
-                draw_text("> " .. row_title, 400, y + 21, 16, 255, 255, 255, 255, 970)
+                draw_rect(525, ry, 820, 54, 38, 62, 94, 240, 958)
+                draw_rect(525, ry, 5, 54, 255, 215, 55, 255, 960)
+                draw_text(row_title, 544, ry + 34, 16, 255, 255, 255, 255, 970)
             else
-                if (i % 2) == 0 then
-                    draw_rect(385, y, 1150, 31, 18, 24, 34, 190, 960)
-                end
-                draw_text("  " .. row_title, 400, y + 21, 16, 195, 205, 218, 255, 970)
+                draw_rect(525, ry, 820, 54, (i % 2 == 0) and 20 or 24, (i % 2 == 0) and 27 or 32, (i % 2 == 0) and 38 or 44, 215, 957)
+                draw_text(row_title, 544, ry + 34, 15, 198, 208, 222, 255, 970)
             end
-            draw_text(val_str, 1180, y + 21, 16, vr, vg, vb, 255, 970)
-            y = y + 34
+
+            -- Interactive Right-Side Widget per Option Type
+            local otype = spec and spec.type
+            if otype == "toggle" or otype == "boolean" or (otype == nil and type(val) == "boolean") then
+                local is_on = (val == true)
+                -- [ OFF ] box (1045..1180) | [ ON ] box (1185..1320)
+                draw_rect(1045, ry + 9, 135, 36, not is_on and 135 or 26, not is_on and 42 or 32, not is_on and 42 or 42, 240, 960)
+                draw_rect(1185, ry + 9, 135, 36, is_on and 36 or 26, is_on and 125 or 32, is_on and 64 or 42, 240, 960)
+                if not is_on then
+                    draw_rect(1045, ry + 42, 135, 3, 255, 120, 120, 255, 962)
+                else
+                    draw_rect(1185, ry + 42, 135, 3, 100, 245, 140, 255, 962)
+                end
+                draw_text("OFF", 1096, ry + 33, 15, not is_on and 255 or 130, not is_on and 220 or 140, not is_on and 220 or 155, 255, 970)
+                draw_text("ON", 1240, ry + 33, 15, is_on and 230 or 130, is_on and 255 or 140, is_on and 235 or 155, 255, 970)
+
+            elseif otype == "choice" or (spec and type(spec.choices) == "table" and #spec.choices > 0) then
+                local count = #spec.choices
+                local idx = normalize_option_value(spec, val)
+                local choice_lbl = resolve_text(spec.choices[idx], tostring(idx))
+                if #choice_lbl > 22 then choice_lbl = choice_lbl:sub(1, 19) .. "..." end
+
+                draw_rect(985, ry + 9, 40, 36, 30, 44, 64, 240, 960)
+                draw_text("<", 1000, ry + 33, 16, 255, 215, 65, 255, 970)
+
+                draw_rect(1030, ry + 9, 255, 36, 22, 30, 42, 240, 960)
+                local seg_w = math.max(8, floor(255 / math.max(1, count)))
+                local seg_x = 1030 + floor((idx - 1) * (255 - seg_w) / math.max(1, count - 1))
+                draw_rect(seg_x, ry + 42, seg_w, 3, 255, 215, 55, 255, 962)
+                draw_text(choice_lbl, 1045, ry + 33, 15, 245, 215, 95, 255, 970)
+
+                draw_rect(1290, ry + 9, 40, 36, 30, 44, 64, 240, 960)
+                draw_text(">", 1305, ry + 33, 16, 255, 215, 65, 255, 970)
+
+            elseif otype == "slider" or otype == "number" or type(val) == "number" then
+                local num = tonumber(val) or 0
+                local min_v = tonumber(spec and spec.min)
+                local max_v = tonumber(spec and spec.max)
+
+                draw_rect(985, ry + 9, 36, 36, 30, 44, 64, 240, 960)
+                draw_text("-", 999, ry + 33, 17, 255, 215, 65, 255, 970)
+
+                -- Visual Slider Track (X=1028..1218, W=190)
+                draw_rect(1028, ry + 14, 190, 26, 16, 22, 32, 245, 960)
+                if min_v and max_v and max_v > min_v then
+                    local ratio = (num - min_v) / (max_v - min_v)
+                    if ratio < 0 then ratio = 0 elseif ratio > 1 then ratio = 1 end
+                    local fill_w = math.max(4, floor(186 * ratio))
+                    draw_rect(1030, ry + 16, fill_w, 22, 55, 155, 215, 245, 961)
+                    draw_rect(1028 + fill_w, ry + 12, 4, 30, 255, 215, 55, 255, 962)
+                end
+
+                draw_rect(1225, ry + 9, 36, 36, 30, 44, 64, 240, 960)
+                draw_text("+", 1237, ry + 33, 16, 255, 215, 65, 255, 970)
+                draw_text(tostring(num), 1270, ry + 33, 15, 125, 220, 255, 255, 970)
+            else
+                local val_str, vr, vg, vb = format_option_value(spec, val)
+                draw_text(val_str, 1140, ry + 33, 15, vr, vg, vb, 255, 970)
+            end
         end
 
         if total == 0 then
-            draw_text("No configurable mod options registered in this category.", 405, 310, 17, 160, 170, 180, 255, 970)
+            draw_text("No configurable mod options registered in this category.", 545, 220, 17, 160, 170, 180, 255, 970)
         end
 
-        -- Bottom Description & Metadata Panel (Y=685..915)
-        draw_rect(385, 685, 1150, 230, 20, 26, 36, 245, 960)
-        draw_rect(385, 685, 1150, 2, 70, 105, 150, 255, 962)
-
+        -- Right Column: Selected Option Details & Description Box
         local sel_id = opt_keys[sel]
         local sel_spec = sel_id and ModOptionsMenu.registered[sel_id]
         if sel_spec then
             local sel_mod = resolve_text(sel_spec.mod or sel_spec.category or sel_spec.mod_id, "General")
             local sel_lbl = resolve_text(sel_spec.label, sel_id)
+            local cur_str, cr, cg, cb = format_option_value(sel_spec, ModOptionsMenu.get(sel_id))
             local def_str = format_default_value(sel_spec)
-            local desc_str = resolve_text(sel_spec.description or sel_spec.tooltip or sel_spec.help, "No description provided for this option.")
+            local desc_str = resolve_text(sel_spec.description or sel_spec.tooltip or sel_spec.help,
+                "No additional description provided by the mod author.")
 
-            draw_text(format("OPTION DETAILS:  [%s] %s", sel_mod, sel_lbl), 405, 712, 16, 255, 215, 65, 255, 970)
-            draw_text(format("ID: %s   |   Default: %s   |   [Backspace] Reset to Default", tostring(sel_id), def_str),
-                405, 738, 14, 155, 175, 198, 255, 970)
-
-            local desc_lines = wrap_text_lines(desc_str, 102, 4)
-            local dy = 772
-            for li = 1, #desc_lines do
-                draw_text(desc_lines[li], 405, dy, 15, 220, 228, 238, 255, 970)
-                dy = dy + 24
+            local title_lines = wrap_text_lines(sel_lbl:upper(), 34, 2)
+            local ty = 180
+            for ti = 1, #title_lines do
+                draw_text(title_lines[ti], 1395, ty, 19, 255, 220, 65, 255, 970)
+                ty = ty + 26
             end
+
+            draw_rect(1395, 232, 400, 96, 22, 30, 42, 235, 958)
+            draw_text(format("MOD:  %s", sel_mod), 1410, 258, 15, 200, 215, 235, 255, 970)
+            draw_text(format("CURRENT:  %s", cur_str), 1410, 286, 15, cr, cg, cb, 255, 970)
+            draw_text(format("DEFAULT:  %s", def_str), 1410, 314, 14, 155, 175, 198, 255, 970)
+
+            local desc_lines = wrap_text_lines(desc_str, 44, 16)
+            local dy = 365
+            for li = 1, #desc_lines do
+                draw_text(desc_lines[li], 1395, dy, 15, 220, 228, 238, 255, 970)
+                dy = dy + 26
+            end
+
+            draw_text(format("Option ID: %s", tostring(sel_id)), 1395, 855, 13, 125, 142, 162, 255, 970)
+
+            -- Interactive Reset Button
+            draw_rect(1395, 880, 400, 48, 52, 34, 36, 240, 958)
+            draw_rect(1395, 925, 400, 3, 235, 185, 55, 255, 960)
+            draw_text("[ BACKSPACE / R-CLICK ]  RESET TO DEFAULT", 1425, 910, 15, 255, 220, 130, 255, 970)
         else
-            draw_text("OPTION DETAILS", 405, 712, 16, 255, 215, 65, 255, 970)
-            draw_text("Select an option above to inspect its description and default value.", 405, 745, 15, 170, 180, 190, 255, 970)
+            draw_text("Hover or select any option row to inspect its description and default value.",
+                1395, 200, 15, 170, 180, 195, 255, 970)
         end
 
-        local total_pages = math.max(1, math.ceil(total / page_size))
-        draw_text(format("Page %d / %d (%d options)   |   Up/Down: Select   |   Left/Right/Enter: Change   |   Q/E: Filter Mod   |   Backspace: Reset",
-            page + 1, total_pages, total), 385, 945, 14, 165, 180, 198, 255, 970)
-
     -- ==========================================================================
-    -- TAB 2: KEY BINDINGS (WITH INTERACTIVE REBINDING & LIVE STATUS)
+    -- TAB 2: KEY BINDINGS (3-COLUMN VIEW WITH INTERACTIVE CAPTURE)
     -- ==========================================================================
     elseif tab == 2 then
         local bind_list = ModBindingsMenu.order
@@ -2951,53 +3838,49 @@ local function draw_menu_overlay()
         local sel = UniversalState.menu_selected or 1
         if sel > total then sel = math.max(1, total); UniversalState.menu_selected = sel end
 
-        draw_rect(385, 216, 1150, 34, 22, 28, 38, 240, 960)
-        draw_text("REGISTERED KEYBINDINGS   --   [Enter / Space] Rebind Key   |   [Backspace] Reset to Default",
-            402, 238, 15, 200, 215, 230, 255, 970)
-
-        local page_size = 13
+        local page_size = 12
         local page = floor((sel - 1) / page_size)
+        local total_pages = math.max(1, math.ceil(total / page_size))
         local start_idx = page * page_size + 1
         local end_idx = min(total, start_idx + page_size - 1)
-        local y = 262
+
+        draw_text(format("REGISTERED KEYBINDINGS  —  %d BINDINGS (PAGE %d / %d)", total, page + 1, total_pages),
+            535, 131, 16, 255, 215, 65, 255, 970)
 
         for i = start_idx, end_idx do
             local record = bind_list[i]
             local current_key = ModBindingsMenu.binding(record.id)
             local is_sel = (i == sel)
             local is_rebinding = (UniversalState.menu_rebind_id == record.id)
+            local ry = 152 + (i - start_idx) * 60
+
             local cat_str = resolve_text(record.raw_category or record.category, "General")
             local lbl_str = resolve_text(record.raw_label or record.label, record.id)
             local row_title = format("[%s]  %s", cat_str, lbl_str)
-            if #row_title > 62 then row_title = row_title:sub(1, 59) .. "..." end
+            if #row_title > 54 then row_title = row_title:sub(1, 51) .. "..." end
 
             if is_rebinding then
-                draw_rect(385, y, 1150, 32, 175, 95, 20, 240, 961)
-                draw_rect(385, y, 4, 32, 255, 230, 120, 255, 962)
-                draw_text(">> " .. row_title, 400, y + 22, 16, 255, 250, 210, 255, 970)
-                draw_text(">> PRESS ANY KEY (Esc: Cancel, Del: Unbind) <<", 1040, y + 22, 15, 255, 240, 150, 255, 970)
+                draw_rect(525, ry, 820, 54, 165, 90, 20, 245, 958)
+                draw_rect(525, ry, 5, 54, 255, 235, 120, 255, 960)
+                draw_text(row_title, 544, ry + 34, 16, 255, 250, 210, 255, 970)
+                draw_text(">> PRESS KEY (ESC: CANCEL / DEL: UNBIND) <<", 930, ry + 34, 14, 255, 240, 150, 255, 970)
             elseif is_sel then
-                draw_rect(385, y, 1150, 32, 40, 68, 102, 235, 961)
-                draw_rect(385, y, 4, 32, 255, 215, 55, 255, 962)
-                draw_text("> " .. row_title, 400, y + 22, 16, 255, 255, 255, 255, 970)
-                draw_text(format("[ %s ]", tostring(current_key):upper()), 1220, y + 22, 16, 255, 215, 65, 255, 970)
+                draw_rect(525, ry, 820, 54, 38, 62, 94, 240, 958)
+                draw_rect(525, ry, 5, 54, 255, 215, 55, 255, 960)
+                draw_text(row_title, 544, ry + 34, 16, 255, 255, 255, 255, 970)
+                draw_rect(1015, ry + 9, 210, 36, 24, 36, 54, 245, 960)
+                draw_text(format("[ %s ]", tostring(current_key):upper()), 1045, ry + 33, 15, 255, 215, 65, 255, 970)
+                draw_rect(1235, ry + 9, 95, 36, 52, 34, 36, 240, 960)
+                draw_text("RESET", 1258, ry + 33, 14, 245, 195, 195, 255, 970)
             else
-                if (i % 2) == 0 then
-                    draw_rect(385, y, 1150, 32, 18, 24, 34, 190, 960)
-                end
-                draw_text("  " .. row_title, 400, y + 22, 16, 195, 205, 218, 255, 970)
-                draw_text(format("[ %s ]", tostring(current_key):upper()), 1220, y + 22, 16, 130, 205, 245, 255, 970)
+                draw_rect(525, ry, 820, 54, (i % 2 == 0) and 20 or 24, (i % 2 == 0) and 27 or 32, (i % 2 == 0) and 38 or 44, 215, 957)
+                draw_text(row_title, 544, ry + 34, 15, 198, 208, 222, 255, 970)
+                draw_rect(1015, ry + 9, 210, 36, 20, 28, 40, 235, 960)
+                draw_text(format("[ %s ]", tostring(current_key):upper()), 1045, ry + 33, 15, 130, 205, 245, 255, 970)
+                draw_rect(1235, ry + 9, 95, 36, 32, 28, 32, 215, 960)
+                draw_text("RESET", 1258, ry + 33, 14, 175, 160, 165, 255, 970)
             end
-            y = y + 35
         end
-
-        if total == 0 then
-            draw_text("No configurable keybindings registered.", 405, 310, 17, 160, 170, 180, 255, 970)
-        end
-
-        -- Bottom Binding Details Panel (Y=730..915)
-        draw_rect(385, 730, 1150, 185, 20, 26, 36, 245, 960)
-        draw_rect(385, 730, 1150, 2, 70, 105, 150, 255, 962)
 
         local sel_rec = bind_list[sel]
         if sel_rec then
@@ -3007,19 +3890,30 @@ local function draw_menu_overlay()
             local def_k = tostring(sel_rec.default or "NONE"):upper()
             local live_down = ModBindingsMenu.is_down(sel_rec.id) and "PRESSED (DOWN)" or "IDLE (UP)"
 
-            draw_text(format("BINDING DETAILS:  [%s] %s", cat_str, lbl_str), 405, 760, 16, 255, 215, 65, 255, 970)
-            draw_text(format("Binding ID: %s   |   Current Key: [%s]   |   Default Key: [%s]   |   Live State: %s",
-                tostring(sel_rec.id), cur_k, def_k, live_down), 405, 792, 15, 210, 220, 232, 255, 970)
-            draw_text("Press [Enter] or [Space] to assign a new key/mouse button. While rebinding, press [Delete] to unbind or [Escape] to cancel.",
-                405, 830, 14, 160, 178, 196, 255, 970)
+            draw_text(lbl_str:upper(), 1395, 185, 19, 255, 220, 65, 255, 970)
+            draw_rect(1395, 210, 400, 125, 22, 30, 42, 235, 958)
+            draw_text(format("MOD:  %s", cat_str), 1410, 238, 15, 200, 215, 235, 255, 970)
+            draw_text(format("BOUND KEY:  [%s]", cur_k), 1410, 266, 15, 125, 220, 255, 255, 970)
+            draw_text(format("DEFAULT KEY:  [%s]", def_k), 1410, 294, 14, 155, 175, 198, 255, 970)
+            draw_text(format("LIVE STATE:  %s", live_down), 1410, 322, 14, 90, 235, 130, 255, 970)
+
+            local help_lines = wrap_text_lines(
+                "Left-click the binding row (or press Enter / Space) to capture a new keyboard or mouse button. Press Delete to unbind, Escape/Right-Click to cancel, or click RESET to restore the default binding.",
+                44, 8
+            )
+            local dy = 370
+            for li = 1, #help_lines do
+                draw_text(help_lines[li], 1395, dy, 15, 215, 225, 235, 255, 970)
+                dy = dy + 26
+            end
+
+            draw_rect(1395, 880, 400, 48, 52, 34, 36, 240, 958)
+            draw_rect(1395, 925, 400, 3, 235, 185, 55, 255, 960)
+            draw_text("[ BACKSPACE / R-CLICK ]  RESET BINDING", 1435, 910, 15, 255, 220, 130, 255, 970)
         end
 
-        local total_pages = math.max(1, math.ceil(total / page_size))
-        draw_text(format("Page %d / %d (%d bindings)   |   Up/Down: Select   |   Enter/Space: Rebind   |   Backspace: Reset Default",
-            page + 1, total_pages, total), 385, 945, 14, 165, 180, 198, 255, 970)
-
     -- ==========================================================================
-    -- TAB 3: LOADED MODS & DIAGNOSTICS
+    -- TAB 3: LOADED MODS & DIAGNOSTICS (3-COLUMN VIEW)
     -- ==========================================================================
     elseif tab == 3 then
         local total = #mods_list
@@ -3034,19 +3928,23 @@ local function draw_menu_overlay()
             else err_cnt = err_cnt + 1 end
         end
 
-        draw_rect(385, 216, 1150, 34, 22, 28, 38, 240, 960)
-        draw_text(format("ACTIVE MODS: %d   |   BUILT-IN SUPERSEDED: %d   |   ERRORS: %d   |   UPDATE HOOKS: %d",
-            loaded_cnt, builtin_cnt, err_cnt, #update_order), 402, 238, 15, 200, 215, 230, 255, 970)
-
-        local page_size = 13
+        local page_size = 12
         local page = floor((sel - 1) / page_size)
+        local total_pages = math.max(1, math.ceil(total / page_size))
         local start_idx = page * page_size + 1
         local end_idx = min(total, start_idx + page_size - 1)
-        local y = 262
+
+        draw_text(format("ACTIVE: %d  |  BUILT-IN: %d  |  ERRORS: %d  (PAGE %d / %d)",
+            loaded_cnt, builtin_cnt, err_cnt, page + 1, total_pages), 535, 131, 15, 255, 215, 65, 255, 970)
+        draw_rect(1095, 109, 115, 32, 32, 46, 66, 235, 958)
+        draw_text("< PAGE", 1122, 130, 14, 215, 225, 240, 255, 970)
+        draw_rect(1220, 109, 115, 32, 32, 46, 66, 235, 958)
+        draw_text("PAGE >", 1248, 130, 14, 215, 225, 240, 255, 970)
 
         for i = start_idx, end_idx do
             local item = mods_list[i]
             local is_sel = (i == sel)
+            local ry = 152 + (i - start_idx) * 60
             local badge, br, bg, bb = "[ ACTIVE ]", 90, 235, 130
             if item.status == "superseded_by_builtin" then
                 badge, br, bg, bb = "[ BUILT-IN ]", 110, 210, 250
@@ -3055,48 +3953,45 @@ local function draw_menu_overlay()
             end
 
             if is_sel then
-                draw_rect(385, y, 1150, 32, 40, 68, 102, 235, 961)
-                draw_rect(385, y, 4, 32, 255, 215, 55, 255, 962)
-                draw_text(format("> %s", tostring(item.name)), 400, y + 22, 16, 255, 255, 255, 255, 970)
+                draw_rect(525, ry, 820, 54, 38, 62, 94, 240, 958)
+                draw_rect(525, ry, 5, 54, 255, 215, 55, 255, 960)
+                draw_text(tostring(item.name), 544, ry + 34, 16, 255, 255, 255, 255, 970)
             else
-                if (i % 2) == 0 then
-                    draw_rect(385, y, 1150, 32, 18, 24, 34, 190, 960)
-                end
-                draw_text(format("  %s", tostring(item.name)), 400, y + 22, 16, 195, 205, 218, 255, 970)
+                draw_rect(525, ry, 820, 54, (i % 2 == 0) and 20 or 24, (i % 2 == 0) and 27 or 32, (i % 2 == 0) and 38 or 44, 215, 957)
+                draw_text(tostring(item.name), 544, ry + 34, 15, 198, 208, 222, 255, 970)
             end
-            draw_text(tostring(item.archive or "patch"), 980, y + 22, 15, 165, 180, 198, 255, 970)
-            draw_text(badge, 1360, y + 22, 15, br, bg, bb, 255, 970)
-            y = y + 35
+            draw_text(tostring(item.archive or "patch"), 985, ry + 34, 14, 155, 175, 198, 255, 970)
+            draw_text(badge, 1215, ry + 34, 15, br, bg, bb, 255, 970)
         end
-
-        -- Bottom Mod Diagnostics Panel (Y=730..915)
-        draw_rect(385, 730, 1150, 185, 20, 26, 36, 245, 960)
-        draw_rect(385, 730, 1150, 2, 70, 105, 150, 255, 962)
 
         local sel_mod = mods_list[sel]
         if sel_mod then
-            draw_text(format("MOD DIAGNOSTICS:  %s", tostring(sel_mod.name)), 405, 760, 16, 255, 215, 65, 255, 970)
-            draw_text(format("Source Archive: %s   |   Status: %s", tostring(sel_mod.archive), tostring(sel_mod.status):upper()),
-                405, 790, 15, 210, 220, 232, 255, 970)
-            if sel_mod.error then
-                local err_lines = wrap_text_lines("Error: " .. tostring(sel_mod.error), 102, 2)
-                for li = 1, #err_lines do
-                    draw_text(err_lines[li], 405, 820 + (li - 1) * 24, 14, 245, 120, 120, 255, 970)
-                end
-            elseif sel_mod.status == "superseded_by_builtin" then
-                draw_text("Standalone menu archive automatically superseded by Universal Mod Loader's built-in MOM v3 / MBM v4 engine.",
-                    405, 825, 14, 140, 210, 245, 255, 970)
-            else
-                draw_text("Mod compiled and initialized cleanly inside isolated multi-standard sandbox (Bingus / Chef / BML / HD2RT).",
-                    405, 825, 14, 160, 185, 205, 255, 970)
-            end
-            draw_text(format("Settings Storage: %s\\settings.json", get_settings_dir()), 405, 880, 13, 135, 150, 168, 255, 970)
-        end
+            draw_text(tostring(sel_mod.name):upper(), 1395, 185, 17, 255, 220, 65, 255, 970)
+            draw_rect(1395, 210, 400, 100, 22, 30, 42, 235, 958)
+            draw_text(format("ARCHIVE:  %s", tostring(sel_mod.archive)), 1410, 240, 15, 200, 215, 235, 255, 970)
+            draw_text(format("STATUS:   %s", tostring(sel_mod.status):upper()), 1410, 270, 15, 90, 235, 130, 255, 970)
+            draw_text(format("HOOKS:    %d Update Callbacks", #update_order), 1410, 298, 14, 155, 175, 198, 255, 970)
 
-        local total_pages = math.max(1, math.ceil(total / page_size))
-        draw_text(format("Page %d / %d (%d mods)   |   Up/Down/PgUp/PgDn: Scroll   |   Tab / 1-3: Switch Tab   |   F2/F9: Close",
-            page + 1, total_pages, total), 385, 945, 14, 165, 180, 198, 255, 970)
+            local diag_msg = "Mod compiled and initialized cleanly inside isolated multi-standard sandbox (Bingus / Chef / BML / HD2RT) with Lua 5.2/5.3 polyfills active."
+            if sel_mod.error then
+                diag_msg = "Error: " .. tostring(sel_mod.error)
+            elseif sel_mod.status == "superseded_by_builtin" then
+                diag_msg = "Standalone menu archive automatically superseded by Universal Mod Loader's built-in Escape-Menu MODS Tab (MOM v3 + MBM v4)."
+            end
+            local dlines = wrap_text_lines(diag_msg, 44, 10)
+            local dy = 345
+            for li = 1, #dlines do
+                draw_text(dlines[li], 1395, dy, 15, 215, 225, 235, 255, 970)
+                dy = dy + 26
+            end
+            draw_text(format("Storage: %s\\settings.json", get_settings_dir()), 1395, 910, 13, 135, 150, 168, 255, 970)
+        end
     end
+
+    -- Bottom Footer Action Bar (Y=955..998)
+    draw_rect(105, 955, 1710, 44, 20, 27, 38, 245, 957)
+    draw_text("MOUSE: Click Categories / Options / Sliders  |  WHEEL: Scroll  |  R-CLICK / BACKSPACE: Reset Default  |  Q/E: Category  |  TAB/1-3: Mode  |  ESC/F2: Close",
+        125, 983, 14, 185, 198, 215, 255, 970)
 end
 
 -- ==============================================================================
