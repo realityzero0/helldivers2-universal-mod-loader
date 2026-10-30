@@ -7,17 +7,21 @@ Unifies all four Helldivers 2 modding standards into a single engine boot loader
   2. Chef Shared Loader (API Levels 1, 2, 3, HD2-Addon, HD2-Boot, HD2-Options, cooperative handoff)
   3. Boot Mod Loader (VeganSquid API 1)
   4. HD2 Lua Runtime (hd2rt / 0.1.0)
-  5. Built-in Mod Options Menu (MOM v2)
+  5. Built-in Mod Options Menu (MOM v2) with 1-based choice indexing, slider snapping, & localization callables
   6. Built-in Mod Bindings Menu (MBM v4) with pure Stingray Keyboard/Mouse input polling
 
 Features in v22.0.0:
-- Built-in Mod Bindings Menu (MBM): Erases the need for the broken third-party mod_bindings_menu mod.
-  Provides native key state tracking (down, pressed, released, poll) using pure Stingray engine calls.
+- Built-in Mod Options (MOM v2) & Mod Bindings (MBM v4): Replaces standalone mod_options_menu and
+  mod_bindings_menu mods with an integrated pure-Lua engine and retained Stingray Screen-GUI renderer.
 - Persistent Settings & Bindings: Automatically saves mod options and keybinds to
   %LOCALAPPDATA%/UniversalModLoader/settings.json, persisting player settings across sessions.
-- Interactive Multi-Tab In-Game Overlay (F2 / F9):
-  - Tab 1: Mod Options (adjust booleans, numbers, choices with Up/Down/Left/Right/Enter/Space).
-  - Tab 2: Key Bindings (view all registered mod hotkeys and rebind them live in-game).
+- Interactive 3-Tab In-Game Mod UI Overlay (F2 / F9):
+  - Tab 1: Mod Options (filter by mod with Q/E or PgUp/PgDn, adjust toggles/sliders/choices with
+    Left/Right/Enter, reset to default with Backspace, and read full option descriptions).
+  - Tab 2: Key Bindings (rebind any mod hotkey live with Enter/Space, clear with Delete, reset with Backspace,
+    and view real-time key press indicators).
+  - Tab 3: Loaded Mods & Diagnostics (inspect all active, built-in superseded, and errored mods, source
+    patch_N archives, and error diagnostics).
 - Patch Deduplication: Emulates Stingray priority rules across patch_0..255. When multiple archives
   contain the same mod identifier, the highest-numbered patch cleanly executes.
 - UTF-8 BOM Stripping: Automatically removes \xEF\xBB\xBF byte order marks from Windows text editors.
