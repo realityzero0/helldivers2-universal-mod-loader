@@ -15,7 +15,7 @@
     "data/9ba626afa44a3aa3.patch_0": "46A7CDC8484E18FBC5529B1CB93B0469C79176D1F29D90E48B8CDCB2107986BC",
     "data/9ba626afa44a3aa3.patch_0.stream": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
     "data/9ba626afa44a3aa3.patch_0.gpu_resources": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
-    "UniversalModLoader-README.txt": "8C95CED7142128B68D120E744367399E28F9D6BB4ADBC19383C78C039E00090F",
+    "UniversalModLoader-README.txt": "8F8C81DEDDBC2DAB6B106B4AC2736D8B66340911BDAC09FD01B82E3CB70554B3",
     "thumbnail.png": "C8C7901C5C71BF2F8D7CF6D83BD0F916244CA2508B1D39824FA9B66B79BED7CC"
   },
   "provides": {
@@ -24,7 +24,7 @@
     "chef_shared_api": 3,
     "boot_mod_loader_api": 1,
     "hd2_runtime_api": "0.1.0",
-    "mod_options_menu": 2,
+    "mod_options_menu": 3,
     "mod_bindings_menu": 4,
     "patch_deduplication": 1,
     "settings_persistence": 1
