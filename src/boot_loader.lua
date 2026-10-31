@@ -261,7 +261,7 @@ local function safe_tonumber(v, base)
             return mt.__tonumber(v)
         end
     end
-    if base ~= nil then
+    if base ~= nil and type(base) == "number" and base >= 2 and base <= 36 then
         return orig_tonumber(v, base)
     end
     return orig_tonumber(v)
@@ -354,6 +354,37 @@ if type(table.pack) ~= "function" then
         return { n = select("#", ...), ... }
     end
 end
+if type(math.type) ~= "function" then
+    math.type = function(x)
+        if type(x) ~= "number" then return nil end
+        if floor(x) == x and x >= -9007199254740992 and x <= 9007199254740992 then
+            return "integer"
+        end
+        return "float"
+    end
+end
+if type(math.tointeger) ~= "function" then
+    math.tointeger = function(x)
+        local n = tonumber(x)
+        if n and floor(n) == n then
+            return floor(n)
+        end
+        return nil
+    end
+end
+if type(math.ult) ~= "function" then
+    math.ult = function(m, n)
+        local um = tobit(m)
+        local un = tobit(n)
+        if um < 0 then um = um + 4294967296 end
+        if un < 0 then un = un + 4294967296 end
+        return um < un
+    end
+end
+if math.maxinteger == nil then
+    math.maxinteger = 2147483647
+    math.mininteger = -2147483648
+end
 
 local utf8_lib
 utf8_lib = {
@@ -362,7 +393,7 @@ utf8_lib = {
         local out = {}
         local n = select("#", ...)
         for i = 1, n do
-            local cp = floor(tonumber(select(i, ...)) or 0)
+            local cp = floor(tonumber((select(i, ...))) or 0)
             if cp < 0 or cp > 0x10FFFF then
                 out[#out + 1] = "?"
             elseif cp <= 0x7F then
@@ -1480,12 +1511,16 @@ local function normalize_option_value(spec, val)
         if count == 0 then return 1 end
         if type(val) == "number" then
             local idx = floor(val)
-            if idx >= 1 and idx <= count then return idx end
+            if idx < 1 then return 1 end
+            if idx > count then return count end
+            return idx
         elseif type(val) == "string" then
             local as_num = tonumber(val)
             if as_num then
                 local idx = floor(as_num)
-                if idx >= 1 and idx <= count then return idx end
+                if idx < 1 then return 1 end
+                if idx > count then return count end
+                return idx
             end
             for i = 1, count do
                 local c = spec.choices[i]
@@ -1497,7 +1532,9 @@ local function normalize_option_value(spec, val)
         local def = tonumber(spec.default)
         if def then
             local idx = floor(def)
-            if idx >= 1 and idx <= count then return idx end
+            if idx < 1 then return 1 end
+            if idx > count then return count end
+            return idx
         end
         return 1
     elseif otype == "slider" or otype == "number" or type(spec.default) == "number" then
@@ -1518,7 +1555,44 @@ ModOptionsMenu = {
     order = {},
     values = {},
     change_callbacks = {},
-    register_option = function(id, spec)
+    register_option = function(...)
+        local n = select("#", ...)
+        local id, spec
+        if n >= 3 and type(select(1, ...)) == "string" and type(select(2, ...)) == "string" then
+            -- Positional multi-arg style: (mod_id, opt_id, name, opt_type, default, params, callback, desc)
+            local mod_id = select(1, ...)
+            local opt_id = select(2, ...)
+            id = mod_id .. "." .. opt_id
+            local name = select(3, ...)
+            local otype = select(4, ...) or "boolean"
+            local def = select(5, ...)
+            local params = select(6, ...)
+            local cb = select(7, ...)
+            local desc = select(8, ...)
+            spec = {
+                id = id,
+                name = name,
+                type = otype,
+                default = def,
+                callback = cb,
+                on_change = cb,
+                description = desc,
+                category = mod_id
+            }
+            if type(params) == "table" then
+                for k, v in pairs(params) do
+                    if spec[k] == nil then spec[k] = v end
+                end
+            end
+        elseif n == 1 and type(select(1, ...)) == "table" then
+            -- Table spec only: register_option(spec)
+            spec = select(1, ...)
+            id = spec.id or spec.key
+        else
+            -- Standard: register_option(id, spec)
+            id = select(1, ...)
+            spec = select(2, ...)
+        end
         if type(id) ~= "string" or id == "" or type(spec) ~= "table" then
             return false, "invalid args"
         end
@@ -1532,6 +1606,25 @@ ModOptionsMenu = {
         end
         ModOptionsMenu.revision = (ModOptionsMenu.revision or 1) + 1
         return true
+    end,
+    reset = function(id)
+        local spec = ModOptionsMenu.registered[id]
+        if spec then
+            local def = spec.default
+            if def == nil then
+                if spec.type == "boolean" then def = false
+                elseif spec.type == "number" then def = spec.min or 0
+                elseif spec.type == "choice" then def = 1
+                end
+            end
+            return ModOptionsMenu.set(id, def)
+        end
+        return false
+    end,
+    reset_all = function()
+        for id, spec in pairs(ModOptionsMenu.registered) do
+            ModOptionsMenu.reset(id)
+        end
     end,
     get = function(id)
         local spec = ModOptionsMenu.registered[id]
@@ -1628,7 +1721,28 @@ local function normalize_key_name(k)
     return KEY_ALIASES[lower] or lower
 end
 
-function ModBindingsMenu.register_binding(id, label, slot, options)
+function ModBindingsMenu.register_binding(...)
+    local n = select("#", ...)
+    local id, label, slot, options
+    if n >= 4 and type(select(1, ...)) == "string" and type(select(2, ...)) == "string" and type(select(3, ...)) == "string" and type(select(4, ...)) == "string" then
+        -- Multi-arg style: (mod_id, bind_id, label, default_key, description)
+        local mod_id = select(1, ...)
+        local bind_id = select(2, ...)
+        id = mod_id .. "." .. bind_id
+        label = select(3, ...)
+        local def_key = select(4, ...)
+        local desc = select(5, ...)
+        options = { default = def_key, description = desc, category = mod_id }
+    else
+        id = select(1, ...)
+        label = select(2, ...)
+        slot = select(3, ...)
+        options = select(4, ...)
+        if type(slot) == "string" and not options then
+            options = { default = slot }
+            slot = nil
+        end
+    end
     if type(id) ~= "string" or id == "" then return false, "invalid id" end
     local existing = ModBindingsMenu.registry[id]
     if existing then
@@ -1685,27 +1799,49 @@ function ModBindingsMenu.reset_binding(id)
 end
 
 function ModBindingsMenu.is_down(id)
+    if not id then return false end
     local st = ModBindingsMenu.states[id]
-    return st and st.down or false
+    if st then return st.down end
+    for k, s in pairs(ModBindingsMenu.states) do
+        if k:sub(-#id - 1) == "." .. id then return s.down end
+    end
+    return false
 end
 ModBindingsMenu.down = ModBindingsMenu.is_down
 
 function ModBindingsMenu.is_pressed(id)
+    if not id then return false end
     local st = ModBindingsMenu.states[id]
-    return st and st.pressed or false
+    if st then return st.pressed end
+    for k, s in pairs(ModBindingsMenu.states) do
+        if k:sub(-#id - 1) == "." .. id then return s.pressed end
+    end
+    return false
 end
 ModBindingsMenu.was_pressed = ModBindingsMenu.is_pressed
 ModBindingsMenu.pressed = ModBindingsMenu.is_pressed
 
 function ModBindingsMenu.is_released(id)
+    if not id then return false end
     local st = ModBindingsMenu.states[id]
-    return st and st.released or false
+    if st then return st.released end
+    for k, s in pairs(ModBindingsMenu.states) do
+        if k:sub(-#id - 1) == "." .. id then return s.released end
+    end
+    return false
 end
 ModBindingsMenu.was_released = ModBindingsMenu.is_released
 ModBindingsMenu.released = ModBindingsMenu.is_released
 
 function ModBindingsMenu.binding(id)
-    return ModBindingsMenu.bindings[id] or "NONE"
+    if not id then return "NONE" end
+    if ModBindingsMenu.bindings[id] then return ModBindingsMenu.bindings[id] end
+    for k, v in pairs(ModBindingsMenu.bindings) do
+        if k:sub(-#id - 1) == "." .. id then return v end
+    end
+    local rec = ModBindingsMenu.registry[id]
+    if rec and rec.default then return rec.default end
+    return "NONE"
 end
 ModBindingsMenu.get_binding = ModBindingsMenu.binding
 
@@ -2593,14 +2729,25 @@ local function get_screen_resolution(sr)
 end
 
 local function is_cursor_shown(sr)
-    if not sr or type(sr.Window) ~= "table" then return false end
-    if type(sr.Window.show_cursor) == "function" then
-        local ok, shown = pcall(sr.Window.show_cursor)
-        if ok and shown == true then return true end
-    end
-    if type(sr.Window.has_cursor) == "function" then
-        local ok, shown = pcall(sr.Window.has_cursor)
-        if ok and shown == true then return true end
+    if not sr then return false end
+    if type(rawget(_G, "cursor_visible")) == "boolean" then return _G.cursor_visible end
+    if type(sr.Window) == "table" then
+        local w = sr.Window
+        if type(w.show_cursor) == "function" then
+            local ok, shown = pcall(w.show_cursor)
+            if ok and shown == true then return true end
+        elseif type(w.show_cursor) == "boolean" and w.show_cursor then
+            return true
+        end
+        if type(w.has_cursor) == "function" then
+            local ok, shown = pcall(w.has_cursor)
+            if ok and shown == true then return true end
+        elseif type(w.has_cursor) == "boolean" and w.has_cursor then
+            return true
+        end
+        if type(w.cursor_visible) == "boolean" and w.cursor_visible then
+            return true
+        end
     end
     return false
 end
@@ -2712,7 +2859,9 @@ end
 
 local function is_stingray_retained_gui(sr)
     return sr and sr.World and type(sr.World.create_screen_gui) == "function"
-        and type(sr.Vector3) == "function" and type(sr.Vector2) == "function" and type(sr.Color) == "function"
+        and (type(sr.Vector3) == "function" or type(sr.Vector3) == "table")
+        and (type(sr.Vector2) == "function" or type(sr.Vector2) == "table")
+        and (type(sr.Color) == "function" or type(sr.Color) == "table")
 end
 
 local function ui_world_alive(sr, w)
@@ -2723,13 +2872,16 @@ local function ui_world_alive(sr, w)
     if not ok or type(worlds) ~= "table" then return true end
     for i = 1, #worlds do
         if worlds[i] == w then return true end
+        if type(worlds[i]) == "table" and type(w) == "table" and worlds[i].id and worlds[i].id == w.id then
+            return true
+        end
     end
     return false
 end
 
 local function ui_find_world(sr)
     local app = sr and sr.Application
-    if not app then return nil end
+    if not app then return {} end
     local main_w = (type(app.main_world) == "function") and select(2, pcall(app.main_world)) or nil
     if type(app.worlds) == "function" then
         local ok, worlds = pcall(app.worlds)
@@ -2740,7 +2892,7 @@ local function ui_find_world(sr)
             if worlds[1] then return worlds[1] end
         end
     end
-    return main_w
+    return main_w or {}
 end
 
 local function ui_gfx_clear(sr)
