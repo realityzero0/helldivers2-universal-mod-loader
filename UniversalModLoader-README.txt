@@ -1,4 +1,4 @@
-Supports Steam builds 25988413 (EXE 1.8.46539.0) & 26088801+ (EXE 1.8.46659.0).
+Supports Steam builds 25988413, 26088801, and 26251122+ (EAC EOS Overhaul).
 
 Helldivers 2 Universal Mod Loader - v22.0.0 (Unified Pure-Lua 5.1 Infrastructure)
 

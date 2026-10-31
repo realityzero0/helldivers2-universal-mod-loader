@@ -1,4 +1,4 @@
--- Universal Mod Loader v22.0.0 for Helldivers 2 (Steam Builds 25988413 / 26088801+ / Lua 5.1)
+-- Universal Mod Loader v22.0.0 for Helldivers 2 (Steam Builds 25988413 / 26088801 / 26251122+ / Lua 5.1)
 -- Replaces engine boot resource 0xF476DF93691895FA in bundle 9ba626afa44a3aa3
 -- Unifies All Helldivers 2 Modding Standards + Built-in Mod Options & Mod Bindings Menus:
 --   1. Bingus Shared Loader (CowboyBingus / v17 / v20 / v21 / API 1 + BingusRuntime v1)
