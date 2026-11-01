@@ -2186,10 +2186,6 @@ save_persistent_settings = function()
     }
     local str = json_serialize(payload)
     local f = io.open(path, "w")
-    if not f and os.execute and sdir ~= "." then
-        pcall(os.execute, 'mkdir "' .. sdir .. '" >nul 2>&1')
-        f = io.open(path, "w")
-    end
 
     if f then
         f:write(str)
@@ -2946,8 +2942,10 @@ local function init_win32_cursor()
         }) do
             pcall(ffi.cdef, decl)
         end
-        local u32 = ffi.load("user32")
-        local k32 = ffi.load("kernel32")
+        local u32 = ffi.C
+        pcall(function() u32 = ffi.load("user32") or ffi.C end)
+        local k32 = ffi.C
+        pcall(function() k32 = ffi.load("kernel32") or ffi.C end)
         local ci = nil
         pcall(function()
             ci = ffi.new("UML_CURSORINFO")
