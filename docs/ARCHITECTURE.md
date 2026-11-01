@@ -11,7 +11,7 @@ Universal Mod Loader is designed to harmonize multiple competing modding archite
                                                     |
                                                     v
                               +-------------------------------------------+
-                              |      Universal Mod Loader v22.0.0         |
+                              |      Universal Mod Loader v1.0.0         |
                               +---------------------+---------------------+
                                                     |
                         +---------------------------+---------------------------+

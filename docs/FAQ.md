@@ -1,4 +1,4 @@
-# Universal Mod Loader v22.0.0 — Frequently Asked Questions
+# Universal Mod Loader v1.0.0 — Frequently Asked Questions
 
 ### Do I need to install Bingus Shared Loader AND Universal Mod Loader?
 No. Universal Mod Loader is a complete drop-in replacement that fully supersedes Bingus Shared Loader. Do not install both in the same slot.

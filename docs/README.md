@@ -1,4 +1,4 @@
-# Helldivers 2 Universal Mod Loader (v22.0.0)
+# Helldivers 2 Universal Mod Loader (v1.0.0)
 
 [![License: 0BSD](https://img.shields.io/badge/License-0BSD-blue.svg)](LICENSE)
 [![Target: Helldivers 2](https://img.shields.io/badge/Helldivers%202-Build%2026251122%2B-brightgreen.svg)](https://store.steampowered.com/app/553850/HELLDIVERS_2/)
@@ -75,7 +75,7 @@ This caused severe ecosystem fragmentation:
 ## Installation
 
 ### Method A: Mod Manager (Recommended)
-1. Download `Helldivers2-Universal-Mod-Loader-v22.0.0.zip`.
+1. Download `Helldivers2-Universal-Mod-Loader-v1.0.0.zip`.
 2. Import the archive into **HD2 Mod Manager** or your preferred mod manager.
 3. Deploy your mods.
 

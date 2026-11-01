@@ -1297,6 +1297,7 @@ _G.UniversalModLoader = {
     load_settings = function() if load_persistent_settings then return load_persistent_settings() end end
 }
 package.preload["UniversalModLoader"] = function() return _G.UniversalModLoader end
+package.loaded["UniversalModLoader"] = _G.UniversalModLoader
 
 -- ==============================================================================
 -- 6. BINGUS SHARED LOADER API & BINGUS RUNTIME V1 (V17 / V20 / V21 PARITY)
@@ -1324,7 +1325,7 @@ local capabilities_locked = setmetatable({}, {
 CowboyBingusModLoader = {
     api = 1,
     version = 17,
-    revision = "loader-v22.0.0",
+    revision = "loader-v1.0.0",
     capabilities = capabilities_locked,
     log_directory = get_log_dir(),
     modules = {},
@@ -1655,8 +1656,9 @@ ModOptionsMenu = {
         end
         ModOptionsMenu.registered[id] = spec
         ModOptionsMenu.values[id] = normalize_option_value(spec, ModOptionsMenu.values[id])
-        if type(spec.on_change) == "function" then
-            ModOptionsMenu.on_change(id, spec.on_change)
+        local cb_fn = spec.on_change or spec.callback or spec.onChange or spec.cb
+        if type(cb_fn) == "function" then
+            ModOptionsMenu.on_change(id, cb_fn)
         end
         ModOptionsMenu.revision = (ModOptionsMenu.revision or 1) + 1
         return true
@@ -1688,7 +1690,7 @@ ModOptionsMenu = {
         end
         return val
     end,
-    set = function(id, val)
+    set = function(id, val, skip_save)
         local spec = ModOptionsMenu.registered[id]
         local norm = spec and normalize_option_value(spec, val) or val
         ModOptionsMenu.values[id] = norm
@@ -1703,7 +1705,7 @@ ModOptionsMenu = {
                 end
             end
         end
-        if save_persistent_settings then
+        if not skip_save and save_persistent_settings then
             save_persistent_settings()
         end
         return true
@@ -1733,7 +1735,10 @@ ModOptionsMenu = {
         end
         return false
     end,
-    ready = function() return true end
+    ready = function() return true end,
+    add_callback = function(id, fn) return ModOptionsMenu.on_change(id, fn) end,
+    set_callback = function(id, fn) return ModOptionsMenu.on_change(id, fn) end,
+    register_callback = function(id, fn) return ModOptionsMenu.on_change(id, fn) end
 }
 _G.ModOptionsMenu = ModOptionsMenu
 package.preload["ModOptionsMenu"] = function() return ModOptionsMenu end
@@ -1757,7 +1762,10 @@ ModBindingsMenu = {
     order = {},
     bindings = {},
     states = {},
-    ready = function() return true end
+    ready = function() return true end,
+    add_callback = function(id, fn) return ModOptionsMenu.on_change(id, fn) end,
+    set_callback = function(id, fn) return ModOptionsMenu.on_change(id, fn) end,
+    register_callback = function(id, fn) return ModOptionsMenu.on_change(id, fn) end
 }
 
 local KEY_ALIASES = {
@@ -2131,6 +2139,9 @@ load_persistent_settings = function()
         f = io.open(ldir .. [[\universal_settings.json]], "r")
     end
     if not f then
+        f = io.open("universal_settings.json", "r")
+    end
+    if not f then
         if legacy_count > 0 then
             log_message("Settings", "Imported %d legacy ModOptionsMenu values from disk.", legacy_count)
         end
@@ -2175,6 +2186,10 @@ save_persistent_settings = function()
     }
     local str = json_serialize(payload)
     local f = io.open(path, "w")
+    if not f and os.execute and sdir ~= "." then
+        pcall(os.execute, 'mkdir "' .. sdir .. '" >nul 2>&1')
+        f = io.open(path, "w")
+    end
 
     if f then
         f:write(str)
@@ -2185,6 +2200,12 @@ save_persistent_settings = function()
         if f_alt then
             f_alt:write(str)
             f_alt:close()
+        else
+            local f_cur = io.open("universal_settings.json", "w")
+            if f_cur then
+                f_cur:write(str)
+                f_cur:close()
+            end
         end
     end
     pcall(save_legacy_mom_values)
@@ -2208,6 +2229,7 @@ BootModLoader = {
 }
 _G.BootModLoader = BootModLoader
 package.preload["BootModLoader"] = function() return BootModLoader end
+package.loaded["BootModLoader"] = BootModLoader
 
 local hd2rt = {
     _VERSION = "0.1.0",
@@ -2293,6 +2315,7 @@ local function create_chef_api_table(mod_id)
 end
 _G.ChefSharedLoader = create_chef_api_table("ChefSharedLoader")
 package.preload["ChefSharedLoader"] = function() return _G.ChefSharedLoader end
+package.loaded["ChefSharedLoader"] = _G.ChefSharedLoader
 
 -- ==============================================================================
 -- 12. UNIVERSAL ADDON DISCOVERY & EXECUTION GATEWAY
@@ -3008,8 +3031,9 @@ end
 
 local function get_mouse_canvas_pos(sr)
     local W, H = get_screen_resolution(sr)
-    local scale = H / 1080
+    local scale = math.min(W / 1920, H / 1080)
     local ox = floor((W - 1920 * scale) * 0.5)
+    local oy = floor((H - 1080 * scale) * 0.5)
     local raw_x, raw_y = nil, nil
 
     -- 1. Try Win32 ScreenToClient (exact top-down client coordinates in Helldivers 2)
@@ -3086,7 +3110,7 @@ local function get_mouse_canvas_pos(sr)
         return nil, nil
     end
     local cx = (raw_x - ox) / scale
-    local cy = raw_y / scale
+    local cy = (raw_y - oy) / scale
     return cx, cy
 end
 
@@ -3440,7 +3464,7 @@ local function step_option_value(cur_id, dir)
     end
 end
 
-local function set_slider_from_ratio(cur_id, ratio)
+local function set_slider_from_ratio(cur_id, ratio, skip_save)
     local spec = ModOptionsMenu.registered[cur_id]
     if not spec then return end
     local min_v = tonumber(spec.min)
@@ -3448,7 +3472,7 @@ local function set_slider_from_ratio(cur_id, ratio)
     if not min_v or not max_v or max_v <= min_v then return end
     if ratio < 0 then ratio = 0 elseif ratio > 1 then ratio = 1 end
     local raw_val = min_v + ratio * (max_v - min_v)
-    ModOptionsMenu.set(cur_id, snap_slider_value(spec, raw_val))
+    ModOptionsMenu.set(cur_id, snap_slider_value(spec, raw_val), skip_save)
 end
 
 local input_edges = {}
@@ -3600,8 +3624,11 @@ local function handle_menu_input()
     local rclick = mouse_btn_pressed("right", "mouse_right")
     local wheel = get_mouse_wheel_delta(sr)
 
-    if not ldown then
+    if not ldown and UniversalState.dragging_slider_id then
         UniversalState.dragging_slider_id = nil
+        if save_persistent_settings then
+            save_persistent_settings()
+        end
     end
 
     -- Hotkey toggle (F2 / F9) works anywhere (in gameplay, ship, or Escape menu)
@@ -3660,7 +3687,7 @@ local function handle_menu_input()
     -- Continue active slider drag if left mouse button is held down (track is X=890..1170, W=280)
     if UniversalState.dragging_slider_id and ldown and cx ~= nil then
         local ratio = (cx - 890) / 280
-        set_slider_from_ratio(UniversalState.dragging_slider_id, ratio)
+        set_slider_from_ratio(UniversalState.dragging_slider_id, ratio, true)
         return
     end
 
@@ -3854,7 +3881,7 @@ local function handle_menu_input()
                             local max_v = tonumber(spec.max)
                             if min_v and max_v and max_v > min_v and cx >= 890 and cx <= 1170 then
                                 UniversalState.dragging_slider_id = row_id
-                                set_slider_from_ratio(row_id, (cx - 890) / 280)
+                                set_slider_from_ratio(row_id, (cx - 890) / 280, true)
                             elseif cx < 890 then
                                 step_option_value(row_id, -1)
                             else
@@ -4046,13 +4073,14 @@ local function draw_menu_overlay()
 
     local retained_mode = is_stingray_retained_gui(sr)
     local W, H = get_screen_resolution(sr)
-    local scale = H / 1080
+    local scale = math.min(W / 1920, H / 1080)
     local ox = floor((W - 1920 * scale) * 0.5)
+    local oy = floor((H - 1080 * scale) * 0.5)
 
     local function draw_rect(x, y, w, h, r, g, b, a, layer)
         if retained_mode then
             local sx = floor(ox + x * scale)
-            local sy_top = floor(y * scale)
+            local sy_top = floor(oy + y * scale)
             local sw = math.max(1, floor(w * scale))
             local sh = math.max(1, floor(h * scale))
             local pos = sr.Vector3(sx, H - sy_top - sh, layer or 960)
@@ -4068,7 +4096,7 @@ local function draw_menu_overlay()
     local function draw_text(str, x, y, font_size, r, g, b, a, layer)
         if retained_mode then
             local sx = floor(ox + x * scale)
-            local sy = floor(H - y * scale)
+            local sy = floor(H - (oy + y * scale))
             local fsize = math.max(10, floor((font_size or 16) * scale))
             local col = sr.Color(a or 255, r or 255, g or 255, b or 255)
             local text_layer = math.max(995, (layer or 995) + 25)
@@ -4172,8 +4200,8 @@ local function draw_menu_overlay()
         UI_GFX.last_sig = sig
     end
 
-    -- 1. Fullscreen Subtle Dark Backdrop (seamlessly covers background without gaudy frames)
-    draw_rect(0, 0, 1920, 1080, 8, 12, 16, 242, 950)
+    -- 1. Fullscreen Subtle Dark Backdrop (seamlessly covers 100% of screen across all aspect ratios)
+    draw_rect(-ox / scale, -oy / scale, W / scale, H / scale, 8, 12, 16, 242, 950)
 
     -- 2. Top Navigation Bar (matching native Helldivers 2 tabs exactly)
     -- [Q] Button (X=40, Y=74)
