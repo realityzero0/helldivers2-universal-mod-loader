@@ -5,7 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT / "scripts"))
 import archive
 
-ZIP_PATH = Path(r"g:\antigravity\Helldivers2-Universal-Mod-Loader-v22.0.0.zip")
+ZIP_PATH = Path(r"g:\antigravity\Helldivers2-Universal-Mod-Loader-v1.0.0.zip")
 assert ZIP_PATH.exists(), f"ZIP not found: {ZIP_PATH}"
 
 with zipfile.ZipFile(ZIP_PATH, "r") as z:

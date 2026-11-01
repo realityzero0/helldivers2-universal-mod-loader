@@ -1,4 +1,4 @@
--- Universal Mod Loader v22.0.0 for Helldivers 2 (Steam Builds 25988413 / 26088801 / 26251122+ / Lua 5.1)
+-- Universal Mod Loader v1.0.0 for Helldivers 2 (Steam Builds 25988413 / 26088801 / 26251122+ / Lua 5.1)
 -- Replaces engine boot resource 0xF476DF93691895FA in bundle 9ba626afa44a3aa3
 -- Unifies All Helldivers 2 Modding Standards + Built-in Mod Options & Mod Bindings Menus:
 --   1. Bingus Shared Loader (CowboyBingus / v17 / v20 / v21 / API 1 + BingusRuntime v1)
@@ -14,14 +14,16 @@
 local A = rawget(_G, 'stingray') and stingray.Application
 if A and type(A.can_get) == 'function' and A.can_get('lua', 'mods/chef_shared_loader/core_1')
     and rawget(_G, 'ChefSharedLoader') == nil then
-  rawset(_G, 'ChefSharedLoaderHandoff', { from = 'Universal Mod Loader v22.0.0' })
+  rawset(_G, 'ChefSharedLoaderHandoff', { from = 'Universal Mod Loader v1.0.0' })
   local ok, err = pcall(require, 'mods/chef_shared_loader/core_1')
   if ok then return end
 end
 
 -- Forward declarations
+local load_persistent_settings
 local save_persistent_settings
 local update_bindings_state
+local get_loaded_mods_list
 
 -- ==============================================================================
 -- 1. ENGINE ENTRYPOINT ASSIGNMENT & SAFE CHAINING
@@ -51,6 +53,9 @@ end
 _G.init = handle_init
 init = handle_init
 
+local hook_to_mod = {}
+local current_executing_mod = nil
+
 local function handle_update(dt, ...)
     handle_update_ran = true
     if UniversalLoader_update then
@@ -59,24 +64,47 @@ local function handle_update(dt, ...)
             pcall(print, "[UniversalLoader] internal update error: " .. tostring(u_err))
         end
     end
+    local t_all_start = os.clock()
     for i = 1, #update_order do
         local id = update_order[i]
         local fn = update_hooks[id]
         if fn then
-            local ok, err = pcall(fn, dt, ...)
-            if not ok then
-                local cnt = (update_hook_errors[id] or 0) + 1
-                update_hook_errors[id] = cnt
-                if cnt <= 3 then
-                    pcall(print, "[UniversalLoader] update hook " .. tostring(id) .. " error: " .. tostring(err))
-                end
-                if cnt >= 20 then
-                    update_hooks[id] = nil
-                    pcall(print, "[UniversalLoader] [CIRCUIT BREAKER] update hook " .. tostring(id) .. " disabled after 20 errors.")
+            local mod_owner = hook_to_mod[id] or id
+            local is_disabled = UniversalState.mod_disabled and (UniversalState.mod_disabled[mod_owner] or UniversalState.mod_disabled[id])
+            if not is_disabled then
+                local t0 = os.clock()
+                local ok, err = pcall(fn, dt, ...)
+                local elapsed_ms = (os.clock() - t0) * 1000
+                if ok then
+                    if UniversalState.mod_profiler then
+                        local prof = UniversalState.mod_profiler[id]
+                        if not prof then
+                            prof = { avg_ms = elapsed_ms, max_ms = elapsed_ms, count = 1, owner = mod_owner }
+                            UniversalState.mod_profiler[id] = prof
+                        else
+                            prof.avg_ms = prof.avg_ms * 0.95 + elapsed_ms * 0.05
+                            if elapsed_ms > prof.max_ms then prof.max_ms = elapsed_ms end
+                            prof.count = prof.count + 1
+                        end
+                    end
+                    if mod_owner and UniversalState.active_mods and UniversalState.active_mods[mod_owner] then
+                        UniversalState.active_mods[mod_owner].frame_cost_ms = UniversalState.mod_profiler and UniversalState.mod_profiler[id] and UniversalState.mod_profiler[id].avg_ms or elapsed_ms
+                    end
+                else
+                    local cnt = (update_hook_errors[id] or 0) + 1
+                    update_hook_errors[id] = cnt
+                    if cnt <= 3 then
+                        pcall(print, "[UniversalLoader] update hook " .. tostring(id) .. " error: " .. tostring(err))
+                    end
+                    if cnt >= 20 then
+                        update_hooks[id] = nil
+                        pcall(print, "[UniversalLoader] [CIRCUIT BREAKER] update hook " .. tostring(id) .. " disabled after 20 errors.")
+                    end
                 end
             end
         end
     end
+    UniversalState.total_mod_frame_ms = (os.clock() - t_all_start) * 1000
     bindings_polled_this_frame = false
     return prev_update(dt, ...)
 end
@@ -1176,12 +1204,20 @@ end
 -- ==============================================================================
 -- 5. UNIVERSAL STATE & LOGGING INFRASTRUCTURE
 -- ==============================================================================
+local reload_all_mods
+local toggle_mod_enabled
+
 local UniversalState = {
-    version = "22.0.0",
-    revision = "loader-v22.0.0",
-    api_levels = { bingus = 1, chef = 3, bml = 1, hd2rt = "0.1.0" },
+    version = "1.0.0",
+    revision = "loader-v1.0.0",
+    api_levels = { bingus = 1, chef = 3, bml = 1, hd2rt = "0.1.0", mom = 3, mbm = 4, dynamic_loader = 1 },
     active_mods = {},
     failed_mods = {},
+    mod_disabled = {},
+    mod_profiler = {},
+    total_mod_frame_ms = 0.0,
+    dynamic_revision = 1,
+    toast = nil,
     addons = {},
     options = {},
     after_startup_cbs = {},
@@ -1246,7 +1282,19 @@ _G.UniversalModLoader = {
     api_levels = UniversalState.api_levels,
     state = UniversalState,
     active_mods = UniversalState.active_mods,
-    log = function(...) log_message("UniversalLoader", ...) end
+    log = function(...) log_message("UniversalLoader", ...) end,
+    reload_all_mods = function() if reload_all_mods then return reload_all_mods() end end,
+    toggle_mod = function(name) if toggle_mod_enabled then return toggle_mod_enabled(name) end end,
+    is_mod_enabled = function(name) return not (UniversalState.mod_disabled and UniversalState.mod_disabled[name]) end,
+    set_mod_enabled = function(name, state)
+        if toggle_mod_enabled and (not (UniversalState.mod_disabled and UniversalState.mod_disabled[name]) ~= (not not state)) then
+            toggle_mod_enabled(name)
+        end
+    end,
+    get_profiler = function() return UniversalState.mod_profiler end,
+    get_loaded_mods = function() if get_loaded_mods_list then return get_loaded_mods_list() else return {} end end,
+    save_settings = function() if save_persistent_settings then return save_persistent_settings() end end,
+    load_settings = function() if load_persistent_settings then return load_persistent_settings() end end
 }
 package.preload["UniversalModLoader"] = function() return _G.UniversalModLoader end
 
@@ -1315,12 +1363,14 @@ CowboyBingusModLoader = {
         if type(id) == "string" and id ~= "" then
             if fn == nil then
                 update_hooks[id] = nil
+                hook_to_mod[id] = nil
                 return true
             elseif type(fn) == "function" then
                 if update_hooks[id] == nil then
                     update_order[#update_order + 1] = id
                 end
                 update_hooks[id] = fn
+                hook_to_mod[id] = current_executing_mod or id
                 return true
             end
         end
@@ -1373,6 +1423,7 @@ local bingus_shared_table = setmetatable({
             local id = "bingus_rt_" .. tostring(#update_order + 1)
             update_order[#update_order + 1] = id
             update_hooks[id] = fn
+            hook_to_mod[id] = current_executing_mod or id
         elseif event == "shutdown" and type(fn) == "function" then
             local id = "bingus_rt_shut_" .. tostring(#shutdown_order + 1)
             shutdown_order[#shutdown_order + 1] = id
@@ -1393,6 +1444,9 @@ BingusRuntime = {
     versions = {},
     hash_reads = {},
     shared = bingus_shared_table,
+    on = bingus_shared_table.on,
+    on_update = function(id, fn) return CowboyBingusModLoader.on_update(id, fn) end,
+    on_shutdown = function(id, fn) return CowboyBingusModLoader.on_shutdown(id, fn) end,
     guard = function(spec_or_name, fn)
         if type(spec_or_name) == "table" then
             local spec = spec_or_name
@@ -1915,25 +1969,42 @@ local function ensure_input_compat(sr)
     end
 end
 
+local function is_valid_obj(o)
+    return o ~= nil and (type(o) == "table" or type(o) == "userdata")
+end
+
 local function is_input_active(v)
     return v == true or (type(v) == "number" and v > 0)
 end
 
 local function resolve_button_id(dev, name)
-    if type(dev) ~= "table" or type(name) ~= "string" or name == "" then return nil end
-    local fn = rawget(dev, "button_id") or rawget(dev, "button_index")
-    if type(fn) ~= "function" then return nil end
+    if not is_valid_obj(dev) or type(name) ~= "string" or name == "" then return nil end
+    local fn = nil
+    local ok1, f1 = pcall(function() return dev.button_id end)
+    if ok1 and type(f1) == "function" then
+        fn = f1
+    else
+        local ok2, f2 = pcall(function() return dev.button_index end)
+        if ok2 and type(f2) == "function" then
+            fn = f2
+        end
+    end
+    if not fn then return nil end
     local ok, idx = pcall(fn, name)
     if ok and idx ~= nil then
         return idx
+    end
+    local ok_u, idx_u = pcall(fn, string.upper(name))
+    if ok_u and idx_u ~= nil then
+        return idx_u
     end
     return nil
 end
 
 local function query_device_button(dev, idx, method_name)
-    if type(dev) ~= "table" or idx == nil then return false end
-    local fn = rawget(dev, method_name)
-    if type(fn) ~= "function" then return false end
+    if not is_valid_obj(dev) or idx == nil then return false end
+    local ok1, fn = pcall(function() return dev[method_name] end)
+    if not ok1 or type(fn) ~= "function" then return false end
     local ok, res = pcall(fn, idx)
     return ok and is_input_active(res)
 end
@@ -2050,7 +2121,7 @@ local function save_legacy_mom_values()
     f:close()
 end
 
-local function load_persistent_settings()
+load_persistent_settings = function()
     local legacy_count = load_legacy_mom_values()
     local sdir = get_settings_dir()
     local path = sdir .. [[\settings.json]]
@@ -2084,7 +2155,14 @@ local function load_persistent_settings()
             end
         end
     end
-    log_message("Settings", "Loaded persistent mod options and keybindings from disk.")
+    if data.disabled_mods and type(data.disabled_mods) == "table" then
+        for k, v in pairs(data.disabled_mods) do
+            if v then
+                UniversalState.mod_disabled[k] = true
+            end
+        end
+    end
+    log_message("Settings", "Loaded persistent mod options, keybindings, and disabled state from disk.")
 end
 
 save_persistent_settings = function()
@@ -2092,20 +2170,17 @@ save_persistent_settings = function()
     local path = sdir .. [[\settings.json]]
     local payload = {
         options = ModOptionsMenu.values,
-        bindings = ModBindingsMenu.bindings
+        bindings = ModBindingsMenu.bindings,
+        disabled_mods = UniversalState.mod_disabled
     }
     local str = json_serialize(payload)
     local f = io.open(path, "w")
-    if not f then
-        pcall(os.execute, 'mkdir "' .. sdir .. '" 2>nul')
-        f = io.open(path, "w")
-    end
+
     if f then
         f:write(str)
         f:close()
     else
         local ldir = get_log_dir():gsub("[Ll]ogs[/\\]?$", "Settings")
-        pcall(os.execute, 'mkdir "' .. ldir .. '" 2>nul')
         local f_alt = io.open(ldir .. [[\universal_settings.json]], "w")
         if f_alt then
             f_alt:write(str)
@@ -2247,10 +2322,32 @@ local function transpile_lua52_goto(str)
     return out
 end
 
-local function execute_mod_script(mod_name, source_code, archive_name)
+toggle_mod_enabled = function(mod_name)
+    if not mod_name or type(mod_name) ~= "string" then return end
+    local is_dis = UniversalState.mod_disabled[mod_name]
+    local new_enabled = not not is_dis
+    if new_enabled then
+        UniversalState.mod_disabled[mod_name] = nil
+    else
+        UniversalState.mod_disabled[mod_name] = true
+    end
+    if UniversalState.active_mods[mod_name] then
+        UniversalState.active_mods[mod_name].enabled = new_enabled
+    end
+    if save_persistent_settings then
+        save_persistent_settings()
+    end
+    UniversalState.dynamic_revision = (UniversalState.dynamic_revision or 1) + 1
+    if UI_GFX then UI_GFX.last_sig = nil end
+    log_message("UniversalLoader", "[LIVE TOGGLE] Mod '%s' is now %s.", mod_name, new_enabled and "ENABLED" or "DISABLED")
+end
+
+local function execute_mod_script(mod_name, source_code, archive_name, source_type, source_path)
     if UniversalState.active_mods[mod_name] and UniversalState.active_mods[mod_name].status == "loaded" then
         return true
     end
+    local prev_exec_mod = current_executing_mod
+    current_executing_mod = mod_name
 
     if mod_name:find("cowboybingus/mod_options_menu") or mod_name:find("cowboybingus/mod_bindings_menu") then
         log_message("UniversalLoader", "Superseding legacy standalone %s (unified built-in engine active)", mod_name)
@@ -2334,11 +2431,17 @@ local function execute_mod_script(mod_name, source_code, archive_name)
     UniversalState.active_mods[mod_name] = {
         name = mod_name,
         archive = archive_name,
+        source_type = source_type or "archive",
+        source_path = source_path,
+        source_code = source_code,
+        enabled = not (UniversalState.mod_disabled and UniversalState.mod_disabled[mod_name]),
+        frame_cost_ms = 0.0,
         status = "loaded"
     }
     BingusRuntime.statuses[mod_name] = "ok"
     CowboyBingusModLoader.modules[mod_name] = UniversalState.active_mods[mod_name]
 
+    current_executing_mod = prev_exec_mod
     log_message("UniversalLoader", "Successfully loaded %s from %s", mod_name, archive_name or "patch")
     return true
 end
@@ -2524,13 +2627,93 @@ local function extract_declared_mod_name(code, key8, patch_num, entry_idx)
     return nil
 end
 
+local function resolve_loose_mods_dirs()
+    local dirs = {}
+    if UniversalState.mods_dir then
+        dirs[#dirs + 1] = UniversalState.mods_dir
+    end
+    if UniversalState.settings_dir then
+        dirs[#dirs + 1] = UniversalState.settings_dir .. "/mods"
+    end
+    local data_dir = resolve_data_dir()
+    dirs[#dirs + 1] = data_dir .. "/mods"
+    dirs[#dirs + 1] = data_dir .. "/../mods"
+    dirs[#dirs + 1] = "mods"
+    local local_app = os.getenv and os.getenv("LOCALAPPDATA")
+    if local_app and local_app ~= "" then
+        dirs[#dirs + 1] = local_app .. [[\UniversalModLoader\mods]]
+        dirs[#dirs + 1] = local_app .. [[\MDL\Helldivers2\Mods]]
+    end
+    local app = os.getenv and os.getenv("APPDATA")
+    if app and app ~= "" then
+        dirs[#dirs + 1] = app .. [[\UniversalModLoader\mods]]
+    end
+    return dirs
+end
+
+local PROBE_CANDIDATES = {
+    "main.lua",
+    "init.lua",
+    "autorun.lua",
+    "mod.lua",
+    "sample_loose_mod.lua",
+    "loose_mod.lua"
+}
+
+local function discover_loose_mods(register_candidate)
+    local dirs = resolve_loose_mods_dirs()
+    local checked = {}
+    for i = 1, #dirs do
+        local dir = dirs[i]
+        local norm = dir:gsub("\\", "/")
+        if not checked[norm] then
+            checked[norm] = true
+            -- Method 1: mods.txt manifest (lightning fast, pure io.open, EAC compliant)
+            local f_list = io.open(norm .. "/mods.txt", "r")
+            if f_list then
+                for line in f_list:lines() do
+                    line = line:gsub("^%s+", ""):gsub("%s+$", "")
+                    if #line > 0 and not line:match("^#") then
+                        local rel_path = norm .. "/" .. line
+                        local f = io.open(rel_path, "rb")
+                        if f then
+                            local code = f:read("*a")
+                            f:close()
+                            if code and #code > 0 then
+                                local mod_name = extract_declared_mod_name(code) or ("mods/" .. (line:match("([^/\\]+)%.lua$") or line))
+                                register_candidate(mod_name, code, nil, nil, rel_path, "loose")
+                            end
+                        end
+                    end
+                end
+                f_list:close()
+            end
+
+            -- Method 2: Probe standard entry points (pure io.open, 0 child processes)
+            for p = 1, #PROBE_CANDIDATES do
+                local filename = PROBE_CANDIDATES[p]
+                local rel_path = norm .. "/" .. filename
+                local f = io.open(rel_path, "rb")
+                if f then
+                    local code = f:read("*a")
+                    f:close()
+                    if code and #code > 0 then
+                        local mod_name = extract_declared_mod_name(code) or ("mods/" .. filename:gsub("%.lua$", ""))
+                        register_candidate(mod_name, code, nil, nil, rel_path, "loose")
+                    end
+                end
+            end
+        end
+    end
+end
+
 local function discover_installed_mods()
     local data_dir = resolve_data_dir()
     local candidates = {}
     local candidate_order = {}
     local preset_modules = {}
 
-    local function register_candidate(target_name, code, patch_num, key8)
+    local function register_candidate(target_name, code, patch_num, key8, source_path, source_type)
         if is_boot_loader_script(code, target_name, key8) then
             return
         end
@@ -2547,21 +2730,28 @@ local function discover_installed_mods()
             end
             return
         end
+        local arc_label = source_type == "loose" and ("[LOOSE] " .. (source_path and source_path:match([[([^\\/]+)$]]) or "mod.lua"))
+            or format("9ba626afa44a3aa3.patch_%d", patch_num or 0)
+
         if candidates[target_name] then
-            log_message("UniversalLoader", "Overriding %s (patch_%d replaced by higher patch_%d)",
-                target_name, candidates[target_name].patch_num, patch_num)
+            log_message("UniversalLoader", "Overriding %s (%s replaced by %s)",
+                target_name, candidates[target_name].archive, arc_label)
             candidates[target_name] = {
                 name = target_name,
                 content = code,
                 patch_num = patch_num,
-                archive = format("9ba626afa44a3aa3.patch_%d", patch_num)
+                archive = arc_label,
+                source_type = source_type or "archive",
+                source_path = source_path
             }
         else
             candidates[target_name] = {
                 name = target_name,
                 content = code,
                 patch_num = patch_num,
-                archive = format("9ba626afa44a3aa3.patch_%d", patch_num)
+                archive = arc_label,
+                source_type = source_type or "archive",
+                source_path = source_path
             }
             candidate_order[#candidate_order + 1] = target_name
         end
@@ -2647,10 +2837,12 @@ local function discover_installed_mods()
         return (orig_idx[a] or 0) < (orig_idx[b] or 0)
     end)
 
+    discover_loose_mods(register_candidate)
+
     for _, target_name in ipairs(candidate_order) do
         local item = candidates[target_name]
         if item then
-            execute_mod_script(item.name, item.content, item.archive)
+            execute_mod_script(item.name, item.content, item.archive, item.source_type, item.source_path)
         end
     end
 
@@ -2658,6 +2850,30 @@ local function discover_installed_mods()
     for _ in pairs(UniversalState.active_mods) do mod_count = mod_count + 1 end
     log_message("UniversalLoader", "Discovered & Registered %d unique mods from %s.", mod_count, data_dir)
 end
+
+reload_all_mods = function()
+    log_message("UniversalLoader", "[LIVE RELOAD] Initiating dynamic hot-reload of all mods...")
+    for k in pairs(update_hook_errors) do update_hook_errors[k] = nil end
+    for mod_name, item in pairs(UniversalState.active_mods) do
+        if type(item.on_unload) == "function" then
+            pcall(item.on_unload)
+        end
+        package.loaded[mod_name] = nil
+    end
+    UniversalState.active_mods = {}
+    UniversalState.failed_mods = {}
+    discover_installed_mods()
+    local cnt = 0
+    for _ in pairs(UniversalState.active_mods) do cnt = cnt + 1 end
+    UniversalState.toast = {
+        text = format("HOT-RELOADED %d MODS CLEANLY", cnt),
+        expire_at = os.clock() + 3.5
+    }
+    UniversalState.dynamic_revision = (UniversalState.dynamic_revision or 1) + 1
+    if UI_GFX then UI_GFX.last_sig = nil end
+    log_message("UniversalLoader", "[LIVE RELOAD] Completed hot-reload: %d mods active.", cnt)
+end
+
 
 -- ==============================================================================
 -- 14. INTERACTIVE ESCAPE-MENU "MODS" TAB & 3-COLUMN SETTINGS UI (MOUSE + KEYBOARD)
@@ -2681,10 +2897,15 @@ local COMMON_SCAN_KEYS = {
     "mouse_middle", "mouse_extra_1", "mouse_extra_2"
 }
 
--- Escape-Menu Top-Bar "MODS [F2]" Tab Button Geometry (1920x1080 Canvas)
-local ESC_TOP_MODS_BTN = { x = 1150, y = 36, w = 190, h = 44 }
+-- Escape-Menu & Settings Button Geometries (1920x1080 Canvas)
+-- 1. Escape Menu Top Bar [ MODS ] Tab Button (placed directly adjacent to [ OPTIONS ] at 350..500)
+local ESC_TOP_MODS_BTN = { x = 525, y = 36, w = 175, h = 44 }
+-- 2. Settings (OPTIONS) Screen Left Sidebar Button (under ACCOUNT at y ~ 630..675)
+local ESC_SETTINGS_MODS_BTN = { x = 105, y = 690, w = 310, h = 48 }
+-- 3. Bottom Screen Navigation Prompt Pill
+local ESC_BOTTOM_HINT = { x = 105, y = 1010, w = 340, h = 32 }
 
--- Win32 Cursor State (used when native LuaJIT FFI is active in Helldivers 2)
+-- Win32 Cursor & Input State (used when native LuaJIT FFI is active in Helldivers 2)
 local win32_cursor_state = nil
 local function init_win32_cursor()
     if win32_cursor_state ~= nil then return win32_cursor_state end
@@ -2694,6 +2915,9 @@ local function init_win32_cursor()
     end
     local ok, state = pcall(function()
         for _, decl in ipairs({
+            "typedef struct { uint32_t cbSize; uint32_t flags; void *hCursor; int32_t pt_x; int32_t pt_y; } UML_CURSORINFO;",
+            "int GetCursorInfo(void *);",
+            "int16_t GetAsyncKeyState(int);",
             "void *GetForegroundWindow(void);",
             "uint32_t GetWindowThreadProcessId(void *, void *);",
             "uint32_t GetCurrentProcessId(void);",
@@ -2705,12 +2929,22 @@ local function init_win32_cursor()
         end
         local u32 = ffi.load("user32")
         local k32 = ffi.load("kernel32")
+        local ci = nil
+        pcall(function()
+            ci = ffi.new("UML_CURSORINFO")
+            ci.cbSize = 24
+        end)
         return {
             user32 = u32,
             own_pid = k32.GetCurrentProcessId(),
             pid_buf = ffi.new("uint32_t[1]"),
             pt_buf = ffi.new("int32_t[2]"),
-            rc_buf = ffi.new("int32_t[4]")
+            rc_buf = ffi.new("int32_t[4]"),
+            ci_buf = ci,
+            last_f2_down = false,
+            last_f9_down = false,
+            last_esc_down = false,
+            last_lclick_down = false
         }
     end)
     win32_cursor_state = (ok and type(state) == "table") and state or false
@@ -2731,24 +2965,48 @@ end
 local function is_cursor_shown(sr)
     if not sr then return false end
     if type(rawget(_G, "cursor_visible")) == "boolean" then return _G.cursor_visible end
-    if type(sr.Window) == "table" then
-        local w = sr.Window
-        if type(w.show_cursor) == "function" then
-            local ok, shown = pcall(w.show_cursor)
-            if ok and shown == true then return true end
-        elseif type(w.show_cursor) == "boolean" and w.show_cursor then
-            return true
+
+    -- 1. Stingray Window cursor check (used by Mech Part HUD and Driver HUD in live engine)
+    local win_obj = (is_valid_obj(sr.Window) and sr.Window) or (is_valid_obj(rawget(_G, "Window")) and _G.Window)
+    if win_obj then
+        if type(win_obj.show_cursor) == "function" then
+            local ok, shown = pcall(win_obj.show_cursor)
+            if ok and type(shown) == "boolean" then return shown end
+        elseif type(win_obj.show_cursor) == "boolean" then
+            return win_obj.show_cursor
         end
-        if type(w.has_cursor) == "function" then
-            local ok, shown = pcall(w.has_cursor)
-            if ok and shown == true then return true end
-        elseif type(w.has_cursor) == "boolean" and w.has_cursor then
-            return true
+        if type(win_obj.has_cursor) == "function" then
+            local ok, shown = pcall(win_obj.has_cursor)
+            if ok and type(shown) == "boolean" then return shown end
+        elseif type(win_obj.has_cursor) == "boolean" then
+            return win_obj.has_cursor
         end
-        if type(w.cursor_visible) == "boolean" and w.cursor_visible then
-            return true
+        if type(win_obj.cursor_visible) == "boolean" then
+            return win_obj.cursor_visible
         end
     end
+
+    -- 2. Win32 GetCursorInfo (checks if OS cursor is showing in foreground Helldivers 2 window)
+    local w32 = init_win32_cursor()
+    if w32 and w32.ci_buf ~= nil then
+        local ok, shown = pcall(function()
+            local u = w32.user32
+            local win = u.GetForegroundWindow()
+            if win ~= nil and win ~= ffi.NULL then
+                if u.GetWindowThreadProcessId(win, ffi.cast("void *", w32.pid_buf)) ~= 0
+                    and tonumber(w32.pid_buf[0]) == tonumber(w32.own_pid)
+                then
+                    if u.GetCursorInfo(ffi.cast("void *", w32.ci_buf)) ~= 0 then
+                        local flags = tonumber(w32.ci_buf.flags)
+                        return flags and (flags % 2 == 1)
+                    end
+                end
+            end
+            return nil
+        end)
+        if ok and type(shown) == "boolean" then return shown end
+    end
+
     return false
 end
 
@@ -2788,28 +3046,40 @@ local function get_mouse_canvas_pos(sr)
     end
 
     -- 2. Fallback to Stingray Mouse.axis("cursor")
-    if (raw_x == nil or raw_y == nil) and sr and type(sr.Mouse) == "table" then
+    if (raw_x == nil or raw_y == nil) and sr and is_valid_obj(sr.Mouse) then
         pcall(function()
             local m = sr.Mouse
-            if type(m.axis) == "function" then
-                local aid = (type(m.axis_id) == "function") and m.axis_id("cursor") or "cursor"
-                if aid ~= nil then
-                    local v = m.axis(aid)
-                    if v ~= nil then
-                        local vx, vy
-                        if type(sr.Vector3) == "table" and type(sr.Vector3.x) == "function" then
-                            vx, vy = sr.Vector3.x(v), sr.Vector3.y(v)
+            local ok_axis, axis_fn = pcall(function() return m.axis end)
+            if ok_axis and type(axis_fn) == "function" then
+                local aid = "cursor"
+                local ok_aid, id_fn = pcall(function() return m.axis_id end)
+                if ok_aid and type(id_fn) == "function" then
+                    local ok3, real_id = pcall(id_fn, "cursor")
+                    if ok3 and real_id ~= nil then aid = real_id end
+                end
+                local ok_v, v = pcall(axis_fn, aid)
+                if ok_v and v ~= nil then
+                    local vx, vy = nil, nil
+                    local ok_v3x, r3x = pcall(function() return sr.Vector3.x(v) end)
+                    local ok_v3y, r3y = pcall(function() return sr.Vector3.y(v) end)
+                    if ok_v3x and ok_v3y and type(r3x) == "number" and type(r3y) == "number" then
+                        vx, vy = r3x, r3y
+                    else
+                        local ok_v2x, r2x = pcall(function() return sr.Vector2.x(v) end)
+                        local ok_v2y, r2y = pcall(function() return sr.Vector2.y(v) end)
+                        if ok_v2x and ok_v2y and type(r2x) == "number" and type(r2y) == "number" then
+                            vx, vy = r2x, r2y
                         elseif type(v) == "table" then
                             vx = v.x or v[1]
                             vy = v.y or v[2]
                         end
-                        if type(vx) == "number" and type(vy) == "number" then
-                            if vx >= 0 and vx <= 1 and vy >= 0 and vy <= 1 and (vx > 0 or vy > 0) and W > 1 and H > 1 then
-                                vx = vx * W
-                                vy = vy * H
-                            end
-                            raw_x, raw_y = vx, vy
+                    end
+                    if type(vx) == "number" and type(vy) == "number" then
+                        if vx >= 0 and vx <= 1 and vy >= 0 and vy <= 1 and (vx > 0 or vy > 0) and W > 1 and H > 1 then
+                            vx = vx * W
+                            vy = vy * H
                         end
+                        raw_x, raw_y = vx, vy
                     end
                 end
             end
@@ -2825,7 +3095,7 @@ local function get_mouse_canvas_pos(sr)
 end
 
 local function get_mouse_wheel_delta(sr)
-    if not sr or type(sr.Mouse) ~= "table" then return 0 end
+    if not sr or not is_valid_obj(sr.Mouse) then return 0 end
     local m = sr.Mouse
     if type(m.axis) == "function" then
         local ok, wy = pcall(function()
@@ -2949,14 +3219,52 @@ local function ui_gfx_ensure(sr)
     UI_GFX.rect_ids = {}
     UI_GFX.text_ids = {}
     UI_GFX.last_sig = nil
-    local w = ui_find_world(sr)
-    if not w then return false end
-    local ok, gui = pcall(sr.World.create_screen_gui, w, "scale", 1, 1)
-    if ok and gui then
-        UI_GFX.gui = gui
-        UI_GFX.world = w
-        return true
+    if not sr or not sr.World or type(sr.World.create_screen_gui) ~= "function" then
+        return false
     end
+    local app = sr.Application
+    local main_w = (app and type(app.main_world) == "function") and select(2, pcall(app.main_world)) or nil
+    local worlds = {}
+    if app and type(app.worlds) == "function" then
+        local ok, ws = pcall(app.worlds)
+        if ok and type(ws) == "table" then worlds = ws end
+    end
+    -- 1. Try secondary UI worlds first
+    for _, w in ipairs(worlds) do
+        if w ~= main_w then
+            local ok, gui = pcall(sr.World.create_screen_gui, w, "scale", 1, 1)
+            if ok and gui then
+                UI_GFX.gui = gui
+                UI_GFX.world = w
+                pcall(sr.Gui.material, gui, UI_FONT)
+                pcall(log_message, "UniversalLoader", "[GUI] Screen GUI created on secondary world.")
+                return true
+            end
+        end
+    end
+    -- 2. Try main_world
+    if main_w then
+        local ok, gui = pcall(sr.World.create_screen_gui, main_w, "scale", 1, 1)
+        if ok and gui then
+            UI_GFX.gui = gui
+            UI_GFX.world = main_w
+            pcall(sr.Gui.material, gui, UI_FONT)
+            pcall(log_message, "UniversalLoader", "[GUI] Screen GUI created on main world.")
+            return true
+        end
+    end
+    -- 3. Try any remaining world
+    for _, w in ipairs(worlds) do
+        local ok, gui = pcall(sr.World.create_screen_gui, w, "scale", 1, 1)
+        if ok and gui then
+            UI_GFX.gui = gui
+            UI_GFX.world = w
+            pcall(sr.Gui.material, gui, UI_FONT)
+            pcall(log_message, "UniversalLoader", "[GUI] Screen GUI created on fallback world.")
+            return true
+        end
+    end
+    pcall(log_message, "UniversalLoader", "[GUI ERROR] Unable to create screen GUI on any available world.")
     return false
 end
 
@@ -3005,21 +3313,29 @@ local function get_mod_option_categories()
     return categories, by_cat
 end
 
-local function get_loaded_mods_list()
+get_loaded_mods_list = function()
     local list = {}
     for name, info in pairs(UniversalState.active_mods) do
+        local is_enabled = not (UniversalState.mod_disabled and UniversalState.mod_disabled[name])
         if type(info) == "table" then
             list[#list + 1] = {
                 name = info.name or name,
                 archive = info.archive or "patch",
                 status = info.status or "loaded",
+                enabled = is_enabled,
+                frame_cost_ms = info.frame_cost_ms or 0.0,
+                source_type = info.source_type or "archive",
+                source_path = info.source_path,
                 error = info.error
             }
         else
             list[#list + 1] = {
                 name = tostring(name),
                 archive = "runtime",
-                status = "loaded"
+                status = "loaded",
+                enabled = is_enabled,
+                frame_cost_ms = 0.0,
+                source_type = "runtime"
             }
         end
     end
@@ -3029,6 +3345,10 @@ local function get_loaded_mods_list()
                 name = info.name or name,
                 archive = info.archive or "patch",
                 status = info.status or "error",
+                enabled = false,
+                frame_cost_ms = 0.0,
+                source_type = info.source_type or "archive",
+                source_path = info.source_path,
                 error = info.error
             }
         end
@@ -3135,43 +3455,85 @@ local function set_slider_from_ratio(cur_id, ratio)
     ModOptionsMenu.set(cur_id, snap_slider_value(spec, raw_val))
 end
 
+local input_edges = {}
+
 local function handle_menu_input()
     local sr = rawget(_G, "stingray")
     if not sr then return end
-    ensure_input_compat(sr)
 
     local function key_pressed(name)
-        local idx = resolve_button_id(sr.Keyboard, name)
-        if idx ~= nil and query_device_button(sr.Keyboard, idx, "pressed") then return true end
-        local midx = resolve_button_id(sr.Mouse, name)
-        if midx ~= nil and query_device_button(sr.Mouse, midx, "pressed") then return true end
-        if type(sr.Pad1) == "table" then
-            local pidx = resolve_button_id(sr.Pad1, name)
-            if pidx ~= nil and query_device_button(sr.Pad1, pidx, "pressed") then return true end
+        local kb = sr.Keyboard
+        if is_valid_obj(kb) then
+            local idx = resolve_button_id(kb, name)
+            if idx ~= nil then
+                if query_device_button(kb, idx, "pressed") then
+                    input_edges["k_" .. name] = true
+                    return true
+                end
+                local b = query_device_button(kb, idx, "button") or query_device_button(kb, idx, "down")
+                local is_down = (b == true)
+                local was_down = input_edges["k_" .. name] == true
+                input_edges["k_" .. name] = is_down
+                if is_down and not was_down then return true end
+            end
+        end
+        local m = sr.Mouse
+        if is_valid_obj(m) then
+            local midx = resolve_button_id(m, name)
+            if midx ~= nil then
+                if query_device_button(m, midx, "pressed") then
+                    input_edges["m_" .. name] = true
+                    return true
+                end
+                local b = query_device_button(m, midx, "button") or query_device_button(m, midx, "down")
+                local is_down = (b == true)
+                local was_down = input_edges["m_" .. name] == true
+                input_edges["m_" .. name] = is_down
+                if is_down and not was_down then return true end
+            end
+        end
+        local pad = sr.Pad1
+        if is_valid_obj(pad) then
+            local pidx = resolve_button_id(pad, name)
+            if pidx ~= nil then
+                if query_device_button(pad, pidx, "pressed") then
+                    input_edges["p_" .. name] = true
+                    return true
+                end
+                local b = query_device_button(pad, pidx, "button") or query_device_button(pad, pidx, "down")
+                local is_down = (b == true)
+                local was_down = input_edges["p_" .. name] == true
+                input_edges["p_" .. name] = is_down
+                if is_down and not was_down then return true end
+            end
         end
         return false
     end
 
     local function mouse_btn_pressed(btn_name, alt_name)
         local m = sr.Mouse
-        if type(m) ~= "table" then return false end
-        local idx = resolve_button_id(m, btn_name)
-        if idx ~= nil and query_device_button(m, idx, "pressed") then return true end
-        if alt_name then
-            local aidx = resolve_button_id(m, alt_name)
-            if aidx ~= nil and query_device_button(m, aidx, "pressed") then return true end
+        if not is_valid_obj(m) then return false end
+        local idx = resolve_button_id(m, btn_name) or (alt_name and resolve_button_id(m, alt_name))
+        if idx ~= nil then
+            if query_device_button(m, idx, "pressed") then
+                input_edges["btn_" .. btn_name] = true
+                return true
+            end
+            local b = query_device_button(m, idx, "button") or query_device_button(m, idx, "down")
+            local is_down = (b == true)
+            local was_down = input_edges["btn_" .. btn_name] == true
+            input_edges["btn_" .. btn_name] = is_down
+            if is_down and not was_down then return true end
         end
         return false
     end
 
     local function mouse_btn_down(btn_name, alt_name)
         local m = sr.Mouse
-        if type(m) ~= "table" then return false end
-        local idx = resolve_button_id(m, btn_name)
-        if idx ~= nil and query_device_button(m, idx, "button") then return true end
-        if alt_name then
-            local aidx = resolve_button_id(m, alt_name)
-            if aidx ~= nil and query_device_button(m, aidx, "button") then return true end
+        if not is_valid_obj(m) then return false end
+        local idx = resolve_button_id(m, btn_name) or (alt_name and resolve_button_id(m, alt_name))
+        if idx ~= nil then
+            return query_device_button(m, idx, "button") or query_device_button(m, idx, "down")
         end
         return false
     end
@@ -3186,11 +3548,59 @@ local function handle_menu_input()
             mouse_moved = true
             UniversalState.last_mouse_cx = cx
             UniversalState.last_mouse_cy = cy
+            UniversalState.mouse_active_timer = 2.0
         end
     end
+    if UniversalState.mouse_active_timer and UniversalState.mouse_active_timer > 0 then
+        UniversalState.mouse_active_timer = UniversalState.mouse_active_timer - 0.016
+    end
 
-    local lclick = mouse_btn_pressed("left", "mouse_left")
-    local ldown = mouse_btn_down("left", "mouse_left")
+    -- Win32 Asynchronous Key & Click Polling (guarantees F2/F9/Escape and LClick never missed)
+    local w32 = init_win32_cursor()
+    local win32_f2_pressed = false
+    local win32_f9_pressed = false
+    local win32_esc_pressed = false
+    local win32_lclick_pressed = false
+    local win32_ldown = false
+    if w32 then
+        pcall(function()
+            local u = w32.user32
+            local win = u.GetForegroundWindow()
+            if win ~= nil and win ~= ffi.NULL then
+                if u.GetWindowThreadProcessId(win, ffi.cast("void *", w32.pid_buf)) ~= 0
+                    and tonumber(w32.pid_buf[0]) == tonumber(w32.own_pid)
+                then
+                    -- VK_F2 (0x71)
+                    local f2 = u.GetAsyncKeyState(0x71)
+                    local f2_down = (f2 < 0 or f2 == 1 or f2 == -32767)
+                    if f2_down and not w32.last_f2_down then win32_f2_pressed = true end
+                    w32.last_f2_down = f2_down
+
+                    -- VK_F9 (0x78)
+                    local f9 = u.GetAsyncKeyState(0x78)
+                    local f9_down = (f9 < 0 or f9 == 1 or f9 == -32767)
+                    if f9_down and not w32.last_f9_down then win32_f9_pressed = true end
+                    w32.last_f9_down = f9_down
+
+                    -- VK_ESCAPE (0x1B)
+                    local esc = u.GetAsyncKeyState(0x1B)
+                    local esc_down = (esc < 0 or esc == 1 or esc == -32767)
+                    if esc_down and not w32.last_esc_down then win32_esc_pressed = true end
+                    w32.last_esc_down = esc_down
+
+                    -- VK_LBUTTON (0x01)
+                    local lb = u.GetAsyncKeyState(0x01)
+                    local lb_down = (lb < 0 or lb == 1 or lb == -32767)
+                    if lb_down and not w32.last_lclick_down then win32_lclick_pressed = true end
+                    w32.last_lclick_down = lb_down
+                    win32_ldown = lb_down
+                end
+            end
+        end)
+    end
+
+    local lclick = mouse_btn_pressed("left", "mouse_left") or win32_lclick_pressed
+    local ldown = mouse_btn_down("left", "mouse_left") or win32_ldown
     local rclick = mouse_btn_pressed("right", "mouse_right")
     local wheel = get_mouse_wheel_delta(sr)
 
@@ -3198,30 +3608,38 @@ local function handle_menu_input()
         UniversalState.dragging_slider_id = nil
     end
 
-    -- Hotkey toggle (F2 / F9) works anywhere
-    if key_pressed("f2") or key_pressed("f9") then
+    -- Hotkey toggle (F2 / F9) works anywhere (in gameplay, ship, or Escape menu)
+    if key_pressed("f2") or key_pressed("f9") or win32_f2_pressed or win32_f9_pressed then
         UniversalState.menu_visible = not UniversalState.menu_visible
         UniversalState.menu_rebind_id = nil
         UniversalState.dragging_slider_id = nil
-        if not UniversalState.menu_visible then
-            ui_gfx_clear(sr)
-        end
+        ui_gfx_clear(sr)
         return
     end
 
-    -- When MODS screen is closed, check if Escape Menu cursor is active for Top-Bar "MODS [F2]" Tab Button
+    -- When MODS screen is closed, process hit testing for buttons whenever mouse coordinates exist
     if not UniversalState.menu_visible then
-        if is_cursor_shown(sr) then
-            local hov = pt_in_rect(cx, cy, ESC_TOP_MODS_BTN.x, ESC_TOP_MODS_BTN.y, ESC_TOP_MODS_BTN.w, ESC_TOP_MODS_BTN.h)
-            UniversalState.hover_esc_mods_btn = hov
-            if hov and lclick then
-                UniversalState.menu_visible = true
-                UniversalState.menu_rebind_id = nil
-                UniversalState.dragging_slider_id = nil
-                return
-            end
-        else
-            UniversalState.hover_esc_mods_btn = false
+        local hov_top = (cx ~= nil and cy ~= nil) and (
+            pt_in_rect(cx, cy, ESC_TOP_MODS_BTN.x, ESC_TOP_MODS_BTN.y, ESC_TOP_MODS_BTN.w, ESC_TOP_MODS_BTN.h)
+            or pt_in_rect(cx, cy, 600, 36, 165, 44)
+            or pt_in_rect(cx, cy, 1150, 36, 190, 44)
+        ) or false
+        local hov_set = (cx ~= nil and cy ~= nil) and (
+            pt_in_rect(cx, cy, ESC_SETTINGS_MODS_BTN.x, ESC_SETTINGS_MODS_BTN.y, ESC_SETTINGS_MODS_BTN.w, ESC_SETTINGS_MODS_BTN.h)
+            or pt_in_rect(cx, cy, 105, 560, 310, 48)
+        ) or false
+        local hov_hnt = (cx ~= nil and cy ~= nil) and pt_in_rect(cx, cy, ESC_BOTTOM_HINT.x, ESC_BOTTOM_HINT.y, ESC_BOTTOM_HINT.w, ESC_BOTTOM_HINT.h) or false
+
+        UniversalState.hover_esc_mods_btn = hov_top
+        UniversalState.hover_esc_settings_btn = hov_set
+        UniversalState.hover_esc_hint_btn = hov_hnt
+
+        if (hov_top or hov_set or hov_hnt) and lclick then
+            UniversalState.menu_visible = true
+            UniversalState.menu_rebind_id = nil
+            UniversalState.dragging_slider_id = nil
+            ui_gfx_clear(sr)
+            return
         end
         return
     end
@@ -3596,13 +4014,28 @@ local function handle_menu_input()
         elseif lclick and pt_in_rect(cx, cy, 1220, 109, 115, 34) then
             UniversalState.menu_selected = math.min(total, sel + page_size)
             return
+        elseif lclick and pt_in_rect(cx, cy, 1345, 109, 130, 34) then
+            reload_all_mods()
+            return
+        end
+
+        if lclick and pt_in_rect(cx, cy, 1395, 820, 400, 44) then
+            local item = mods_list[sel]
+            if item then toggle_mod_enabled(item.name) end
+            return
+        elseif lclick and pt_in_rect(cx, cy, 1395, 875, 400, 44) then
+            reload_all_mods()
+            return
         end
 
         if cx ~= nil and cx >= 525 and cx <= 1345 then
             for i = start_idx, end_idx do
                 local ry = 152 + (i - start_idx) * 60
                 if pt_in_rect(cx, cy, 525, ry, 820, 54) then
-                    if mouse_moved or lclick then
+                    if lclick and cx >= 1180 then
+                        local item = mods_list[i]
+                        if item then toggle_mod_enabled(item.name) end
+                    elseif mouse_moved or lclick then
                         UniversalState.menu_selected = i
                     end
                     break
@@ -3610,7 +4043,12 @@ local function handle_menu_input()
             end
         end
 
-        if key_pressed("up") or key_pressed("d_up") then
+        if key_pressed("space") or key_pressed("enter") then
+            local item = mods_list[sel]
+            if item then toggle_mod_enabled(item.name) end
+        elseif key_pressed("r") then
+            reload_all_mods()
+        elseif key_pressed("up") or key_pressed("d_up") then
             UniversalState.menu_selected = math.max(1, sel - 1)
         elseif key_pressed("down") or key_pressed("d_down") then
             UniversalState.menu_selected = math.min(total, sel + 1)
@@ -3625,14 +4063,6 @@ end
 local function draw_menu_overlay()
     local sr = rawget(_G, "stingray")
     if not sr or not sr.Gui or not sr.Gui.rect then return end
-
-    local cursor_open = is_cursor_shown(sr)
-    if not UniversalState.menu_visible and not cursor_open then
-        if UI_GFX.gui or #UI_GFX.rect_ids > 0 or #UI_GFX.text_ids > 0 then
-            ui_gfx_clear(sr)
-        end
-        return
-    end
 
     local retained_mode = is_stingray_retained_gui(sr)
     local W, H = get_screen_resolution(sr)
@@ -3660,9 +4090,26 @@ local function draw_menu_overlay()
             local sx = floor(ox + x * scale)
             local sy = floor(H - y * scale)
             local fsize = math.max(10, floor((font_size or 16) * scale))
-            local pos = sr.Vector3(sx, sy, layer or 970)
             local col = sr.Color(a or 255, r or 255, g or 255, b or 255)
-            local ok, id = pcall(sr.Gui.text, UI_GFX.gui, tostring(str or ""), UI_FONT, fsize, UI_FONT, pos, col)
+            local text_layer = math.max(995, (layer or 995) + 25)
+            local ok, id = false, nil
+            -- 1. Try Vector3 with high Z layer (995+) so text renders IN FRONT OF layer 954..965 rectangles
+            local pos3 = (type(sr.Vector3) == "function" or type(sr.Vector3) == "table" or type(sr.Vector3) == "userdata") and sr.Vector3(sx, sy, text_layer) or nil
+            if pos3 then
+                ok, id = pcall(sr.Gui.text, UI_GFX.gui, tostring(str or ""), UI_FONT, fsize, UI_FONT, pos3, col)
+            end
+            -- 2. Fallback to Vector2 only if Vector3 was rejected
+            if not ok or not id then
+                local pos2 = (type(sr.Vector2) == "function" or type(sr.Vector2) == "table" or type(sr.Vector2) == "userdata") and sr.Vector2(sx, sy) or nil
+                if pos2 then
+                    local ok2, id2 = pcall(sr.Gui.text, UI_GFX.gui, tostring(str or ""), UI_FONT, fsize, UI_FONT, pos2, col)
+                    if ok2 and id2 then ok, id = ok2, id2 end
+                end
+            end
+            if not UI_GFX.logged_text then
+                UI_GFX.logged_text = true
+                pcall(log_message, "UniversalLoader", "[GUI] First text '%s' render: ok=%s, id=%s, layer=%s, font=%s", tostring(str or ""), tostring(ok), tostring(id), tostring(text_layer), tostring(UI_FONT))
+            end
             if ok and id then UI_GFX.text_ids[#UI_GFX.text_ids + 1] = id end
         else
             pcall(sr.Gui.text, tostring(str or ""), x, y, font_size, r, g, b, a)
@@ -3670,23 +4117,50 @@ local function draw_menu_overlay()
     end
 
     -- ==========================================================================
-    -- STATE 1: ESCAPE MENU OPEN (TOP-BAR "MODS [F2]" TAB BUTTON ONLY)
+    -- STATE 1: MOD MENU CLOSED -> DRAW ACCESS BUTTONS ONLY IF ESCAPE/SETTINGS MENU IS OPEN
     -- ==========================================================================
-    if not UniversalState.menu_visible and cursor_open then
-        local hov = UniversalState.hover_esc_mods_btn == true
+    if not UniversalState.menu_visible then
+        local cursor_open = is_cursor_shown(sr)
+        if not cursor_open then
+            if retained_mode and UI_GFX.last_sig ~= "CLOSED_IDLE" then
+                ui_gfx_clear(sr)
+                UI_GFX.last_sig = "CLOSED_IDLE"
+            end
+            return
+        end
+
+        local hov_top = UniversalState.hover_esc_mods_btn == true
+        local hov_set = UniversalState.hover_esc_settings_btn == true
+        local hov_hnt = UniversalState.hover_esc_hint_btn == true
+
         if retained_mode then
             if not ui_gfx_ensure(sr) then return end
-            local sig = format("ESC_TOPBAR:%d:%d:%s", W, H, tostring(hov))
+            local sig = format("ESC_BTNS:%d:%d:%s:%s:%s", W, H, tostring(hov_top), tostring(hov_set), tostring(hov_hnt))
             if UI_GFX.last_sig == sig then return end
             ui_gfx_clear(sr)
             UI_GFX.last_sig = sig
         end
 
+        -- 1. Top-Bar Tab [ MODS [F2] ] (X=525..700, Y=36, W=175, H=44)
         local bx, by, bw, bh = ESC_TOP_MODS_BTN.x, ESC_TOP_MODS_BTN.y, ESC_TOP_MODS_BTN.w, ESC_TOP_MODS_BTN.h
-        draw_rect(bx - 2, by - 2, bw + 4, bh + 4, 245, 205, 50, hov and 255 or 195, 955)
-        draw_rect(bx, by, bw, bh, hov and 52 or 22, hov and 68 or 28, hov and 92 or 38, 242, 956)
+        draw_rect(bx - 2, by - 2, bw + 4, bh + 4, 245, 205, 50, hov_top and 255 or 195, 955)
+        draw_rect(bx, by, bw, bh, hov_top and 52 or 22, hov_top and 68 or 28, hov_top and 92 or 38, 242, 956)
         draw_rect(bx, by + bh - 3, bw, 3, 255, 215, 55, 255, 958)
-        draw_text("MODS [F2]", bx + 34, by + 29, 18, 255, hov and 245 or 215, hov and 140 or 65, 255, 970)
+        draw_text("MODS [F2]", bx + 28, by + 29, 18, 255, hov_top and 255 or 215, hov_top and 140 or 65, 255, 970)
+
+        -- 2. In-Settings Sidebar Entry [ >> MOD OPTIONS & BINDS << ] (X=105, Y=690, W=310, H=48)
+        local sx, sy, sw, sh = ESC_SETTINGS_MODS_BTN.x, ESC_SETTINGS_MODS_BTN.y, ESC_SETTINGS_MODS_BTN.w, ESC_SETTINGS_MODS_BTN.h
+        draw_rect(sx - 2, sy - 2, sw + 4, sh + 4, 245, 205, 50, hov_set and 255 or 160, 955)
+        draw_rect(sx, sy, sw, sh, hov_set and 48 or 20, hov_set and 64 or 26, hov_set and 88 or 36, 245, 956)
+        draw_rect(sx, sy, 5, sh, 255, 215, 55, 255, 958)
+        draw_text(">> MOD OPTIONS & BINDS <<", sx + 22, sy + 31, 16, 255, hov_set and 255 or 215, hov_set and 160 or 75, 255, 970)
+
+        -- 3. Bottom HUD Shortcut Pill [F2] MOD OPTIONS & KEYBINDINGS (X=105, Y=1010, W=340, H=32)
+        local hx, hy, hw, hh = ESC_BOTTOM_HINT.x, ESC_BOTTOM_HINT.y, ESC_BOTTOM_HINT.w, ESC_BOTTOM_HINT.h
+        draw_rect(hx, hy, hw, hh, 14, 18, 24, 220, 956)
+        draw_rect(hx, hy, hw, hh, 215, 185, 45, hov_hnt and 240 or 140, 957)
+        draw_text("[F2] MOD OPTIONS & KEYBINDINGS", hx + 18, hy + 22, 14, 255, hov_hnt and 255 or 215, hov_hnt and 160 or 55, 255, 970)
+
         return
     end
 
@@ -3706,7 +4180,8 @@ local function draw_menu_overlay()
             local rec = ModBindingsMenu.order[UniversalState.menu_selected or 1]
             if rec then sel_bind_down = ModBindingsMenu.is_down(rec.id) end
         end
-        local sig = format("MODS_3COL:%d:%d:%d:%d:%d:%s:%d:%d:%d:%s",
+        local has_toast = (UniversalState.toast and UniversalState.toast.expire_at and UniversalState.toast.expire_at > os.clock()) and "1" or "0"
+        local sig = format("MODS_3COL:%d:%d:%d:%d:%d:%s:%d:%d:%d:%s:%d:%s",
             W, H,
             UniversalState.menu_tab or 1,
             UniversalState.menu_selected or 1,
@@ -3715,7 +4190,9 @@ local function draw_menu_overlay()
             ModOptionsMenu.revision or 1,
             ModBindingsMenu.revision or 1,
             total_mods,
-            tostring(sel_bind_down)
+            tostring(sel_bind_down),
+            UniversalState.dynamic_revision or 1,
+            has_toast
         )
         if UI_GFX.last_sig == sig then
             return
@@ -4072,12 +4549,18 @@ local function draw_menu_overlay()
         local sel = UniversalState.menu_selected or 1
         if sel > total then sel = math.max(1, total); UniversalState.menu_selected = sel end
 
-        local loaded_cnt, builtin_cnt, err_cnt = 0, 0, 0
+        local loaded_cnt, disabled_cnt, builtin_cnt, err_cnt = 0, 0, 0, 0
         for i = 1, total do
-            local st = mods_list[i].status
-            if st == "loaded" then loaded_cnt = loaded_cnt + 1
-            elseif st == "superseded_by_builtin" then builtin_cnt = builtin_cnt + 1
-            else err_cnt = err_cnt + 1 end
+            local m = mods_list[i]
+            if m.status == "superseded_by_builtin" then
+                builtin_cnt = builtin_cnt + 1
+            elseif not m.enabled then
+                disabled_cnt = disabled_cnt + 1
+            elseif m.status == "loaded" then
+                loaded_cnt = loaded_cnt + 1
+            else
+                err_cnt = err_cnt + 1
+            end
         end
 
         local page_size = 12
@@ -4086,22 +4569,32 @@ local function draw_menu_overlay()
         local start_idx = page * page_size + 1
         local end_idx = min(total, start_idx + page_size - 1)
 
-        draw_text(format("ACTIVE: %d  |  BUILT-IN: %d  |  ERRORS: %d  (PAGE %d / %d)",
-            loaded_cnt, builtin_cnt, err_cnt, page + 1, total_pages), 535, 131, 15, 255, 215, 65, 255, 970)
+        local lua_mem = floor(collectgarbage("count"))
+        local total_cpu = UniversalState.total_mod_frame_ms or 0.0
+
+        draw_text(format("ACTIVE: %d  |  BUILT-IN: %d  |  ERRORS: %d  (PAGE %d / %d)  |  HEAP: %d KB",
+            loaded_cnt, builtin_cnt, err_cnt, page + 1, total_pages, lua_mem), 535, 131, 14, 255, 215, 65, 255, 970)
         draw_rect(1095, 109, 115, 32, 32, 46, 66, 235, 958)
         draw_text("< PAGE", 1122, 130, 14, 215, 225, 240, 255, 970)
         draw_rect(1220, 109, 115, 32, 32, 46, 66, 235, 958)
         draw_text("PAGE >", 1248, 130, 14, 215, 225, 240, 255, 970)
+        draw_rect(1345, 109, 130, 32, 36, 58, 44, 240, 958)
+        draw_rect(1345, 138, 130, 3, 90, 235, 130, 255, 960)
+        draw_text("[R] RELOAD ALL", 1354, 130, 13, 215, 255, 220, 255, 970)
 
         for i = start_idx, end_idx do
             local item = mods_list[i]
             local is_sel = (i == sel)
             local ry = 152 + (i - start_idx) * 60
-            local badge, br, bg, bb = "[ ACTIVE ]", 90, 235, 130
-            if item.status == "superseded_by_builtin" then
+            local badge, br, bg, bb
+            if not item.enabled then
+                badge, br, bg, bb = "[ DISABLED ]", 145, 145, 145
+            elseif item.status == "superseded_by_builtin" then
                 badge, br, bg, bb = "[ BUILT-IN ]", 110, 210, 250
             elseif item.status ~= "loaded" then
                 badge, br, bg, bb = "[ ERROR ]", 240, 95, 95
+            else
+                badge, br, bg, bb = "[ ACTIVE ]", 90, 235, 130
             end
 
             if is_sel then
@@ -4112,31 +4605,56 @@ local function draw_menu_overlay()
                 draw_rect(525, ry, 820, 54, (i % 2 == 0) and 20 or 24, (i % 2 == 0) and 27 or 32, (i % 2 == 0) and 38 or 44, 215, 957)
                 draw_text(tostring(item.name), 544, ry + 34, 15, 198, 208, 222, 255, 970)
             end
-            draw_text(tostring(item.archive or "patch"), 985, ry + 34, 14, 155, 175, 198, 255, 970)
-            draw_text(badge, 1215, ry + 34, 15, br, bg, bb, 255, 970)
+
+            local src_label = item.source_type == "loose" and "[LOOSE]" or tostring(item.archive or "patch")
+            draw_text(src_label, 950, ry + 34, 13, item.source_type == "loose" and 100 or 155, item.source_type == "loose" and 220 or 175, item.source_type == "loose" and 255 or 198, 255, 970)
+
+            local cost_str = format("%.2f ms", item.frame_cost_ms or 0.0)
+            draw_text(cost_str, 1100, ry + 34, 13, 245, 215, 90, 255, 970)
+
+            draw_text(badge, 1205, ry + 34, 14, br, bg, bb, 255, 970)
         end
 
         local sel_mod = mods_list[sel]
         if sel_mod then
             draw_text(tostring(sel_mod.name):upper(), 1395, 185, 17, 255, 220, 65, 255, 970)
-            draw_rect(1395, 210, 400, 100, 22, 30, 42, 235, 958)
-            draw_text(format("ARCHIVE:  %s", tostring(sel_mod.archive)), 1410, 240, 15, 200, 215, 235, 255, 970)
-            draw_text(format("STATUS:   %s", tostring(sel_mod.status):upper()), 1410, 270, 15, 90, 235, 130, 255, 970)
-            draw_text(format("HOOKS:    %d Update Callbacks", #update_order), 1410, 298, 14, 155, 175, 198, 255, 970)
+            draw_rect(1395, 210, 400, 120, 22, 30, 42, 235, 958)
+            local src_desc = sel_mod.source_type == "loose" and ("LOOSE: " .. tostring(sel_mod.source_path or sel_mod.archive)) or ("ARCHIVE: " .. tostring(sel_mod.archive))
+            draw_text(src_desc, 1410, 235, 14, 200, 215, 235, 255, 970)
+            local st_label = not sel_mod.enabled and "DISABLED" or tostring(sel_mod.status):upper()
+            local sr_c = not sel_mod.enabled and {160, 160, 160} or {90, 235, 130}
+            draw_text(format("STATE:    %s", st_label), 1410, 260, 14, sr_c[1], sr_c[2], sr_c[3], 255, 970)
+            draw_text(format("CPU COST: %.3f ms (avg)", sel_mod.frame_cost_ms or 0.0), 1410, 285, 14, 245, 215, 90, 255, 970)
+            draw_text(format("HOOKS:    %d Update Callbacks", #update_order), 1410, 310, 14, 155, 175, 198, 255, 970)
 
-            local diag_msg = "Mod compiled and initialized cleanly inside isolated multi-standard sandbox (Bingus / Chef / BML / HD2RT) with Lua 5.2/5.3 polyfills active."
+            local diag_msg = "Pure Lua 5.1 runtime sandboxed (Bingus / Chef / BML / HD2RT). Hot-loadable live without restart."
             if sel_mod.error then
                 diag_msg = "Error: " .. tostring(sel_mod.error)
+            elseif not sel_mod.enabled then
+                diag_msg = "Mod is currently DISABLED. Update callbacks and hotkeys are suspended to save CPU time."
             elseif sel_mod.status == "superseded_by_builtin" then
                 diag_msg = "Standalone menu archive automatically superseded by Universal Mod Loader's built-in Escape-Menu MODS Tab (MOM v3 + MBM v4)."
             end
-            local dlines = wrap_text_lines(diag_msg, 44, 10)
-            local dy = 345
+            local dlines = wrap_text_lines(diag_msg, 44, 8)
+            local dy = 350
             for li = 1, #dlines do
                 draw_text(dlines[li], 1395, dy, 15, 215, 225, 235, 255, 970)
                 dy = dy + 26
             end
-            draw_text(format("Storage: %s\\settings.json", get_settings_dir()), 1395, 910, 13, 135, 150, 168, 255, 970)
+
+            -- Button 1: Toggle Active
+            local is_on = sel_mod.enabled
+            draw_rect(1395, 820, 400, 44, is_on and 64 or 34, is_on and 42 or 68, is_on and 34 or 42, 240, 958)
+            draw_rect(1395, 861, 400, 3, is_on and 235 or 90, is_on and 110 or 235, is_on and 110 or 130, 255, 960)
+            local tog_text = is_on and "[ SPACE / ENTER ]  DISABLE MOD" or "[ SPACE / ENTER ]  ENABLE MOD"
+            draw_text(tog_text, 1440, 848, 15, 255, 255, 255, 255, 970)
+
+            -- Button 2: Reload All
+            draw_rect(1395, 875, 400, 44, 42, 54, 76, 240, 958)
+            draw_rect(1395, 916, 400, 3, 235, 195, 55, 255, 960)
+            draw_text("[ R ]  RELOAD ALL MODS (HOT-RELOAD)", 1430, 903, 15, 255, 225, 120, 255, 970)
+
+            draw_text(format("Storage: %s\\settings.json", get_settings_dir()), 1395, 940, 13, 135, 150, 168, 255, 970)
         end
     end
 
@@ -4144,6 +4662,14 @@ local function draw_menu_overlay()
     draw_rect(105, 955, 1710, 44, 20, 27, 38, 245, 957)
     draw_text("MOUSE: Click Categories / Options / Sliders  |  WHEEL: Scroll  |  R-CLICK / BACKSPACE: Reset Default  |  Q/E: Category  |  TAB/1-3: Mode  |  ESC/F2: Close",
         125, 983, 14, 185, 198, 215, 255, 970)
+    -- Floating Tactical Notification Toast Banner
+    if UniversalState.toast and UniversalState.toast.expire_at and UniversalState.toast.expire_at > os.clock() then
+        local tw = 620
+        local tx = floor((1920 - tw) * 0.5)
+        draw_rect(tx - 2, 24, tw + 4, 44, 235, 195, 45, 255, 995)
+        draw_rect(tx, 26, tw, 40, 18, 28, 42, 250, 996)
+        draw_text(tostring(UniversalState.toast.text or ""), tx + 30, 52, 16, 255, 220, 65, 255, 998)
+    end
 end
 
 -- ==============================================================================
