@@ -2937,7 +2937,7 @@ local COMMON_SCAN_KEYS = {
 
 -- Escape-Menu Native MODS Tab Geometry (1920x1080 Canvas)
 -- 4th Tab in the Top Bar (X=500..655, Y=66..110 directly adjacent to [ OPTIONS ] 3)
-local ESC_TOP_MODS_BTN = { x = 716, y = 90, w = 170, h = 36 }
+local ESC_TOP_MODS_BTN = { x = 716, y = 72, w = 170, h = 48 }
 
 -- Win32 FFI cursor declarations removed (EAC EOS safety; pure Stingray input)
 
@@ -3258,6 +3258,8 @@ local function get_mod_option_categories()
     for i = 1, #mod_names do
         categories[#categories + 1] = mod_names[i]
     end
+    categories[#categories + 1] = "KEY BINDINGS"
+    categories[#categories + 1] = "LOADED MODS"
     return categories, by_cat
 end
 
@@ -3528,7 +3530,7 @@ local function handle_menu_input()
 
     -- When MODS screen is closed, check if user clicked the top-bar [ MODS 4 ] tab button
     if not UniversalState.menu_visible then
-        local hov_top = (cx ~= nil and cy ~= nil) and pt_in_rect(cx, cy, ESC_TOP_MODS_BTN.x, ESC_TOP_MODS_BTN.y, ESC_TOP_MODS_BTN.w, ESC_TOP_MODS_BTN.h) or false
+        local hov_top = (cx ~= nil and cy ~= nil) and pt_in_rect(cx, cy, ESC_TOP_MODS_BTN.x, ESC_TOP_MODS_BTN.y, ESC_TOP_MODS_BTN.w + 40, ESC_TOP_MODS_BTN.h) or false
         UniversalState.hover_esc_mods_btn = hov_top
 
         -- Open MODS tab on click, or pressing key '4'
@@ -3577,45 +3579,68 @@ local function handle_menu_input()
         return
     end
 
-    -- Top Header Bar Mouse Clicks (Y=80..136)
-    if lclick and cy ~= nil and ((cy >= 80 and cy <= 136) or (1080 - cy >= 80 and 1080 - cy <= 136)) then
-        -- Clicking [Q] or Native Tabs [ GAME ] [ SOCIAL ] [ OPTIONS ] returns to native menu
-        if (cx >= 70 and cx <= 710) or (cx >= 1590 and cx <= 1780) then
+    -- Top Header Bar Mouse Clicks (Y=70..125): Clicking [Q], [GAME], [SOCIAL], [OPTIONS] returns to native menu
+    if lclick and cy ~= nil and ((cy >= 70 and cy <= 125) or (1080 - cy >= 70 and 1080 - cy <= 125)) then
+        if cx >= 70 and cx <= 710 then
             UniversalState.menu_visible = false
             UniversalState.dragging_slider_id = nil
             ui_gfx_clear(sr)
             return
-        elseif cx >= 950 and cx <= 1150 then
-            UniversalState.menu_tab = 1
-            UniversalState.menu_selected = 1
+        end
+    end
+
+    -- Footer Bar Mouse Clicks (Y=1020..1060)
+    if lclick and cy ~= nil and ((cy >= 1020 and cy <= 1060) or (1080 - cy >= 1020 and 1080 - cy <= 1060)) then
+        if cx >= 70 and cx <= 180 then
+            UniversalState.menu_visible = false
+            UniversalState.dragging_slider_id = nil
+            ui_gfx_clear(sr)
             return
-        elseif cx >= 1155 and cx <= 1335 then
-            UniversalState.menu_tab = 2
-            UniversalState.menu_selected = 1
+        elseif cx >= 210 and cx <= 340 then
+            if save_persistent_settings then save_persistent_settings() end
+            UniversalState.toast = { text = "SETTINGS SAVED & APPLIED", expire_at = os.clock() + 2.0 }
             return
-        elseif cx >= 1335 and cx <= 1530 then
-            UniversalState.menu_tab = 3
-            UniversalState.menu_selected = 1
+        elseif cx >= 360 and cx <= 550 then
+            local categories_f, by_cat_f = get_mod_option_categories()
+            local active_cat_f = categories_f[UniversalState.menu_mod_filter or 1] or "ALL MODS"
+            local opt_keys_f = by_cat_f[active_cat_f] or {}
+            local cur_id_f = opt_keys_f[UniversalState.menu_selected or 1]
+            if cur_id_f then ModOptionsMenu.reset_option(cur_id_f) end
             return
         end
     end
 
-    -- Keyboard Tab Switching (Tab / 1 / 2 / 3)
+    -- Keyboard Shortcuts: Tab (Apply Settings), 1 (Options), 2 (Bindings), 3 (Loaded Mods)
     if key_pressed("tab") then
-        UniversalState.menu_tab = ((UniversalState.menu_tab or 1) % 3) + 1
-        UniversalState.menu_selected = 1
+        if save_persistent_settings then save_persistent_settings() end
+        UniversalState.toast = { text = "SETTINGS SAVED & APPLIED", expire_at = os.clock() + 2.0 }
         return
     elseif key_pressed("1") then
+        UniversalState.menu_mod_filter = 1
         UniversalState.menu_tab = 1
         UniversalState.menu_selected = 1
         return
     elseif key_pressed("2") then
-        UniversalState.menu_tab = 2
-        UniversalState.menu_selected = 1
+        local cat_temp = get_mod_option_categories()
+        for ci = 1, #cat_temp do
+            if cat_temp[ci] == "KEY BINDINGS" then
+                UniversalState.menu_mod_filter = ci
+                UniversalState.menu_tab = 2
+                UniversalState.menu_selected = 1
+                break
+            end
+        end
         return
     elseif key_pressed("3") then
-        UniversalState.menu_tab = 3
-        UniversalState.menu_selected = 1
+        local cat_temp = get_mod_option_categories()
+        for ci = 1, #cat_temp do
+            if cat_temp[ci] == "LOADED MODS" then
+                UniversalState.menu_mod_filter = ci
+                UniversalState.menu_tab = 3
+                UniversalState.menu_selected = 1
+                break
+            end
+        end
         return
     end
 
@@ -3637,13 +3662,27 @@ local function handle_menu_input()
             cat_idx = cat_idx - 1
             if cat_idx < 1 then cat_idx = #categories end
             UniversalState.menu_mod_filter = cat_idx
-            UniversalState.menu_tab = 1
+            local sel_cat = categories[cat_idx]
+            if sel_cat == "KEY BINDINGS" then
+                UniversalState.menu_tab = 2
+            elseif sel_cat == "LOADED MODS" then
+                UniversalState.menu_tab = 3
+            else
+                UniversalState.menu_tab = 1
+            end
             UniversalState.menu_selected = 1
             return
         elseif wheel < 0 and #categories > 0 then
             cat_idx = (cat_idx % #categories) + 1
             UniversalState.menu_mod_filter = cat_idx
-            UniversalState.menu_tab = 1
+            local sel_cat = categories[cat_idx]
+            if sel_cat == "KEY BINDINGS" then
+                UniversalState.menu_tab = 2
+            elseif sel_cat == "LOADED MODS" then
+                UniversalState.menu_tab = 3
+            else
+                UniversalState.menu_tab = 1
+            end
             UniversalState.menu_selected = 1
             return
         end
@@ -3653,7 +3692,14 @@ local function handle_menu_input()
                 local ry = 165 + (ci - cat_start) * 52
                 if pt_in_rect(cx, cy, 76, ry, 310, 46) then
                     UniversalState.menu_mod_filter = ci
-                    UniversalState.menu_tab = 1
+                    local sel_cat = categories[ci]
+                    if sel_cat == "KEY BINDINGS" then
+                        UniversalState.menu_tab = 2
+                    elseif sel_cat == "LOADED MODS" then
+                        UniversalState.menu_tab = 3
+                    else
+                        UniversalState.menu_tab = 1
+                    end
                     UniversalState.menu_selected = 1
                     return
                 end
@@ -3663,13 +3709,27 @@ local function handle_menu_input()
                 cat_idx = cat_idx - 1
                 if cat_idx < 1 then cat_idx = #categories end
                 UniversalState.menu_mod_filter = cat_idx
-                UniversalState.menu_tab = 1
+                local sel_cat = categories[cat_idx]
+                if sel_cat == "KEY BINDINGS" then
+                    UniversalState.menu_tab = 2
+                elseif sel_cat == "LOADED MODS" then
+                    UniversalState.menu_tab = 3
+                else
+                    UniversalState.menu_tab = 1
+                end
                 UniversalState.menu_selected = 1
                 return
             elseif pt_in_rect(cx, cy, 236, 905, 150, 36) and #categories > 0 then
                 cat_idx = (cat_idx % #categories) + 1
                 UniversalState.menu_mod_filter = cat_idx
-                UniversalState.menu_tab = 1
+                local sel_cat = categories[cat_idx]
+                if sel_cat == "KEY BINDINGS" then
+                    UniversalState.menu_tab = 2
+                elseif sel_cat == "LOADED MODS" then
+                    UniversalState.menu_tab = 3
+                else
+                    UniversalState.menu_tab = 1
+                end
                 UniversalState.menu_selected = 1
                 return
             end
@@ -3684,11 +3744,27 @@ local function handle_menu_input()
             cat_idx = cat_idx - 1
             if cat_idx < 1 then cat_idx = #categories end
             UniversalState.menu_mod_filter = cat_idx
+            local sel_cat = categories[cat_idx]
+            if sel_cat == "KEY BINDINGS" then
+                UniversalState.menu_tab = 2
+            elseif sel_cat == "LOADED MODS" then
+                UniversalState.menu_tab = 3
+            else
+                UniversalState.menu_tab = 1
+            end
             UniversalState.menu_selected = 1
             return
         elseif key_pressed("e") or key_pressed("right_shoulder") then
             cat_idx = (cat_idx % #categories) + 1
             UniversalState.menu_mod_filter = cat_idx
+            local sel_cat = categories[cat_idx]
+            if sel_cat == "KEY BINDINGS" then
+                UniversalState.menu_tab = 2
+            elseif sel_cat == "LOADED MODS" then
+                UniversalState.menu_tab = 3
+            else
+                UniversalState.menu_tab = 1
+            end
             UniversalState.menu_selected = 1
             return
         end
@@ -3969,7 +4045,7 @@ local function draw_menu_overlay()
             local sy_top = floor(oy + y * scale)
             local sw = math.max(1, floor(w * scale))
             local sh = math.max(1, floor(h * scale))
-            local pos = sr.Vector3(sx, H - sy_top - sh, layer or 960)
+            local pos = sr.Vector3(sx, H - sy_top - sh, layer or (UniversalState.menu_visible and 1215 or 955))
             local sz = sr.Vector2(sw, sh)
             local col = sr.Color(a or 255, r or 255, g or 255, b or 255)
             local ok, id = pcall(sr.Gui.rect, UI_GFX.gui, pos, sz, col)
@@ -3985,7 +4061,7 @@ local function draw_menu_overlay()
             local sy = floor(H - (oy + y * scale))
             local fsize = math.max(10, floor((font_size or 16) * scale))
             local col = sr.Color(a or 255, r or 255, g or 255, b or 255)
-            local text_layer = math.max(995, (layer or 995) + 25)
+            local text_layer = math.max(1260, (layer or 1260) + 25)
             local ok, id = false, nil
             -- 1. Try Vector3 with high Z layer (995+) so text renders IN FRONT OF layer 954..965 rectangles
             local pos3 = (type(sr.Vector3) == "function" or type(sr.Vector3) == "table" or type(sr.Vector3) == "userdata") and sr.Vector3(sx, sy, text_layer) or nil
@@ -4033,25 +4109,25 @@ local function draw_menu_overlay()
             UI_GFX.last_sig = sig
         end
 
-        -- Inactive MODS Tab in Top Bar (X=716..886, Y=90..126 directly adjacent to [ OPTIONS ] 3 at X=516..704)
+        -- Inactive MODS Tab in Top Bar (X=716..886, Y=72..120 connecting directly with native baseline at Y=120)
         local bx, by, bw, bh = ESC_TOP_MODS_BTN.x, ESC_TOP_MODS_BTN.y, ESC_TOP_MODS_BTN.w, ESC_TOP_MODS_BTN.h
         -- Solid opaque backdrop covering the native [E] prompt at X=740..765
-        draw_rect(bx, by, bw, bh, 16, 22, 28, 255, 955)
+        draw_rect(bx, by, bw, bh, 14, 18, 24, hov_top and 220 or 160, 955)
         -- Bracket borders matching native Helldivers 2 tabs
         draw_rect(bx, by, bw, 1, 60, 75, 90, hov_top and 255 or 140, 956)
-        draw_rect(bx, by + bh - 2, bw, 2, 40, 50, 62, 160, 956)
-        draw_rect(bx, by + 4, 1, bh - 8, 60, 75, 90, 160, 956)
-        draw_rect(bx + bw, by + 4, 1, bh - 8, 60, 75, 90, 160, 956)
+        draw_rect(bx, by + bh - 2, bw, 2, 60, 75, 90, 180, 956)
+        draw_rect(bx, by + 4, 1, bh - 6, 60, 75, 90, 160, 956)
+        draw_rect(bx + bw, by + 4, 1, bh - 6, 60, 75, 90, 160, 956)
         -- Label
-        draw_text("MODS", bx + 36, by + 24, 16, hov_top and 255 or 195, hov_top and 240 or 205, hov_top and 140 or 215, 255, 970)
-        draw_text("4", bx + 124, by + 24, 13, 130, 145, 165, 255, 970)
+        draw_text("MODS", bx + 36, by + 30, 16, hov_top and 255 or 195, hov_top and 240 or 205, hov_top and 140 or 215, 255, 970)
+        draw_text("4", bx + 124, by + 30, 13, 130, 145, 165, 255, 970)
 
-        -- Native-style [E] Key Prompt Box right after the MODS tab (X=896, Y=94)
+        -- Authentic Helldivers 2 White [E] Keycap Graphic (X=896, Y=80)
         local ex = bx + bw + 10
-        local ey = by + 4
-        draw_rect(ex, ey, 28, 28, 18, 24, 32, 220, 956)
-        draw_rect(ex, ey, 28, 28, 65, 80, 98, 200, 957)
-        draw_text("E", ex + 8, ey + 20, 14, 215, 225, 235, 255, 970)
+        local ey = by + 8
+        draw_rect(ex, ey, 26, 24, 245, 245, 248, 255, 960)
+        draw_rect(ex, ey + 24, 26, 4, 155, 160, 170, 255, 960)
+        draw_text("E", ex + 7, ey + 18, 13, 20, 24, 30, 255, 975)
 
         return
     end
@@ -4092,71 +4168,62 @@ local function draw_menu_overlay()
         UI_GFX.last_sig = sig
     end
 
-    -- 1. Fullscreen Subtle Dark Backdrop (seamlessly covers 100% of screen across all aspect ratios)
-    draw_rect(-ox / scale, -oy / scale, W / scale, H / scale, 8, 12, 16, 242, 950)
+    -- 1. Fullscreen Solid Dark Backdrop below Top Bar (completely covers squad list, Major Order, and 3D hangar)
+    -- Y=120 down to Y=1080; Layer 1200 is well above native pause menu layers (~990-1050), completely preventing bleed-through!
+    draw_rect(-ox / scale, 120, W / scale, 960 + oy / scale, 12, 16, 22, 255, 1200)
 
-    -- 2. Top Navigation Bar (matching native Helldivers 2 tabs exactly)
-    -- [Q] Button (X=76, Y=94)
-    draw_rect(76, 94, 28, 28, 18, 24, 32, 220, 956)
-    draw_rect(76, 94, 28, 28, 65, 80, 98, 200, 957)
-    draw_text("Q", 84, 114, 14, 215, 225, 235, 255, 970)
+    -- 2. Solid Tab Bar Backing (Y=70..120, X=70..930) at Layer 1200
+    -- Covers the native tab bar and any active underline on GAME 1 / OPTIONS 3 so zero ghost text bleeds through
+    draw_rect(70, 70, 860, 50, 12, 16, 22, 255, 1200)
+
+    -- 3. Top Navigation Bar (matching native Helldivers 2 tabs exactly)
+    -- [Q] Button (X=76, Y=80)
+    draw_rect(76, 80, 26, 24, 245, 245, 248, 255, 1210)
+    draw_rect(76, 104, 26, 4, 155, 160, 170, 255, 1210)
+    draw_text("Q", 84, 98, 13, 20, 24, 30, 255, 1260)
 
     -- Inactive Native Tabs (Clicking any returns to that native menu)
     -- GAME 1 (X=116..304)
-    draw_rect(116, 90, 188, 36, 14, 18, 24, 160, 955)
-    draw_text("GAME", 170, 114, 16, 175, 185, 195, 255, 970)
-    draw_text("1", 275, 114, 13, 130, 145, 165, 255, 970)
-    draw_rect(304, 94, 1, 28, 60, 75, 90, 160, 956)
+    draw_rect(116, 72, 188, 48, 14, 18, 24, 180, 1210)
+    draw_rect(116, 72, 188, 1, 60, 75, 90, 140, 1212)
+    draw_rect(304, 76, 1, 40, 60, 75, 90, 160, 1212)
+    draw_text("GAME", 170, 102, 16, 175, 185, 195, 255, 1260)
+    draw_text("1", 275, 102, 13, 130, 145, 165, 255, 1260)
 
     -- SOCIAL 2 (X=316..504)
-    draw_rect(316, 90, 188, 36, 14, 18, 24, 160, 955)
-    draw_text("SOCIAL", 365, 114, 16, 175, 185, 195, 255, 970)
-    draw_text("2", 475, 114, 13, 130, 145, 165, 255, 970)
-    draw_rect(504, 94, 1, 28, 60, 75, 90, 160, 956)
+    draw_rect(316, 72, 188, 48, 14, 18, 24, 180, 1210)
+    draw_rect(316, 72, 188, 1, 60, 75, 90, 140, 1212)
+    draw_rect(504, 76, 1, 40, 60, 75, 90, 160, 1212)
+    draw_text("SOCIAL", 365, 102, 16, 175, 185, 195, 255, 1260)
+    draw_text("2", 475, 102, 13, 130, 145, 165, 255, 1260)
 
     -- OPTIONS 3 (X=516..704)
-    draw_rect(516, 90, 188, 36, 14, 18, 24, 160, 955)
-    draw_text("OPTIONS", 560, 114, 16, 175, 185, 195, 255, 970)
-    draw_text("3", 675, 114, 13, 130, 145, 165, 255, 970)
-    draw_rect(704, 94, 1, 28, 60, 75, 90, 160, 956)
+    draw_rect(516, 72, 188, 48, 14, 18, 24, 180, 1210)
+    draw_rect(516, 72, 188, 1, 60, 75, 90, 140, 1212)
+    draw_rect(704, 76, 1, 40, 60, 75, 90, 160, 1212)
+    draw_text("OPTIONS", 560, 102, 16, 175, 185, 195, 255, 1260)
+    draw_text("3", 675, 102, 13, 130, 145, 165, 255, 1260)
 
     -- ACTIVE [ MODS 4 ] TAB (X=716..886)
-    draw_rect(716, 90, 170, 36, 42, 38, 16, 245, 956)
-    draw_text("MODS", 752, 114, 16, 255, 220, 65, 255, 970)
-    draw_text("4", 840, 114, 13, 255, 215, 55, 255, 970)
+    draw_rect(716, 72, 170, 48, 42, 38, 16, 255, 1210)
+    draw_rect(716, 72, 170, 1, 245, 215, 55, 255, 1212)
+    draw_rect(716, 72, 1, 48, 245, 215, 55, 255, 1212)
+    draw_rect(886, 72, 1, 48, 245, 215, 55, 255, 1212)
+    draw_text("MODS", 752, 102, 16, 255, 220, 65, 255, 1260)
+    draw_text("4", 840, 102, 13, 255, 215, 55, 255, 1260)
     -- Helldivers 2 signature diagonal striped underline
-    draw_rect(716, 126, 170, 3, 245, 205, 45, 255, 960)
-    draw_text("////// 4 //////", 745, 133, 10, 245, 205, 45, 255, 970)
-    draw_rect(886, 94, 1, 28, 60, 75, 90, 160, 956)
+    draw_rect(716, 118, 170, 3, 245, 205, 45, 255, 1215)
+    draw_text("////// 4 //////", 745, 124, 10, 245, 205, 45, 255, 1260)
 
-    -- [E] Button (X=896, Y=94)
-    draw_rect(896, 94, 28, 28, 18, 24, 32, 220, 956)
-    draw_rect(896, 94, 28, 28, 65, 80, 98, 200, 957)
-    draw_text("E", 904, 114, 14, 215, 225, 235, 255, 970)
+    -- [E] Button (X=896, Y=80)
+    draw_rect(896, 80, 26, 24, 245, 245, 248, 255, 1210)
+    draw_rect(896, 104, 26, 4, 155, 160, 170, 255, 1210)
+    draw_text("E", 904, 98, 13, 20, 24, 30, 255, 1260)
 
-    -- Mode Switchers in Top Right (Options / Keybindings / Diagnostics)
-    local mode_tabs = {
-        { idx = 1, x = 960,  w = 190, label = format("[1] MOD OPTIONS (%d)", total_opts) },
-        { idx = 2, x = 1160, w = 170, label = format("[2] BINDINGS (%d)", total_binds) },
-        { idx = 3, x = 1340, w = 180, label = format("[3] MODS LIST (%d)", total_mods) }
-    }
-    for mi = 1, #mode_tabs do
-        local mt = mode_tabs[mi]
-        local is_act = (tab == mt.idx)
-        draw_rect(mt.x, 90, mt.w, 36, is_act and 42 or 20, is_act and 58 or 26, is_act and 82 or 36, 235, 958)
-        if is_act then
-            draw_rect(mt.x, 123, mt.w, 3, 255, 215, 55, 255, 960)
-        end
-        draw_text(mt.label, mt.x + 12, 114, 14, is_act and 255 or 170, is_act and 240 or 182, is_act and 175 or 198, 255, 970)
-    end
+    -- Note: Mode switchers removed from top right; X=930..1920 left clear so currencies and Level 105 show cleanly!
 
-    -- Close Button (X=1600..1760)
-    draw_rect(1600, 90, 160, 36, 68, 28, 32, 235, 958)
-    draw_rect(1600, 123, 160, 3, 235, 95, 95, 255, 960)
-    draw_text("[ESC] CLOSE", 1632, 114, 14, 255, 210, 210, 255, 970)
-
-    -- Full-width divider line underneath top bar at Y=138
-    draw_rect(76, 138, 1764, 2, 60, 75, 90, 180, 955)
+    -- Full-width divider line underneath top bar at Y=120
+    draw_rect(76, 120, 1764, 2, 60, 75, 90, 200, 1210)
 
     -- ==========================================================================
     -- COLUMN 1: MODS / CATEGORIES LIST (X=76..386, Width=310, Y=160..900)
@@ -4175,22 +4242,29 @@ local function draw_menu_overlay()
 
     for ci = cat_start, cat_end do
         local cname = categories[ci]
-        local ccount = #(by_cat[cname] or {})
+        local ccount = 0
+        if cname == "KEY BINDINGS" then
+            ccount = total_binds
+        elseif cname == "LOADED MODS" then
+            ccount = total_mods
+        else
+            ccount = #(by_cat[cname] or {})
+        end
         local ry = 165 + (ci - cat_start) * 52
-        local is_active_cat = (tab == 1 and ci == cat_idx)
+        local is_active_cat = (ci == cat_idx)
         local disp_cat = cname:upper()
         if #disp_cat > 22 then disp_cat = disp_cat:sub(1, 19) .. "..." end
 
         if is_active_cat then
             -- Solid Yellow Active Highlight (Exact Helldivers 2 Native Style like Shallow Water Diving in Image 2)
-            draw_rect(76, ry, 310, 46, 235, 195, 45, 255, 958)
-            draw_text(disp_cat, 92, ry + 30, 16, 12, 16, 22, 255, 970)
-            draw_text(format("(%d)", ccount), 340, ry + 30, 13, 40, 32, 10, 255, 970)
+            draw_rect(76, ry, 310, 46, 235, 195, 45, 255, 1215)
+            draw_text(disp_cat, 92, ry + 30, 16, 12, 16, 22, 255, 1260)
+            draw_text(format("(%d)", ccount), 340, ry + 30, 13, 40, 32, 10, 255, 1260)
         else
             -- Dark Subtle Inactive Button
-            draw_rect(76, ry, 310, 46, 18, 24, 32, 210, 958)
-            draw_text(disp_cat, 92, ry + 30, 15, 195, 205, 215, 255, 970)
-            draw_text(format("(%d)", ccount), 340, ry + 30, 13, 130, 145, 165, 255, 970)
+            draw_rect(76, ry, 310, 46, 18, 24, 32, 210, 1215)
+            draw_text(disp_cat, 92, ry + 30, 15, 195, 205, 215, 255, 1260)
+            draw_text(format("(%d)", ccount), 340, ry + 30, 13, 130, 145, 165, 255, 1260)
         end
     end
 
@@ -4516,10 +4590,10 @@ local function draw_menu_overlay()
     -- ==========================================================================
     -- NATIVE FOOTER NAVIGATION BAR (Y=1020..1050)
     -- ==========================================================================
-    draw_text("ESC  CLOSE", 76, 1035, 15, 220, 225, 235, 255, 970)
-    draw_text("R  RESET DEFAULT", 220, 1035, 15, 200, 215, 235, 255, 970)
-    draw_text("ENTER  APPLY", 410, 1035, 15, 245, 215, 65, 255, 970)
-    draw_text("MOUSE: Click / Drag  |  WHEEL: Scroll  |  Q/E: Categories", 1320, 1035, 13, 140, 155, 175, 255, 970)
+    draw_text("ESC  BACK", 76, 1035, 15, 220, 225, 235, 255, 1260)
+    draw_text("TAB  APPLY", 220, 1035, 15, 245, 215, 65, 255, 1260)
+    draw_text("R  RESET TO DEFAULT", 370, 1035, 15, 200, 215, 235, 255, 1260)
+    draw_text("MOUSE: Click / Drag  |  WHEEL: Scroll  |  Q/E: Categories", 1320, 1035, 13, 140, 155, 175, 255, 1260)
 
     -- Toast Notifications
     if UniversalState.toast and UniversalState.toast.expire_at and UniversalState.toast.expire_at > os.clock() then
