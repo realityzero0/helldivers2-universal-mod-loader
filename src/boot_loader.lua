@@ -1958,6 +1958,45 @@ package.preload["CowboyBingusModBindings"] = function() return ModBindingsMenu e
 package.loaded["ModBindingsMenu"] = ModBindingsMenu
 package.loaded["CowboyBingusModBindings"] = ModBindingsMenu
 
+-- Default Universal Mod Loader options (ensures Tab 1 and Tab 2 are always responsive and populated)
+ModOptionsMenu.register_option("uml_menu_hotkey", {
+    mod = "Universal Mod Loader",
+    label = "Mod Menu Hotkey",
+    type = "choice",
+    choices = { "F2", "F9", "F10", "F11" },
+    default = 1,
+    description = "Dedicated keyboard hotkey used to open or toggle the Universal Mod Loader overlay from anywhere in-game."
+})
+ModOptionsMenu.register_option("uml_perf_profiler", {
+    mod = "Universal Mod Loader",
+    label = "Mod CPU Profiler",
+    type = "toggle",
+    default = false,
+    description = "Enables real-time tracking and display of execution time (ms/frame) for each loaded mod hook in Tab 3."
+})
+ModOptionsMenu.register_option("uml_log_level", {
+    mod = "Universal Mod Loader",
+    label = "Log Verbosity",
+    type = "choice",
+    choices = { "Normal (Info)", "Verbose (Debug)", "Diagnostic (Trace)" },
+    default = 1,
+    description = "Configures logging detail written to BingusSharedLoader.log in the game root folder."
+})
+ModOptionsMenu.register_option("uml_auto_reload", {
+    mod = "Universal Mod Loader",
+    label = "Dynamic Hot-Reload",
+    type = "toggle",
+    default = true,
+    description = "Enables live dynamic reloading without restarting the game when scripts or patches change."
+})
+
+ModBindingsMenu.register_binding("uml_toggle_overlay", {
+    mod = "Universal Mod Loader",
+    label = "Toggle Mod Overlay",
+    default = "F2",
+    description = "Opens or closes the Universal Mod Loader 3-column configuration screen."
+})
+
 -- Stingray Input Compatibility: Helldivers 2 exposes Keyboard.button_id / Mouse.button_id
 -- while some mods call button_index, and pressed()/button() may return true OR 1 (> 0).
 -- Native input devices left untouched (C++ table integrity)
@@ -2898,7 +2937,7 @@ local COMMON_SCAN_KEYS = {
 
 -- Escape-Menu Native MODS Tab Geometry (1920x1080 Canvas)
 -- 4th Tab in the Top Bar (X=500..655, Y=66..110 directly adjacent to [ OPTIONS ] 3)
-local ESC_TOP_MODS_BTN = { x = 500, y = 66, w = 155, h = 44 }
+local ESC_TOP_MODS_BTN = { x = 716, y = 90, w = 170, h = 36 }
 
 -- Win32 FFI cursor declarations removed (EAC EOS safety; pure Stingray input)
 
@@ -3028,7 +3067,12 @@ local function get_mouse_wheel_delta(sr)
 end
 
 local function pt_in_rect(cx, cy, x, y, w, h)
-    return cx ~= nil and cy ~= nil and cx >= x and cx <= (x + w) and cy >= y and cy <= (y + h)
+    if cx == nil or cy == nil then return false end
+    if cx < x or cx > (x + w) then return false end
+    if cy >= y and cy <= (y + h) then return true end
+    local inv_y = 1080 - cy
+    if inv_y >= y and inv_y <= (y + h) then return true end
+    return false
 end
 
 local function is_stingray_retained_gui(sr)
@@ -3471,8 +3515,10 @@ local function handle_menu_input()
         end
     end
 
-    -- Hotkey toggle (F2 / F9) works anywhere (in gameplay, ship, or Escape menu)
-    if key_pressed("f2") or key_pressed("f9") then
+    -- Hotkey toggle (F2 / F9 or custom user binding) works anywhere
+    local hotkey_str = ModBindingsMenu and ModBindingsMenu.binding and ModBindingsMenu.binding("uml_toggle_overlay")
+    local custom_key = (type(hotkey_str) == "string" and hotkey_str ~= "" and hotkey_str:lower()) or nil
+    if key_pressed("f2") or key_pressed("f9") or (custom_key and key_pressed(custom_key)) then
         UniversalState.menu_visible = not UniversalState.menu_visible
         UniversalState.menu_rebind_id = nil
         UniversalState.dragging_slider_id = nil
@@ -3531,23 +3577,23 @@ local function handle_menu_input()
         return
     end
 
-    -- Top Header Bar Mouse Clicks (Y=64..114)
-    if lclick and cy ~= nil and cy >= 64 and cy <= 114 then
-        -- Clicking [Q] (36..68) or Native Tabs [ GAME ] (76..215), [ SOCIAL ] (225..365), [ OPTIONS ] (375..495) returns to native menu
-        if (cx >= 36 and cx <= 495) or (cx >= 1620 and cx <= 1800) then
+    -- Top Header Bar Mouse Clicks (Y=80..136)
+    if lclick and cy ~= nil and ((cy >= 80 and cy <= 136) or (1080 - cy >= 80 and 1080 - cy <= 136)) then
+        -- Clicking [Q] or Native Tabs [ GAME ] [ SOCIAL ] [ OPTIONS ] returns to native menu
+        if (cx >= 70 and cx <= 710) or (cx >= 1590 and cx <= 1780) then
             UniversalState.menu_visible = false
             UniversalState.dragging_slider_id = nil
             ui_gfx_clear(sr)
             return
-        elseif cx >= 910 and cx <= 1130 then
+        elseif cx >= 950 and cx <= 1150 then
             UniversalState.menu_tab = 1
             UniversalState.menu_selected = 1
             return
-        elseif cx >= 1140 and cx <= 1350 then
+        elseif cx >= 1155 and cx <= 1335 then
             UniversalState.menu_tab = 2
             UniversalState.menu_selected = 1
             return
-        elseif cx >= 1360 and cx <= 1580 then
+        elseif cx >= 1335 and cx <= 1530 then
             UniversalState.menu_tab = 3
             UniversalState.menu_selected = 1
             return
@@ -3987,19 +4033,25 @@ local function draw_menu_overlay()
             UI_GFX.last_sig = sig
         end
 
-        -- Inactive MODS Tab in Top Bar (X=500..655, Y=66..110 directly adjacent to [ OPTIONS ] 3)
+        -- Inactive MODS Tab in Top Bar (X=716..886, Y=90..126 directly adjacent to [ OPTIONS ] 3 at X=516..704)
         local bx, by, bw, bh = ESC_TOP_MODS_BTN.x, ESC_TOP_MODS_BTN.y, ESC_TOP_MODS_BTN.w, ESC_TOP_MODS_BTN.h
-        draw_rect(bx, by, bw, bh, 16, 22, 28, hov_top and 230 or 150, 955)
+        -- Solid opaque backdrop covering the native [E] prompt at X=740..765
+        draw_rect(bx, by, bw, bh, 16, 22, 28, 255, 955)
+        -- Bracket borders matching native Helldivers 2 tabs
         draw_rect(bx, by, bw, 1, 60, 75, 90, hov_top and 255 or 140, 956)
         draw_rect(bx, by + bh - 2, bw, 2, 40, 50, 62, 160, 956)
+        draw_rect(bx, by + 4, 1, bh - 8, 60, 75, 90, 160, 956)
         draw_rect(bx + bw, by + 4, 1, bh - 8, 60, 75, 90, 160, 956)
-        draw_text("MODS", bx + 32, by + 28, 17, hov_top and 255 or 195, hov_top and 240 or 205, hov_top and 140 or 215, 255, 970)
-        draw_text("4", bx + 104, by + 28, 13, 130, 145, 165, 255, 970)
+        -- Label
+        draw_text("MODS", bx + 36, by + 24, 16, hov_top and 255 or 195, hov_top and 240 or 205, hov_top and 140 or 215, 255, 970)
+        draw_text("4", bx + 124, by + 24, 13, 130, 145, 165, 255, 970)
 
-        -- Native [E] Key Prompt Box right after the MODS tab (X=670, Y=74)
-        draw_rect(bx + bw + 15, by + 8, 28, 28, 18, 24, 32, 220, 956)
-        draw_rect(bx + bw + 15, by + 8, 28, 28, 65, 80, 98, 200, 957)
-        draw_text("E", bx + bw + 24, by + 28, 14, 215, 225, 235, 255, 970)
+        -- Native-style [E] Key Prompt Box right after the MODS tab (X=896, Y=94)
+        local ex = bx + bw + 10
+        local ey = by + 4
+        draw_rect(ex, ey, 28, 28, 18, 24, 32, 220, 956)
+        draw_rect(ex, ey, 28, 28, 65, 80, 98, 200, 957)
+        draw_text("E", ex + 8, ey + 20, 14, 215, 225, 235, 255, 970)
 
         return
     end
@@ -4044,67 +4096,67 @@ local function draw_menu_overlay()
     draw_rect(-ox / scale, -oy / scale, W / scale, H / scale, 8, 12, 16, 242, 950)
 
     -- 2. Top Navigation Bar (matching native Helldivers 2 tabs exactly)
-    -- [Q] Button (X=40, Y=74)
-    draw_rect(40, 74, 28, 28, 18, 24, 32, 220, 956)
-    draw_rect(40, 74, 28, 28, 65, 80, 98, 200, 957)
-    draw_text("Q", 48, 94, 14, 215, 225, 235, 255, 970)
+    -- [Q] Button (X=76, Y=94)
+    draw_rect(76, 94, 28, 28, 18, 24, 32, 220, 956)
+    draw_rect(76, 94, 28, 28, 65, 80, 98, 200, 957)
+    draw_text("Q", 84, 114, 14, 215, 225, 235, 255, 970)
 
     -- Inactive Native Tabs (Clicking any returns to that native menu)
-    -- GAME 1 (X=76..215)
-    draw_rect(76, 66, 140, 44, 14, 18, 24, 160, 955)
-    draw_text("GAME", 110, 94, 17, 175, 185, 195, 255, 970)
-    draw_text("1", 175, 94, 13, 130, 145, 165, 255, 970)
-    draw_rect(216, 70, 1, 36, 60, 75, 90, 160, 956)
+    -- GAME 1 (X=116..304)
+    draw_rect(116, 90, 188, 36, 14, 18, 24, 160, 955)
+    draw_text("GAME", 170, 114, 16, 175, 185, 195, 255, 970)
+    draw_text("1", 275, 114, 13, 130, 145, 165, 255, 970)
+    draw_rect(304, 94, 1, 28, 60, 75, 90, 160, 956)
 
-    -- SOCIAL 2 (X=225..365)
-    draw_rect(225, 66, 140, 44, 14, 18, 24, 160, 955)
-    draw_text("SOCIAL", 250, 94, 17, 175, 185, 195, 255, 970)
-    draw_text("2", 330, 94, 13, 130, 145, 165, 255, 970)
-    draw_rect(365, 70, 1, 36, 60, 75, 90, 160, 956)
+    -- SOCIAL 2 (X=316..504)
+    draw_rect(316, 90, 188, 36, 14, 18, 24, 160, 955)
+    draw_text("SOCIAL", 365, 114, 16, 175, 185, 195, 255, 970)
+    draw_text("2", 475, 114, 13, 130, 145, 165, 255, 970)
+    draw_rect(504, 94, 1, 28, 60, 75, 90, 160, 956)
 
-    -- OPTIONS 3 (X=375..495)
-    draw_rect(375, 66, 120, 44, 14, 18, 24, 160, 955)
-    draw_text("OPTIONS", 392, 94, 17, 175, 185, 195, 255, 970)
-    draw_text("3", 475, 94, 13, 130, 145, 165, 255, 970)
-    draw_rect(495, 70, 1, 36, 60, 75, 90, 160, 956)
+    -- OPTIONS 3 (X=516..704)
+    draw_rect(516, 90, 188, 36, 14, 18, 24, 160, 955)
+    draw_text("OPTIONS", 560, 114, 16, 175, 185, 195, 255, 970)
+    draw_text("3", 675, 114, 13, 130, 145, 165, 255, 970)
+    draw_rect(704, 94, 1, 28, 60, 75, 90, 160, 956)
 
-    -- ACTIVE [ MODS 4 ] TAB (X=500..655)
-    draw_rect(500, 66, 155, 44, 42, 38, 16, 245, 956)
-    draw_text("MODS", 538, 94, 18, 255, 220, 65, 255, 970)
-    draw_text("4", 625, 94, 13, 255, 215, 55, 255, 970)
+    -- ACTIVE [ MODS 4 ] TAB (X=716..886)
+    draw_rect(716, 90, 170, 36, 42, 38, 16, 245, 956)
+    draw_text("MODS", 752, 114, 16, 255, 220, 65, 255, 970)
+    draw_text("4", 840, 114, 13, 255, 215, 55, 255, 970)
     -- Helldivers 2 signature diagonal striped underline
-    draw_rect(500, 106, 155, 4, 245, 205, 45, 255, 960)
-    draw_text("////// 4 //////", 532, 114, 11, 245, 205, 45, 255, 970)
-    draw_rect(655, 70, 1, 36, 60, 75, 90, 160, 956)
+    draw_rect(716, 126, 170, 3, 245, 205, 45, 255, 960)
+    draw_text("////// 4 //////", 745, 133, 10, 245, 205, 45, 255, 970)
+    draw_rect(886, 94, 1, 28, 60, 75, 90, 160, 956)
 
-    -- [E] Button (X=670, Y=74)
-    draw_rect(670, 74, 28, 28, 18, 24, 32, 220, 956)
-    draw_rect(670, 74, 28, 28, 65, 80, 98, 200, 957)
-    draw_text("E", 678, 94, 14, 215, 225, 235, 255, 970)
+    -- [E] Button (X=896, Y=94)
+    draw_rect(896, 94, 28, 28, 18, 24, 32, 220, 956)
+    draw_rect(896, 94, 28, 28, 65, 80, 98, 200, 957)
+    draw_text("E", 904, 114, 14, 215, 225, 235, 255, 970)
 
     -- Mode Switchers in Top Right (Options / Keybindings / Diagnostics)
     local mode_tabs = {
-        { idx = 1, x = 910,  w = 220, label = format("[1] MOD OPTIONS (%d)", total_opts) },
-        { idx = 2, x = 1140, w = 210, label = format("[2] BINDINGS (%d)", total_binds) },
-        { idx = 3, x = 1360, w = 210, label = format("[3] MODS LIST (%d)", total_mods) }
+        { idx = 1, x = 960,  w = 190, label = format("[1] MOD OPTIONS (%d)", total_opts) },
+        { idx = 2, x = 1160, w = 170, label = format("[2] BINDINGS (%d)", total_binds) },
+        { idx = 3, x = 1340, w = 180, label = format("[3] MODS LIST (%d)", total_mods) }
     }
     for mi = 1, #mode_tabs do
         local mt = mode_tabs[mi]
         local is_act = (tab == mt.idx)
-        draw_rect(mt.x, 68, mt.w, 40, is_act and 42 or 20, is_act and 58 or 26, is_act and 82 or 36, 235, 958)
+        draw_rect(mt.x, 90, mt.w, 36, is_act and 42 or 20, is_act and 58 or 26, is_act and 82 or 36, 235, 958)
         if is_act then
-            draw_rect(mt.x, 105, mt.w, 3, 255, 215, 55, 255, 960)
+            draw_rect(mt.x, 123, mt.w, 3, 255, 215, 55, 255, 960)
         end
-        draw_text(mt.label, mt.x + 14, 94, 14, is_act and 255 or 170, is_act and 240 or 182, is_act and 175 or 198, 255, 970)
+        draw_text(mt.label, mt.x + 12, 114, 14, is_act and 255 or 170, is_act and 240 or 182, is_act and 175 or 198, 255, 970)
     end
 
-    -- Close Button (X=1620..1780)
-    draw_rect(1620, 68, 160, 40, 68, 28, 32, 235, 958)
-    draw_rect(1620, 105, 160, 3, 235, 95, 95, 255, 960)
-    draw_text("[ESC] CLOSE", 1648, 94, 14, 255, 210, 210, 255, 970)
+    -- Close Button (X=1600..1760)
+    draw_rect(1600, 90, 160, 36, 68, 28, 32, 235, 958)
+    draw_rect(1600, 123, 160, 3, 235, 95, 95, 255, 960)
+    draw_text("[ESC] CLOSE", 1632, 114, 14, 255, 210, 210, 255, 970)
 
-    -- Full-width divider line underneath top bar at Y=118
-    draw_rect(76, 118, 1764, 2, 60, 75, 90, 180, 955)
+    -- Full-width divider line underneath top bar at Y=138
+    draw_rect(76, 138, 1764, 2, 60, 75, 90, 180, 955)
 
     -- ==========================================================================
     -- COLUMN 1: MODS / CATEGORIES LIST (X=76..386, Width=310, Y=160..900)
