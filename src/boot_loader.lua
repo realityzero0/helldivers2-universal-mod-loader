@@ -4045,7 +4045,7 @@ local function draw_menu_overlay()
             local sy_top = floor(oy + y * scale)
             local sw = math.max(1, floor(w * scale))
             local sh = math.max(1, floor(h * scale))
-            local pos = sr.Vector3(sx, H - sy_top - sh, layer or (UniversalState.menu_visible and 1215 or 955))
+            local pos = sr.Vector3(sx, H - sy_top - sh, layer or (UniversalState.menu_visible and 985 or 955))
             local sz = sr.Vector2(sw, sh)
             local col = sr.Color(a or 255, r or 255, g or 255, b or 255)
             local ok, id = pcall(sr.Gui.rect, UI_GFX.gui, pos, sz, col)
@@ -4061,7 +4061,7 @@ local function draw_menu_overlay()
             local sy = floor(H - (oy + y * scale))
             local fsize = math.max(10, floor((font_size or 16) * scale))
             local col = sr.Color(a or 255, r or 255, g or 255, b or 255)
-            local text_layer = math.max(1260, (layer or 1260) + 25)
+            local text_layer = math.min(998, math.max(995, (layer or 995) + 5))
             local ok, id = false, nil
             -- 1. Try Vector3 with high Z layer (995+) so text renders IN FRONT OF layer 954..965 rectangles
             local pos3 = (type(sr.Vector3) == "function" or type(sr.Vector3) == "table" or type(sr.Vector3) == "userdata") and sr.Vector3(sx, sy, text_layer) or nil
@@ -4111,23 +4111,16 @@ local function draw_menu_overlay()
 
         -- Inactive MODS Tab in Top Bar (X=716..886, Y=72..120 connecting directly with native baseline at Y=120)
         local bx, by, bw, bh = ESC_TOP_MODS_BTN.x, ESC_TOP_MODS_BTN.y, ESC_TOP_MODS_BTN.w, ESC_TOP_MODS_BTN.h
-        -- Solid opaque backdrop covering the native [E] prompt at X=740..765
-        draw_rect(bx, by, bw, bh, 14, 18, 24, hov_top and 220 or 160, 955)
+        -- Solid 100% OPAQUE (alpha=255) backdrop completely covering whatever is behind the tab (native [E] prompt)
+        draw_rect(bx, by, bw, bh, 12, 16, 22, 255, 960)
         -- Bracket borders matching native Helldivers 2 tabs
-        draw_rect(bx, by, bw, 1, 60, 75, 90, hov_top and 255 or 140, 956)
-        draw_rect(bx, by + bh - 2, bw, 2, 60, 75, 90, 180, 956)
-        draw_rect(bx, by + 4, 1, bh - 6, 60, 75, 90, 160, 956)
-        draw_rect(bx + bw, by + 4, 1, bh - 6, 60, 75, 90, 160, 956)
+        draw_rect(bx, by, bw, 1, 60, 75, 90, hov_top and 255 or 140, 965)
+        draw_rect(bx, by + bh - 2, bw, 2, 60, 75, 90, 180, 965)
+        draw_rect(bx, by + 4, 1, bh - 6, 60, 75, 90, 160, 965)
+        draw_rect(bx + bw, by + 4, 1, bh - 6, 60, 75, 90, 160, 965)
         -- Label
-        draw_text("MODS", bx + 36, by + 30, 16, hov_top and 255 or 195, hov_top and 240 or 205, hov_top and 140 or 215, 255, 970)
-        draw_text("4", bx + 124, by + 30, 13, 130, 145, 165, 255, 970)
-
-        -- Authentic Helldivers 2 White [E] Keycap Graphic (X=896, Y=80)
-        local ex = bx + bw + 10
-        local ey = by + 8
-        draw_rect(ex, ey, 26, 24, 245, 245, 248, 255, 960)
-        draw_rect(ex, ey + 24, 26, 4, 155, 160, 170, 255, 960)
-        draw_text("E", ex + 7, ey + 18, 13, 20, 24, 30, 255, 975)
+        draw_text("MODS", bx + 36, by + 28, 16, hov_top and 255 or 195, hov_top and 240 or 205, hov_top and 140 or 215, 255, 970)
+        draw_text("4", bx + 124, by + 28, 13, 130, 145, 165, 255, 970)
 
         return
     end
@@ -4170,60 +4163,60 @@ local function draw_menu_overlay()
 
     -- 1. Fullscreen Solid Dark Backdrop below Top Bar (completely covers squad list, Major Order, and 3D hangar)
     -- Y=120 down to Y=1080; Layer 1200 is well above native pause menu layers (~990-1050), completely preventing bleed-through!
-    draw_rect(-ox / scale, 120, W / scale, 960 + oy / scale, 12, 16, 22, 255, 1200)
+    draw_rect(-ox / scale, 120, W / scale, 960 + oy / scale, 12, 16, 22, 255, 980)
 
     -- 2. Solid Tab Bar Backing (Y=70..120, X=70..930) at Layer 1200
     -- Covers the native tab bar and any active underline on GAME 1 / OPTIONS 3 so zero ghost text bleeds through
-    draw_rect(70, 70, 860, 50, 12, 16, 22, 255, 1200)
+    draw_rect(70, 70, 860, 50, 12, 16, 22, 255, 980)
 
     -- 3. Top Navigation Bar (matching native Helldivers 2 tabs exactly)
     -- [Q] Button (X=76, Y=80)
-    draw_rect(76, 80, 26, 24, 245, 245, 248, 255, 1210)
-    draw_rect(76, 104, 26, 4, 155, 160, 170, 255, 1210)
-    draw_text("Q", 84, 98, 13, 20, 24, 30, 255, 1260)
+    draw_rect(76, 80, 26, 24, 245, 245, 248, 255, 985)
+    draw_rect(76, 104, 26, 4, 155, 160, 170, 255, 985)
+    draw_text("Q", 84, 98, 13, 20, 24, 30, 255, 995)
 
     -- Inactive Native Tabs (Clicking any returns to that native menu)
     -- GAME 1 (X=116..304)
-    draw_rect(116, 72, 188, 48, 14, 18, 24, 180, 1210)
-    draw_rect(116, 72, 188, 1, 60, 75, 90, 140, 1212)
-    draw_rect(304, 76, 1, 40, 60, 75, 90, 160, 1212)
-    draw_text("GAME", 170, 102, 16, 175, 185, 195, 255, 1260)
-    draw_text("1", 275, 102, 13, 130, 145, 165, 255, 1260)
+    draw_rect(116, 72, 188, 48, 14, 18, 24, 180, 985)
+    draw_rect(116, 72, 188, 1, 60, 75, 90, 140, 986)
+    draw_rect(304, 76, 1, 40, 60, 75, 90, 160, 986)
+    draw_text("GAME", 170, 102, 16, 175, 185, 195, 255, 995)
+    draw_text("1", 275, 102, 13, 130, 145, 165, 255, 995)
 
     -- SOCIAL 2 (X=316..504)
-    draw_rect(316, 72, 188, 48, 14, 18, 24, 180, 1210)
-    draw_rect(316, 72, 188, 1, 60, 75, 90, 140, 1212)
-    draw_rect(504, 76, 1, 40, 60, 75, 90, 160, 1212)
-    draw_text("SOCIAL", 365, 102, 16, 175, 185, 195, 255, 1260)
-    draw_text("2", 475, 102, 13, 130, 145, 165, 255, 1260)
+    draw_rect(316, 72, 188, 48, 14, 18, 24, 180, 985)
+    draw_rect(316, 72, 188, 1, 60, 75, 90, 140, 986)
+    draw_rect(504, 76, 1, 40, 60, 75, 90, 160, 986)
+    draw_text("SOCIAL", 365, 102, 16, 175, 185, 195, 255, 995)
+    draw_text("2", 475, 102, 13, 130, 145, 165, 255, 995)
 
     -- OPTIONS 3 (X=516..704)
-    draw_rect(516, 72, 188, 48, 14, 18, 24, 180, 1210)
-    draw_rect(516, 72, 188, 1, 60, 75, 90, 140, 1212)
-    draw_rect(704, 76, 1, 40, 60, 75, 90, 160, 1212)
-    draw_text("OPTIONS", 560, 102, 16, 175, 185, 195, 255, 1260)
-    draw_text("3", 675, 102, 13, 130, 145, 165, 255, 1260)
+    draw_rect(516, 72, 188, 48, 14, 18, 24, 180, 985)
+    draw_rect(516, 72, 188, 1, 60, 75, 90, 140, 986)
+    draw_rect(704, 76, 1, 40, 60, 75, 90, 160, 986)
+    draw_text("OPTIONS", 560, 102, 16, 175, 185, 195, 255, 995)
+    draw_text("3", 675, 102, 13, 130, 145, 165, 255, 995)
 
     -- ACTIVE [ MODS 4 ] TAB (X=716..886)
-    draw_rect(716, 72, 170, 48, 42, 38, 16, 255, 1210)
-    draw_rect(716, 72, 170, 1, 245, 215, 55, 255, 1212)
-    draw_rect(716, 72, 1, 48, 245, 215, 55, 255, 1212)
-    draw_rect(886, 72, 1, 48, 245, 215, 55, 255, 1212)
-    draw_text("MODS", 752, 102, 16, 255, 220, 65, 255, 1260)
-    draw_text("4", 840, 102, 13, 255, 215, 55, 255, 1260)
+    draw_rect(716, 72, 170, 48, 42, 38, 16, 255, 985)
+    draw_rect(716, 72, 170, 1, 245, 215, 55, 255, 986)
+    draw_rect(716, 72, 1, 48, 245, 215, 55, 255, 986)
+    draw_rect(886, 72, 1, 48, 245, 215, 55, 255, 986)
+    draw_text("MODS", 752, 102, 16, 255, 220, 65, 255, 995)
+    draw_text("4", 840, 102, 13, 255, 215, 55, 255, 995)
     -- Helldivers 2 signature diagonal striped underline
-    draw_rect(716, 118, 170, 3, 245, 205, 45, 255, 1215)
-    draw_text("////// 4 //////", 745, 124, 10, 245, 205, 45, 255, 1260)
+    draw_rect(716, 118, 170, 3, 245, 205, 45, 255, 985)
+    draw_text("////// 4 //////", 745, 124, 10, 245, 205, 45, 255, 995)
 
     -- [E] Button (X=896, Y=80)
-    draw_rect(896, 80, 26, 24, 245, 245, 248, 255, 1210)
-    draw_rect(896, 104, 26, 4, 155, 160, 170, 255, 1210)
-    draw_text("E", 904, 98, 13, 20, 24, 30, 255, 1260)
+    draw_rect(896, 80, 26, 24, 245, 245, 248, 255, 985)
+    draw_rect(896, 104, 26, 4, 155, 160, 170, 255, 985)
+    draw_text("E", 904, 98, 13, 20, 24, 30, 255, 995)
 
     -- Note: Mode switchers removed from top right; X=930..1920 left clear so currencies and Level 105 show cleanly!
 
     -- Full-width divider line underneath top bar at Y=120
-    draw_rect(76, 120, 1764, 2, 60, 75, 90, 200, 1210)
+    draw_rect(76, 120, 1764, 2, 60, 75, 90, 200, 985)
 
     -- ==========================================================================
     -- COLUMN 1: MODS / CATEGORIES LIST (X=76..386, Width=310, Y=160..900)
@@ -4257,14 +4250,14 @@ local function draw_menu_overlay()
 
         if is_active_cat then
             -- Solid Yellow Active Highlight (Exact Helldivers 2 Native Style like Shallow Water Diving in Image 2)
-            draw_rect(76, ry, 310, 46, 235, 195, 45, 255, 1215)
-            draw_text(disp_cat, 92, ry + 30, 16, 12, 16, 22, 255, 1260)
-            draw_text(format("(%d)", ccount), 340, ry + 30, 13, 40, 32, 10, 255, 1260)
+            draw_rect(76, ry, 310, 46, 235, 195, 45, 255, 985)
+            draw_text(disp_cat, 92, ry + 30, 16, 12, 16, 22, 255, 995)
+            draw_text(format("(%d)", ccount), 340, ry + 30, 13, 40, 32, 10, 255, 995)
         else
             -- Dark Subtle Inactive Button
-            draw_rect(76, ry, 310, 46, 18, 24, 32, 210, 1215)
-            draw_text(disp_cat, 92, ry + 30, 15, 195, 205, 215, 255, 1260)
-            draw_text(format("(%d)", ccount), 340, ry + 30, 13, 130, 145, 165, 255, 1260)
+            draw_rect(76, ry, 310, 46, 18, 24, 32, 210, 985)
+            draw_text(disp_cat, 92, ry + 30, 15, 195, 205, 215, 255, 995)
+            draw_text(format("(%d)", ccount), 340, ry + 30, 13, 130, 145, 165, 255, 995)
         end
     end
 
@@ -4590,10 +4583,10 @@ local function draw_menu_overlay()
     -- ==========================================================================
     -- NATIVE FOOTER NAVIGATION BAR (Y=1020..1050)
     -- ==========================================================================
-    draw_text("ESC  BACK", 76, 1035, 15, 220, 225, 235, 255, 1260)
-    draw_text("TAB  APPLY", 220, 1035, 15, 245, 215, 65, 255, 1260)
-    draw_text("R  RESET TO DEFAULT", 370, 1035, 15, 200, 215, 235, 255, 1260)
-    draw_text("MOUSE: Click / Drag  |  WHEEL: Scroll  |  Q/E: Categories", 1320, 1035, 13, 140, 155, 175, 255, 1260)
+    draw_text("ESC  BACK", 76, 1035, 15, 220, 225, 235, 255, 995)
+    draw_text("TAB  APPLY", 220, 1035, 15, 245, 215, 65, 255, 995)
+    draw_text("R  RESET TO DEFAULT", 370, 1035, 15, 200, 215, 235, 255, 995)
+    draw_text("MOUSE: Click / Drag  |  WHEEL: Scroll  |  Q/E: Categories", 1320, 1035, 13, 140, 155, 175, 255, 995)
 
     -- Toast Notifications
     if UniversalState.toast and UniversalState.toast.expire_at and UniversalState.toast.expire_at > os.clock() then
