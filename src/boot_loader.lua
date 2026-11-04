@@ -2936,20 +2936,26 @@ local COMMON_SCAN_KEYS = {
 }
 
 -- Escape-Menu Native MODS Tab Geometry (1920x1080 Canvas)
--- 4th Tab in the Top Bar (X=500..655, Y=66..110 directly adjacent to [ OPTIONS ] 3)
-local ESC_TOP_MODS_BTN = { x = 949, y = 72, w = 268, h = 48 }
+-- 4th Tab in the Top Bar (X=1028..1311, Y=95..175 directly adjacent to [ OPTIONS 3 ])
+local ESC_TOP_MODS_BTN = { x = 1028, y = 95, w = 283, h = 80 }
 
 -- Win32 FFI cursor declarations removed (EAC EOS safety; pure Stingray input)
 
-local function get_screen_resolution(sr)
-    local W, H = 1920, 1080
+local function get_gui_canvas_resolution(sr)
+    if sr and UI_GFX and UI_GFX.gui and sr.Gui and type(sr.Gui.resolution) == "function" then
+        local ok, rw, rh = pcall(sr.Gui.resolution, UI_GFX.gui)
+        if ok and type(rw) == "number" and type(rh) == "number" and rw > 0 and rh > 0 then
+            return rw, rh
+        end
+    end
     if sr and sr.Gui and type(sr.Gui.resolution) == "function" then
         local ok, rw, rh = pcall(sr.Gui.resolution)
         if ok and type(rw) == "number" and type(rh) == "number" and rw > 0 and rh > 0 then
-            W, H = rw, rh
+            return rw, rh
         end
     end
-    return W, H
+    -- Default Stingray virtual canvas for "scale" GUI on 1080p is 1344x756
+    return 1344, 756
 end
 
 local function is_cursor_shown(sr)
@@ -2982,10 +2988,7 @@ local function is_cursor_shown(sr)
 end
 
 local function get_mouse_canvas_pos(sr)
-    local W, H = get_screen_resolution(sr)
-    local scale = math.min(W / 1920, H / 1080)
-    local ox = floor((W - 1920 * scale) * 0.5)
-    local oy = floor((H - 1080 * scale) * 0.5)
+    local gw, gh = get_gui_canvas_resolution(sr)
     local raw_x, raw_y = nil, nil
 
     -- Stingray native Mouse.axis("cursor")
@@ -3018,9 +3021,14 @@ local function get_mouse_canvas_pos(sr)
                         end
                     end
                     if type(vx) == "number" and type(vy) == "number" then
-                        if vx >= 0 and vx <= 1 and vy >= 0 and vy <= 1 and (vx > 0 or vy > 0) and W > 1 and H > 1 then
-                            vx = vx * W
-                            vy = vy * H
+                        if vx >= 0 and vx <= 1 and vy >= 0 and vy <= 1 and (vx > 0 or vy > 0) then
+                            vx = vx * 1920
+                            vy = vy * 1080
+                        elseif vx > 1 or vy > 1 then
+                            if vx <= gw and vy <= gh and gw < 1920 then
+                                vx = vx * (1920 / gw)
+                                vy = vy * (1080 / gh)
+                            end
                         end
                         raw_x, raw_y = vx, vy
                     end
@@ -3029,12 +3037,10 @@ local function get_mouse_canvas_pos(sr)
         end)
     end
 
-    if raw_x == nil or raw_y == nil or scale <= 0 then
+    if raw_x == nil or raw_y == nil then
         return nil, nil
     end
-    local cx = (raw_x - ox) / scale
-    local cy = (raw_y - oy) / scale
-    return cx, cy
+    return raw_x, raw_y
 end
 
 local function get_mouse_wheel_delta(sr)
@@ -3530,7 +3536,7 @@ local function handle_menu_input()
 
     -- When MODS screen is closed, check if user clicked the top-bar [ MODS 4 ] tab button
     if not UniversalState.menu_visible then
-        local hov_top = (cx ~= nil and cy ~= nil) and pt_in_rect(cx, cy, ESC_TOP_MODS_BTN.x, ESC_TOP_MODS_BTN.y, ESC_TOP_MODS_BTN.w + 35, ESC_TOP_MODS_BTN.h) or false
+        local hov_top = (cx ~= nil and cy ~= nil) and pt_in_rect(cx, cy, ESC_TOP_MODS_BTN.x, ESC_TOP_MODS_BTN.y, ESC_TOP_MODS_BTN.w + 40, ESC_TOP_MODS_BTN.h) or false
         UniversalState.hover_esc_mods_btn = hov_top
 
         -- Open MODS tab on click, or pressing key '4'
@@ -3572,16 +3578,16 @@ local function handle_menu_input()
         return
     end
 
-    -- Continue active slider drag if left mouse button is held down (track is X=1080..1270, W=190)
+    -- Continue active slider drag if left mouse button is held down (track is X=1040..1260, W=220)
     if UniversalState.dragging_slider_id and ldown and cx ~= nil then
-        local ratio = (cx - 1080) / 190
+        local ratio = (cx - 1040) / 220
         set_slider_from_ratio(UniversalState.dragging_slider_id, ratio, true)
         return
     end
 
-    -- Top Header Bar Mouse Clicks (Y=70..125): Clicking [Q], [GAME], [SOCIAL], [OPTIONS] returns to native menu
-    if lclick and cy ~= nil and ((cy >= 70 and cy <= 125) or (1080 - cy >= 70 and 1080 - cy <= 125)) then
-        if cx >= 30 and cx <= 930 then
+    -- Top Header Bar Mouse Clicks (Y=95..175): Clicking [Q], [GAME], [SOCIAL], [OPTIONS] returns to native menu
+    if lclick and cy ~= nil and ((cy >= 95 and cy <= 175) or (1080 - cy >= 95 and 1080 - cy <= 175)) then
+        if cx >= 30 and cx <= 1020 then
             UniversalState.menu_visible = false
             UniversalState.dragging_slider_id = nil
             ui_gfx_clear(sr)
@@ -3589,8 +3595,8 @@ local function handle_menu_input()
         end
     end
 
-    -- Footer Bar Mouse Clicks (Y=1020..1060)
-    if lclick and cy ~= nil and ((cy >= 1020 and cy <= 1060) or (1080 - cy >= 1020 and 1080 - cy <= 1060)) then
+    -- Footer Bar Mouse Clicks (Y=1020..1065)
+    if lclick and cy ~= nil and ((cy >= 1020 and cy <= 1065) or (1080 - cy >= 1020 and 1080 - cy <= 1065)) then
         if cx >= 50 and cx <= 180 then
             UniversalState.menu_visible = false
             UniversalState.dragging_slider_id = nil
@@ -3651,8 +3657,8 @@ local function handle_menu_input()
         UniversalState.menu_mod_filter = 1
     end
 
-    -- Left Column (Flush X=0..380, Y=145..980): Category Sidebar Clicks & Wheel
-    local cat_page_size = 14
+    -- Left Column (Flush X=0..380, Y=200..980): Category Sidebar Clicks & Wheel
+    local cat_page_size = 13
     local cat_page = floor((cat_idx - 1) / cat_page_size)
     local cat_start = cat_page * cat_page_size + 1
     local cat_end = min(#categories, cat_start + cat_page_size - 1)
@@ -3689,7 +3695,7 @@ local function handle_menu_input()
 
         if lclick then
             for ci = cat_start, cat_end do
-                local ry = 145 + (ci - cat_start) * 60
+                local ry = 200 + (ci - cat_start) * 60
                 if pt_in_rect(cx, cy, 0, ry, 380, 54) then
                     UniversalState.menu_mod_filter = ci
                     local sel_cat = categories[ci]
@@ -3722,7 +3728,7 @@ local function handle_menu_input()
         end
         UniversalState.menu_selected = 1
         return
-    elseif key_pressed("e") or key_pressed("right_shoulder") or (lclick and cx ~= nil and cx >= 1230 and cx <= 1265 and cy >= 75 and cy <= 110) then
+    elseif key_pressed("e") or key_pressed("right_shoulder") or (lclick and cx ~= nil and cx >= 1330 and cx <= 1370 and cy >= 95 and cy <= 145) then
         cat_idx = (cat_idx % #categories) + 1
         UniversalState.menu_mod_filter = cat_idx
         local sel_cat = categories[cat_idx]
@@ -3738,7 +3744,7 @@ local function handle_menu_input()
     end
 
     -- ==========================================================================
-    -- TAB 1: MOD OPTIONS INPUT (Column 2: X=420..1340, Width=920, Y=145..980)
+    -- TAB 1: MOD OPTIONS INPUT (Column 2: X=420..1320, Width=900, Y=200..980)
     -- ==========================================================================
     if (UniversalState.menu_tab or 1) == 1 then
         local active_cat = categories[cat_idx] or "ALL MODS"
@@ -3748,7 +3754,7 @@ local function handle_menu_input()
 
         local sel = UniversalState.menu_selected or 1
         if sel > total then sel = total; UniversalState.menu_selected = sel end
-        local page_size = 14
+        local page_size = 13
         local page = floor((sel - 1) / page_size)
         local start_idx = page * page_size + 1
         local end_idx = min(total, start_idx + page_size - 1)
@@ -3764,17 +3770,17 @@ local function handle_menu_input()
         end
 
         -- Right Column [RESET TO DEFAULT] Button Click
-        if lclick and pt_in_rect(cx, cy, 1370, 880, 480, 48) then
+        if lclick and pt_in_rect(cx, cy, 1360, 880, 510, 48) then
             local cur_id = opt_keys[sel]
             if cur_id then ModOptionsMenu.reset_option(cur_id) end
             return
         end
 
         -- Center Column Option Rows: Hover, Left-Click, Slider Drag, Right-Click
-        if cx ~= nil and cx >= 420 and cx <= 1340 then
+        if cx ~= nil and cx >= 420 and cx <= 1320 then
             for i = start_idx, end_idx do
-                local ry = 145 + (i - start_idx) * 60
-                if pt_in_rect(cx, cy, 420, ry, 920, 54) then
+                local ry = 200 + (i - start_idx) * 60
+                if pt_in_rect(cx, cy, 420, ry, 900, 54) then
                     if mouse_moved or lclick or rclick then
                         UniversalState.menu_selected = i
                         sel = i
@@ -3788,21 +3794,21 @@ local function handle_menu_input()
                         local cur_val = ModOptionsMenu.get(row_id)
                         local otype = spec.type
                         if otype == "toggle" or otype == "boolean" or (otype == nil and type(cur_val) == "boolean") then
-                            if cx >= 1050 and cx <= 1085 then
+                            if cx >= 1040 and cx <= 1080 then
                                 ModOptionsMenu.set(row_id, not cur_val)
-                            elseif cx >= 1285 and cx <= 1320 then
+                            elseif cx >= 1250 and cx <= 1290 then
                                 ModOptionsMenu.set(row_id, not cur_val)
-                            elseif cx >= 1090 and cx <= 1185 then
+                            elseif cx >= 1080 and cx <= 1165 then
                                 ModOptionsMenu.set(row_id, false)
-                            elseif cx >= 1186 and cx <= 1280 then
+                            elseif cx >= 1166 and cx <= 1250 then
                                 ModOptionsMenu.set(row_id, true)
                             else
                                 ModOptionsMenu.set(row_id, not cur_val)
                             end
                         elseif otype == "choice" or (type(spec.choices) == "table" and #spec.choices > 0) then
-                            if cx >= 1050 and cx <= 1085 then
+                            if cx >= 1040 and cx <= 1080 then
                                 step_option_value(row_id, -1)
-                            elseif cx >= 1285 and cx <= 1320 then
+                            elseif cx >= 1250 and cx <= 1290 then
                                 step_option_value(row_id, 1)
                             else
                                 step_option_value(row_id, 1)
@@ -3810,14 +3816,15 @@ local function handle_menu_input()
                         elseif otype == "slider" or otype == "number" or type(cur_val) == "number" then
                             local min_v = tonumber(spec.min)
                             local max_v = tonumber(spec.max)
-                            if min_v and max_v and max_v > min_v and cx >= 1080 and cx <= 1280 then
+                            if min_v and max_v and max_v > min_v and cx >= 1040 and cx <= 1260 then
                                 UniversalState.dragging_slider_id = row_id
-                                set_slider_from_ratio(row_id, (cx - 1080) / 190, true)
-                            elseif cx < 1080 then
-                                step_option_value(row_id, -1)
+                                local ratio = (cx - 1040) / 220
+                                set_slider_from_ratio(row_id, ratio, true)
                             else
                                 step_option_value(row_id, 1)
                             end
+                        else
+                            step_option_value(row_id, 1)
                         end
                         return
                     end
@@ -3826,32 +3833,28 @@ local function handle_menu_input()
             end
         end
 
-        -- Keyboard / Controller Navigation
+        -- Keyboard Navigation in Tab 1
         if key_pressed("up") or key_pressed("d_up") then
             UniversalState.menu_selected = math.max(1, sel - 1)
         elseif key_pressed("down") or key_pressed("d_down") then
             UniversalState.menu_selected = math.min(total, sel + 1)
+        elseif key_pressed("left") or key_pressed("d_left") then
+            local cur_id = opt_keys[sel]
+            if cur_id then step_option_value(cur_id, -1) end
+        elseif key_pressed("right") or key_pressed("d_right") or key_pressed("enter") or key_pressed("space") then
+            local cur_id = opt_keys[sel]
+            if cur_id then step_option_value(cur_id, 1) end
+        elseif key_pressed("backspace") or key_pressed("delete") then
+            local cur_id = opt_keys[sel]
+            if cur_id then ModOptionsMenu.reset_option(cur_id) end
         elseif key_pressed("page up") then
             UniversalState.menu_selected = math.max(1, sel - page_size)
         elseif key_pressed("page down") then
             UniversalState.menu_selected = math.min(total, sel + page_size)
         end
 
-        sel = UniversalState.menu_selected or 1
-        local cur_id = opt_keys[sel]
-        if cur_id then
-            if key_pressed("backspace") then
-                ModOptionsMenu.reset_option(cur_id)
-                return
-            elseif key_pressed("left") or key_pressed("d_left") then
-                step_option_value(cur_id, -1)
-            elseif key_pressed("right") or key_pressed("d_right") or key_pressed("enter") or key_pressed("space") then
-                step_option_value(cur_id, 1)
-            end
-        end
-
     -- ==========================================================================
-    -- TAB 2: KEY BINDINGS INPUT (Column 2: X=420..1340, Width=920, Y=145..980)
+    -- TAB 2: KEY BINDINGS INPUT (Column 2: X=420..1320, Width=900, Y=200..980)
     -- ==========================================================================
     elseif UniversalState.menu_tab == 2 then
         local bind_list = ModBindingsMenu.order
@@ -3860,7 +3863,7 @@ local function handle_menu_input()
 
         local sel = UniversalState.menu_selected or 1
         if sel > total then sel = total; UniversalState.menu_selected = sel end
-        local page_size = 14
+        local page_size = 13
         local page = floor((sel - 1) / page_size)
         local start_idx = page * page_size + 1
         local end_idx = min(total, start_idx + page_size - 1)
@@ -3874,31 +3877,25 @@ local function handle_menu_input()
             return
         end
 
-        if lclick and pt_in_rect(cx, cy, 1370, 880, 480, 48) then
+        if lclick and pt_in_rect(cx, cy, 1360, 880, 510, 48) then
             local rec = bind_list[sel]
             if rec then ModBindingsMenu.reset_binding(rec.id) end
             return
         end
 
-        if cx ~= nil and cx >= 420 and cx <= 1340 then
+        if cx ~= nil and cx >= 420 and cx <= 1320 then
             for i = start_idx, end_idx do
-                local ry = 145 + (i - start_idx) * 60
-                if pt_in_rect(cx, cy, 420, ry, 920, 54) then
-                    if mouse_moved or lclick or rclick then
-                        UniversalState.menu_selected = i
-                        sel = i
-                    end
+                local ry = 200 + (i - start_idx) * 60
+                if pt_in_rect(cx, cy, 420, ry, 900, 54) then
                     local rec = bind_list[i]
-                    if rclick and rec then
-                        ModBindingsMenu.reset_binding(rec.id)
-                        return
-                    elseif lclick and rec then
-                        if cx >= 1235 and cx <= 1315 then
+                    if rec then
+                        if lclick and cx >= 1215 and cx <= 1300 then
                             ModBindingsMenu.reset_binding(rec.id)
-                        else
+                        elseif lclick and cx >= 1060 and cx <= 1200 then
                             UniversalState.menu_rebind_id = rec.id
+                        elseif mouse_moved or lclick then
+                            UniversalState.menu_selected = i
                         end
-                        return
                     end
                     break
                 end
@@ -3915,7 +3912,6 @@ local function handle_menu_input()
             UniversalState.menu_selected = math.min(total, sel + page_size)
         end
 
-        sel = UniversalState.menu_selected or 1
         local record = bind_list[sel]
         if record then
             if key_pressed("enter") or key_pressed("space") then
@@ -3926,7 +3922,7 @@ local function handle_menu_input()
         end
 
     -- ==========================================================================
-    -- TAB 3: LOADED MODS & DIAGNOSTICS INPUT (Column 2: X=420..1340, Width=920, Y=145..980)
+    -- TAB 3: LOADED MODS & DIAGNOSTICS INPUT (Column 2: X=420..1320, Width=900, Y=200..980)
     -- ==========================================================================
     elseif UniversalState.menu_tab == 3 then
         local mods_list = get_loaded_mods_list()
@@ -3935,7 +3931,7 @@ local function handle_menu_input()
 
         local sel = UniversalState.menu_selected or 1
         if sel > total then sel = total; UniversalState.menu_selected = sel end
-        local page_size = 14
+        local page_size = 13
         local page = floor((sel - 1) / page_size)
         local start_idx = page * page_size + 1
         local end_idx = min(total, start_idx + page_size - 1)
@@ -3949,19 +3945,19 @@ local function handle_menu_input()
             return
         end
 
-        if lclick and pt_in_rect(cx, cy, 1370, 825, 480, 48) then
+        if lclick and pt_in_rect(cx, cy, 1360, 825, 510, 48) then
             local item = mods_list[sel]
             if item then toggle_mod_enabled(item.name) end
             return
-        elseif lclick and pt_in_rect(cx, cy, 1370, 880, 480, 48) then
+        elseif lclick and pt_in_rect(cx, cy, 1360, 880, 510, 48) then
             reload_all_mods()
             return
         end
 
-        if cx ~= nil and cx >= 420 and cx <= 1340 then
+        if cx ~= nil and cx >= 420 and cx <= 1320 then
             for i = start_idx, end_idx do
-                local ry = 145 + (i - start_idx) * 60
-                if pt_in_rect(cx, cy, 420, ry, 920, 54) then
+                local ry = 200 + (i - start_idx) * 60
+                if pt_in_rect(cx, cy, 420, ry, 900, 54) then
                     if lclick and cx >= 1180 then
                         local item = mods_list[i]
                         if item then toggle_mod_enabled(item.name) end
@@ -3995,18 +3991,17 @@ local function draw_menu_overlay()
     if not sr or not sr.Gui or not sr.Gui.rect then return end
 
     local retained_mode = is_stingray_retained_gui(sr)
-    local W, H = get_screen_resolution(sr)
-    local scale = math.min(W / 1920, H / 1080)
-    local ox = floor((W - 1920 * scale) * 0.5)
-    local oy = floor((H - 1080 * scale) * 0.5)
+    local gw, gh = get_gui_canvas_resolution(sr)
+    local scale_x = gw / 1920
+    local scale_y = gh / 1080
 
     local function draw_rect(x, y, w, h, r, g, b, a, layer)
         if retained_mode then
-            local sx = floor(ox + x * scale)
-            local sy_top = floor(oy + y * scale)
-            local sw = math.max(1, floor(w * scale))
-            local sh = math.max(1, floor(h * scale))
-            local pos = sr.Vector3(sx, H - sy_top - sh, layer or (UniversalState.menu_visible and 985 or 955))
+            local sx = floor(x * scale_x)
+            local sy_top = floor(y * scale_y)
+            local sw = math.max(1, floor(w * scale_x))
+            local sh = math.max(1, floor(h * scale_y))
+            local pos = sr.Vector3(sx, gh - sy_top - sh, layer or (UniversalState.menu_visible and 985 or 955))
             local sz = sr.Vector2(sw, sh)
             local col = sr.Color(a or 255, r or 255, g or 255, b or 255)
             local ok, id = pcall(sr.Gui.rect, UI_GFX.gui, pos, sz, col)
@@ -4018,9 +4013,9 @@ local function draw_menu_overlay()
 
     local function draw_text(str, x, y, font_size, r, g, b, a, layer)
         if retained_mode then
-            local sx = floor(ox + x * scale)
-            local sy = floor(H - (oy + y * scale))
-            local fsize = math.max(10, floor((font_size or 16) * scale))
+            local sx = floor(x * scale_x)
+            local sy = floor(gh - (y * scale_y))
+            local fsize = math.max(8, floor((font_size or 16) * scale_y))
             local col = sr.Color(a or 255, r or 255, g or 255, b or 255)
             local text_layer = math.min(998, math.max(995, (layer or 995) + 5))
             local ok, id = false, nil
@@ -4070,31 +4065,34 @@ local function draw_menu_overlay()
 
         if retained_mode then
             if not ui_gfx_ensure(sr) then return end
-            local sig = format("ESC_NATIVE_TAB_V4:%d:%d:%s", W, H, tostring(hov_top))
+            local sig = format("ESC_NATIVE_TAB_V7:%d:%d:%s", gw, gh, tostring(hov_top))
             if UI_GFX.last_sig == sig then return end
             ui_gfx_clear(sr)
             UI_GFX.last_sig = sig
         end
 
-        local bx, by, bw, bh = ESC_TOP_MODS_BTN.x, ESC_TOP_MODS_BTN.y, ESC_TOP_MODS_BTN.w, ESC_TOP_MODS_BTN.h
+        local bx, bw = 1028, 283
 
-        -- 1. Solid dark backdrop covering native bleed-through at native [E] prompt position
-        draw_rect(935, 68, 340, 56, 12, 16, 22, 255, 980)
+        -- 1. Solid dark backdrop covering native bleed-through at native [E] prompt position (X=1020..1320, Y=90..176)
+        draw_rect(1020, 90, 300, 86, 12, 16, 22, 255, 980)
 
-        -- 2. Authentic Tab 4 geometry (baseline at Y=120, cut number 4, hook UP on right edge)
-        draw_rect(bx, 119, bw / 2 - 15, 2, 180, 190, 200, 255, 984)
-        draw_text("4", bx + bw / 2 - 6, 122, 14, 180, 190, 200, 255, 995)
-        draw_rect(bx + bw / 2 + 10, 119, bw / 2 - 12, 2, 180, 190, 200, 255, 984)
-        draw_rect(bx + bw - 2, 78, 2, 43, 180, 190, 200, 255, 984)
-        draw_text("MODS", bx + 100, 98, 17, hov_top and 255 or 225, hov_top and 240 or 230, hov_top and 140 or 235, 255, 995)
+        -- 2. Authentic Tab 4 geometry (baseline at Y=172, cut number 4, hook UP on right edge)
+        draw_rect(bx, 172, 135, 2, 180, 190, 200, 255, 984)
+        draw_text("4", bx + 145, 175, 14, 180, 190, 200, 255, 995)
+        draw_rect(bx + 155, 172, 128, 2, 180, 190, 200, 255, 984)
+        draw_rect(bx + bw - 2, 130, 2, 44, 180, 190, 200, 255, 984)
+        local tc_r = hov_top and 255 or 225
+        local tc_g = hov_top and 240 or 230
+        local tc_b = hov_top and 140 or 235
+        draw_text("MODS", bx + 105, 138, 17, tc_r, tc_g, tc_b, 255, 995)
 
         -- 3. Dedicated [E] button to the right of MODS 4 (matching [Q] style: dark square with 1px border)
-        draw_rect(1230, 78, 30, 30, 20, 24, 30, 255, 984)
-        draw_rect(1230, 78, 30, 1, 160, 170, 180, 255, 985)
-        draw_rect(1230, 107, 30, 1, 160, 170, 180, 255, 985)
-        draw_rect(1230, 78, 1, 30, 160, 170, 180, 255, 985)
-        draw_rect(1259, 78, 1, 30, 160, 170, 180, 255, 985)
-        draw_text("E", 1240, 99, 14, 255, 255, 255, 255, 995)
+        draw_rect(1330, 103, 38, 38, 20, 24, 30, 255, 984)
+        draw_rect(1330, 103, 38, 1, 160, 170, 180, 255, 985)
+        draw_rect(1330, 140, 38, 1, 160, 170, 180, 255, 985)
+        draw_rect(1330, 103, 1, 38, 160, 170, 180, 255, 985)
+        draw_rect(1367, 103, 1, 38, 160, 170, 180, 255, 985)
+        draw_text("E", 1344, 128, 14, 255, 255, 255, 255, 995)
 
         return
     end
@@ -4117,8 +4115,8 @@ local function draw_menu_overlay()
             if rec then sel_bind_down = ModBindingsMenu.is_down(rec.id) end
         end
         local has_toast = (UniversalState.toast and UniversalState.toast.expire_at and UniversalState.toast.expire_at > os.clock()) and "1" or "0"
-        local sig = format("MODS_NATIVE_V4:%d:%d:%d:%d:%d:%s:%d:%d:%d:%s:%d:%s",
-            W, H,
+        local sig = format("MODS_NATIVE_V7:%d:%d:%d:%d:%d:%s:%d:%d:%d:%s:%d:%s",
+            gw, gh,
             tab,
             UniversalState.menu_selected or 1,
             UniversalState.menu_mod_filter or 1,
@@ -4136,60 +4134,60 @@ local function draw_menu_overlay()
     end
 
     -- 1. Fullscreen Solid Dark Backdrop below Top Bar (Layer 975)
-    draw_rect(-ox / scale, 120, W / scale, 960 + oy / scale, 12, 16, 22, 255, 975)
+    draw_rect(0, 174, 1920, 906, 12, 16, 22, 255, 975)
 
-    -- 2. Solid Tab Bar Backing (Y=70..122, X=0..1920) at Layer 980
-    draw_rect(0, 70, 1920, 52, 12, 16, 22, 255, 980)
+    -- 2. Solid Tab Bar Backing (Y=90..176, X=0..1920) at Layer 980
+    draw_rect(0, 90, 1920, 86, 12, 16, 22, 255, 980)
 
     -- 3. Top Navigation Bar (matching native Helldivers 2 tabs exactly)
-    -- [Q] Button (X=30, Y=78)
-    draw_rect(30, 78, 30, 30, 20, 24, 30, 255, 984)
-    draw_rect(30, 78, 30, 1, 160, 170, 180, 255, 985)
-    draw_rect(30, 107, 30, 1, 160, 170, 180, 255, 985)
-    draw_rect(30, 78, 1, 30, 160, 170, 180, 255, 985)
-    draw_rect(59, 78, 1, 30, 160, 170, 180, 255, 985)
-    draw_text("Q", 40, 99, 14, 255, 255, 255, 255, 995)
+    -- [Q] Button (X=47, Y=103)
+    draw_rect(47, 103, 38, 38, 20, 24, 30, 255, 984)
+    draw_rect(47, 103, 38, 1, 160, 170, 180, 255, 985)
+    draw_rect(47, 140, 38, 1, 160, 170, 180, 255, 985)
+    draw_rect(47, 103, 1, 38, 160, 170, 180, 255, 985)
+    draw_rect(84, 103, 1, 38, 160, 170, 180, 255, 985)
+    draw_text("Q", 61, 128, 14, 255, 255, 255, 255, 995)
 
     -- Inactive Native Tabs
-    -- GAME 1 (X=88..356)
-    draw_rect(88, 119, 119, 2, 180, 190, 200, 255, 984)
-    draw_text("1", 217, 122, 14, 180, 190, 200, 255, 995)
-    draw_rect(233, 119, 121, 2, 180, 190, 200, 255, 984)
-    draw_rect(354, 78, 2, 43, 180, 190, 200, 255, 984)
-    draw_text("GAME", 195, 98, 17, 225, 230, 235, 255, 995)
+    -- GAME 1 (X=120..405)
+    draw_rect(120, 172, 135, 2, 180, 190, 200, 255, 984)
+    draw_text("1", 265, 175, 14, 180, 190, 200, 255, 995)
+    draw_rect(275, 172, 130, 2, 180, 190, 200, 255, 984)
+    draw_rect(403, 130, 2, 44, 180, 190, 200, 255, 984)
+    draw_text("GAME", 230, 138, 17, 225, 230, 235, 255, 995)
 
-    -- SOCIAL 2 (X=375..643)
-    draw_rect(375, 119, 119, 2, 180, 190, 200, 255, 984)
-    draw_text("2", 504, 122, 14, 180, 190, 200, 255, 995)
-    draw_rect(520, 119, 121, 2, 180, 190, 200, 255, 984)
-    draw_rect(641, 78, 2, 43, 180, 190, 200, 255, 984)
-    draw_text("SOCIAL", 475, 98, 17, 225, 230, 235, 255, 995)
+    -- SOCIAL 2 (X=424..707)
+    draw_rect(424, 172, 135, 2, 180, 190, 200, 255, 984)
+    draw_text("2", 569, 175, 14, 180, 190, 200, 255, 995)
+    draw_rect(579, 172, 128, 2, 180, 190, 200, 255, 984)
+    draw_rect(705, 130, 2, 44, 180, 190, 200, 255, 984)
+    draw_text("SOCIAL", 535, 138, 17, 225, 230, 235, 255, 995)
 
-    -- OPTIONS 3 (X=662..930)
-    draw_rect(662, 119, 119, 2, 180, 190, 200, 255, 984)
-    draw_text("3", 791, 122, 14, 180, 190, 200, 255, 995)
-    draw_rect(807, 119, 121, 2, 180, 190, 200, 255, 984)
-    draw_rect(928, 78, 2, 43, 180, 190, 200, 255, 984)
-    draw_text("OPTIONS", 755, 98, 17, 225, 230, 235, 255, 995)
+    -- OPTIONS 3 (X=726..1009)
+    draw_rect(726, 172, 135, 2, 180, 190, 200, 255, 984)
+    draw_text("3", 871, 175, 14, 180, 190, 200, 255, 995)
+    draw_rect(881, 172, 128, 2, 180, 190, 200, 255, 984)
+    draw_rect(1007, 130, 2, 44, 180, 190, 200, 255, 984)
+    draw_text("OPTIONS", 835, 138, 17, 225, 230, 235, 255, 995)
 
-    -- ACTIVE [ MODS 4 ] TAB (X=949..1217)
-    draw_text("MODS", 1045, 98, 17, 255, 232, 0, 255, 995)
-    for hx = 955, 1205, 16 do
-        draw_rect(hx, 114, 8, 6, 255, 232, 0, 255, 986)
+    -- ACTIVE [ MODS 4 ] TAB (X=1028..1311)
+    draw_text("MODS", 1135, 138, 17, 255, 232, 0, 255, 995)
+    for hx = 1032, 1300, 16 do
+        draw_rect(hx, 166, 8, 6, 255, 232, 0, 255, 986)
     end
-    draw_text("4", 1078, 122, 14, 255, 232, 0, 255, 995)
-    draw_rect(1215, 78, 2, 43, 255, 232, 0, 255, 986)
+    draw_text("4", 1173, 175, 14, 255, 232, 0, 255, 995)
+    draw_rect(1309, 130, 2, 44, 255, 232, 0, 255, 986)
 
-    -- [E] Button (X=1230, Y=78)
-    draw_rect(1230, 78, 30, 30, 20, 24, 30, 255, 984)
-    draw_rect(1230, 78, 30, 1, 160, 170, 180, 255, 985)
-    draw_rect(1230, 107, 30, 1, 160, 170, 180, 255, 985)
-    draw_rect(1230, 78, 1, 30, 160, 170, 180, 255, 985)
-    draw_rect(1259, 78, 1, 30, 160, 170, 180, 255, 985)
-    draw_text("E", 1240, 99, 14, 255, 255, 255, 255, 995)
+    -- [E] Button (X=1330, Y=103)
+    draw_rect(1330, 103, 38, 38, 20, 24, 30, 255, 984)
+    draw_rect(1330, 103, 38, 1, 160, 170, 180, 255, 985)
+    draw_rect(1330, 140, 38, 1, 160, 170, 180, 255, 985)
+    draw_rect(1330, 103, 1, 38, 160, 170, 180, 255, 985)
+    draw_rect(1367, 103, 1, 38, 160, 170, 180, 255, 985)
+    draw_text("E", 1344, 128, 14, 255, 255, 255, 255, 995)
 
-    -- Full-width baseline divider line underneath top bar at Y=120
-    draw_rect(0, 120, 1920, 2, 60, 75, 90, 200, 982)
+    -- Full-width baseline divider line underneath top bar at Y=172
+    draw_rect(0, 172, 1920, 2, 60, 75, 90, 200, 982)
 
     -- ==========================================================================
     -- COLUMN 1: MODS / CATEGORIES LIST (Flush with screen left edge: X=0..380)
@@ -4199,7 +4197,7 @@ local function draw_menu_overlay()
         cat_idx = 1
         UniversalState.menu_mod_filter = 1
     end
-    local cat_page_size = 14
+    local cat_page_size = 13
     local cat_page = floor((cat_idx - 1) / cat_page_size)
     local cat_start = cat_page * cat_page_size + 1
     local cat_end = min(#categories, cat_start + cat_page_size - 1)
@@ -4214,25 +4212,25 @@ local function draw_menu_overlay()
         else
             ccount = #(by_cat[cname] or {})
         end
-        local ry = 145 + (ci - cat_start) * 60
+        local ry = 200 + (ci - cat_start) * 60
         local is_active_cat = (ci == cat_idx)
         local disp_cat = cname:upper()
         if #disp_cat > 24 then disp_cat = disp_cat:sub(1, 21) .. "..." end
 
         if is_active_cat then
-            draw_rect(0, ry, 380, 54, 235, 195, 0, 255, 984)
-            draw_text(disp_cat, 36, ry + 35, 16, 20, 24, 30, 255, 995)
-            draw_text(format("(%d)", ccount), 320, ry + 35, 14, 30, 24, 10, 255, 995)
+            draw_rect(0, ry, 380, 54, 255, 232, 0, 255, 984)
+            draw_text(disp_cat, 36, ry + 36, 16, 20, 24, 30, 255, 995)
+            draw_text(format("(%d)", ccount), 320, ry + 36, 14, 30, 24, 10, 255, 995)
         else
-            draw_rect(0, ry, 380, 54, 20, 24, 30, 255, 983)
-            draw_rect(0, ry + 53, 380, 1, 45, 55, 65, 200, 984)
-            draw_text(disp_cat, 36, ry + 35, 16, 225, 230, 235, 255, 995)
-            draw_text(format("(%d)", ccount), 320, ry + 35, 14, 130, 145, 160, 255, 992)
+            draw_rect(0, ry, 380, 54, 20, 26, 36, 255, 983)
+            draw_rect(0, ry + 53, 380, 1, 42, 54, 68, 200, 984)
+            draw_text(disp_cat, 36, ry + 36, 16, 225, 230, 235, 255, 995)
+            draw_text(format("(%d)", ccount), 320, ry + 36, 14, 130, 145, 160, 255, 992)
         end
     end
 
     -- ==========================================================================
-    -- COLUMN 2: OPTIONS ROWS (X=420..1340, Width=920, Y=145..980)
+    -- COLUMN 2: OPTIONS ROWS (X=420..1320, Width=900, Y=200..980)
     -- ==========================================================================
     if tab == 1 then
         local active_cat = categories[cat_idx] or "ALL MODS"
@@ -4241,51 +4239,51 @@ local function draw_menu_overlay()
         local sel = UniversalState.menu_selected or 1
         if sel > total then sel = math.max(1, total); UniversalState.menu_selected = sel end
 
-        local page_size = 14
+        local page_size = 13
         local page = floor((sel - 1) / page_size)
         local total_pages = math.max(1, math.ceil(total / page_size))
         local start_idx = page * page_size + 1
         local end_idx = min(total, start_idx + page_size - 1)
 
         draw_text(format("%s  ·  %d OPTIONS (PAGE %d / %d)", active_cat:upper(), total, page + 1, total_pages),
-            420, 138, 15, 245, 245, 245, 255, 995)
+            420, 195, 15, 245, 245, 245, 255, 995)
 
         for i = start_idx, end_idx do
             local id = opt_keys[i]
             local spec = ModOptionsMenu.registered[id]
             local val = ModOptionsMenu.get(id)
             local is_sel = (i == sel)
-            local ry = 145 + (i - start_idx) * 60
+            local ry = 200 + (i - start_idx) * 60
 
             local opt_label = resolve_text(spec and spec.label, id)
             local row_title = opt_label
-            if #row_title > 50 then row_title = row_title:sub(1, 47) .. "..." end
+            if #row_title > 48 then row_title = row_title:sub(1, 45) .. "..." end
 
             if is_sel then
-                draw_rect(420, ry, 920, 54, 255, 232, 0, 255, 984)
-                draw_rect(422, ry + 2, 916, 50, 28, 36, 48, 255, 985)
+                draw_rect(420, ry, 900, 54, 255, 232, 0, 255, 984)
+                draw_rect(422, ry + 2, 896, 50, 28, 36, 48, 255, 985)
                 draw_text(row_title, 444, ry + 35, 16, 255, 255, 255, 255, 995)
             else
-                draw_rect(420, ry, 920, 54, 14, 18, 26, 220, 983)
-                draw_rect(420, ry + 53, 920, 1, 40, 50, 62, 180, 984)
-                draw_text(row_title, 444, ry + 35, 16, 225, 230, 235, 255, 995)
+                draw_rect(420, ry, 900, 54, 16, 22, 30, 220, 983)
+                draw_rect(420, ry + 53, 900, 1, 38, 48, 62, 180, 984)
+                draw_text(row_title, 444, ry + 35, 16, 215, 222, 230, 255, 995)
             end
 
             -- Authentic Helldivers 2 Control Widgets
             local otype = spec and spec.type
             if otype == "toggle" or otype == "boolean" or (otype == nil and type(val) == "boolean") then
                 local is_on = (val == true)
-                draw_triangle_left(1060, ry + 27, 255, 255, 255, 255, 995)
-                draw_triangle_right(1310, ry + 27, 255, 255, 255, 255, 995)
+                draw_triangle_left(1050, ry + 27, 255, 255, 255, 255, 995)
+                draw_triangle_right(1270, ry + 27, 255, 255, 255, 255, 995)
 
                 local vtext = is_on and "ON" or "OFF"
-                draw_text(vtext, 1175, ry + 32, 16, 255, 255, 255, 255, 995)
+                draw_text(vtext, 1150, ry + 32, 16, 255, 255, 255, 255, 995)
 
                 -- 2 Segmented Horizontal Bars
-                local off_c = not is_on and 255 or 80
-                local on_c = is_on and 255 or 80
-                draw_rect(1090, ry + 42, 90, 3, off_c, off_c, off_c, 255, 988)
-                draw_rect(1190, ry + 42, 90, 3, on_c, on_c, on_c, 255, 988)
+                local off_c = not is_on and 255 or 75
+                local on_c = is_on and 255 or 75
+                draw_rect(1080, ry + 42, 88, not is_on and 3 or 2, off_c, off_c, off_c, 255, 988)
+                draw_rect(1180, ry + 42, 88, is_on and 3 or 2, on_c, on_c, on_c, 255, 988)
 
             elseif otype == "choice" or (spec and type(spec.choices) == "table" and #spec.choices > 0) then
                 local choices = spec.choices
@@ -4294,19 +4292,19 @@ local function draw_menu_overlay()
                 local choice_lbl = resolve_text(choices[c_idx], tostring(c_idx))
                 if #choice_lbl > 18 then choice_lbl = choice_lbl:sub(1, 15) .. "..." end
 
-                draw_triangle_left(1060, ry + 27, 255, 255, 255, 255, 995)
-                draw_triangle_right(1310, ry + 27, 255, 255, 255, 255, 995)
+                draw_triangle_left(1050, ry + 27, 255, 255, 255, 255, 995)
+                draw_triangle_right(1270, ry + 27, 255, 255, 255, 255, 995)
 
-                draw_text(choice_lbl:upper(), 1130, ry + 32, 15, 255, 232, 0, 255, 995)
+                draw_text(choice_lbl:upper(), 1110, ry + 32, 15, 255, 232, 0, 255, 995)
 
                 -- N Segmented Bars
-                local total_w = 190
+                local total_w = 180
                 local gap = 6
                 local sw = math.max(6, floor((total_w - (count - 1) * gap) / count))
                 for si = 1, count do
-                    local sx = 1095 + (si - 1) * (sw + gap)
+                    local sx = 1085 + (si - 1) * (sw + gap)
                     local is_cur = (si == c_idx)
-                    local sc = is_cur and 255 or 80
+                    local sc = is_cur and 255 or 75
                     draw_rect(sx, ry + 42, sw, is_cur and 3 or 2, sc, sc, sc, 255, 988)
                 end
 
@@ -4315,28 +4313,28 @@ local function draw_menu_overlay()
                 local min_v = tonumber(spec and spec.min)
                 local max_v = tonumber(spec and spec.max)
 
-                draw_rect(1080, ry + 24, 190, 6, 45, 55, 70, 255, 986)
-                local fill_w = 95
+                draw_rect(1040, ry + 24, 180, 6, 45, 55, 70, 255, 986)
+                local fill_w = 90
                 if min_v and max_v and max_v > min_v then
                     local ratio = (num - min_v) / (max_v - min_v)
                     if ratio < 0 then ratio = 0 elseif ratio > 1 then ratio = 1 end
-                    fill_w = math.max(2, floor(190 * ratio))
+                    fill_w = math.max(2, floor(180 * ratio))
                 end
-                draw_rect(1080, ry + 24, fill_w, 6, 255, 255, 255, 255, 988)
-                draw_rect(1080 + fill_w - 3, ry + 18, 6, 18, 255, 255, 255, 255, 990)
-                draw_text(format("%.2f", num), 1285, ry + 33, 14, 255, 232, 0, 255, 995)
+                draw_rect(1040, ry + 24, fill_w, 6, 255, 255, 255, 255, 988)
+                draw_rect(1040 + fill_w - 3, ry + 18, 6, 18, 255, 255, 255, 255, 990)
+                draw_text(format("%.2f", num), 1235, ry + 33, 14, 255, 232, 0, 255, 995)
             else
                 local val_str, vr, vg, vb = format_option_value(spec, val)
-                draw_text(val_str, 1140, ry + 33, 15, vr, vg, vb, 255, 995)
+                draw_text(val_str, 1120, ry + 33, 15, vr, vg, vb, 255, 995)
             end
         end
 
         if total == 0 then
-            draw_text("No configurable mod options registered in this category.", 444, 220, 16, 160, 170, 180, 255, 995)
+            draw_text("No configurable mod options registered in this category.", 444, 250, 16, 160, 170, 180, 255, 995)
         end
 
         -- ==========================================================================
-        -- COLUMN 3: SELECTED OPTION DESCRIPTION BOX (X=1370..1850, Width=480)
+        -- COLUMN 3: SELECTED OPTION DESCRIPTION BOX (X=1360..1870, Width=510)
         -- ==========================================================================
         local sel_id = opt_keys[sel]
         local sel_spec = sel_id and ModOptionsMenu.registered[sel_id]
@@ -4348,30 +4346,30 @@ local function draw_menu_overlay()
             local desc_str = resolve_text(sel_spec.description or sel_spec.tooltip or sel_spec.help,
                 "No additional description provided by the mod author.")
 
-            draw_text(sel_lbl:upper(), 1370, 165, 22, 255, 255, 255, 255, 995)
-            draw_rect(1370, 185, 480, 2, 80, 95, 115, 220, 984)
+            draw_text(sel_lbl:upper(), 1360, 220, 20, 255, 255, 255, 255, 995)
+            draw_rect(1360, 240, 510, 2, 75, 90, 110, 220, 984)
 
-            local desc_lines = wrap_text_lines(desc_str, 42, 16)
-            local dy = 215
+            local desc_lines = wrap_text_lines(desc_str, 44, 16)
+            local dy = 270
             for li = 1, #desc_lines do
-                draw_text(desc_lines[li], 1370, dy, 15, 215, 225, 235, 255, 995)
+                draw_text(desc_lines[li], 1360, dy, 15, 215, 225, 235, 255, 995)
                 dy = dy + 25
             end
 
-            local iy = math.max(dy + 20, 680)
-            draw_rect(1370, iy, 480, 90, 20, 28, 40, 240, 984)
-            draw_rect(1370, iy, 480, 1, 45, 62, 85, 200, 985)
-            draw_text(format("MOD:      %s", sel_mod), 1390, iy + 26, 14, 200, 215, 235, 255, 995)
-            draw_text(format("CURRENT:  %s", cur_str), 1390, iy + 52, 14, cr, cg, cb, 255, 995)
-            draw_text(format("DEFAULT:  %s", def_str), 1390, iy + 76, 14, 155, 175, 198, 255, 992)
+            local iy = math.max(dy + 25, 700)
+            draw_rect(1360, iy, 510, 90, 20, 28, 40, 240, 984)
+            draw_rect(1360, iy, 510, 1, 45, 62, 85, 200, 985)
+            draw_text(format("MOD:      %s", sel_mod), 1380, iy + 26, 14, 200, 215, 235, 255, 995)
+            draw_text(format("CURRENT:  %s", cur_str), 1380, iy + 52, 14, cr, cg, cb, 255, 995)
+            draw_text(format("DEFAULT:  %s", def_str), 1380, iy + 76, 14, 155, 175, 198, 255, 992)
 
-            draw_rect(1370, 880, 480, 46, 28, 36, 48, 245, 984)
-            draw_rect(1370, 923, 480, 3, 235, 185, 55, 255, 986)
+            draw_rect(1360, 880, 510, 46, 28, 36, 48, 245, 984)
+            draw_rect(1360, 923, 510, 3, 235, 185, 55, 255, 986)
             draw_text("[ BACKSPACE / R-CLICK ]  RESET TO DEFAULT", 1420, 908, 14, 255, 220, 130, 255, 995)
         end
 
     -- ==========================================================================
-    -- TAB 2: KEY BINDINGS (Column 2: X=420..1340, Width=920, Y=145..980)
+    -- TAB 2: KEY BINDINGS (Column 2: X=420..1320, Width=900, Y=200..980)
     -- ==========================================================================
     elseif tab == 2 then
         local bind_list = ModBindingsMenu.order
@@ -4379,59 +4377,59 @@ local function draw_menu_overlay()
         local sel = UniversalState.menu_selected or 1
         if sel > total then sel = math.max(1, total); UniversalState.menu_selected = sel end
 
-        local page_size = 14
+        local page_size = 13
         local page = floor((sel - 1) / page_size)
         local total_pages = math.max(1, math.ceil(total / page_size))
         local start_idx = page * page_size + 1
         local end_idx = min(total, start_idx + page_size - 1)
 
         draw_text(format("KEY BINDINGS  ·  %d BINDINGS (PAGE %d / %d)", total, page + 1, total_pages),
-            420, 138, 15, 245, 245, 245, 255, 995)
+            420, 195, 15, 245, 245, 245, 255, 995)
 
         for i = start_idx, end_idx do
             local record = bind_list[i]
             local current_key = ModBindingsMenu.binding(record.id)
             local is_sel = (i == sel)
             local is_rebinding = (UniversalState.menu_rebind_id == record.id)
-            local ry = 145 + (i - start_idx) * 60
+            local ry = 200 + (i - start_idx) * 60
 
             local lbl_str = resolve_text(record.raw_label or record.label, record.id)
             local row_title = lbl_str
-            if #row_title > 50 then row_title = row_title:sub(1, 47) .. "..." end
+            if #row_title > 48 then row_title = row_title:sub(1, 45) .. "..." end
 
             if is_rebinding then
-                draw_rect(420, ry, 920, 54, 165, 90, 20, 245, 984)
+                draw_rect(420, ry, 900, 54, 165, 90, 20, 245, 984)
                 draw_rect(420, ry, 5, 54, 255, 235, 120, 255, 986)
                 draw_text(row_title, 444, ry + 35, 16, 255, 250, 210, 255, 995)
-                draw_text(">> PRESS ANY KEY (ESC: CANCEL / DEL: UNBIND) <<", 850, ry + 35, 14, 255, 240, 150, 255, 995)
+                draw_text(">> PRESS ANY KEY (ESC: CANCEL / DEL: UNBIND) <<", 830, ry + 35, 14, 255, 240, 150, 255, 995)
             elseif is_sel then
-                draw_rect(420, ry, 920, 54, 255, 232, 0, 255, 984)
-                draw_rect(422, ry + 2, 916, 50, 28, 36, 48, 255, 985)
+                draw_rect(420, ry, 900, 54, 255, 232, 0, 255, 984)
+                draw_rect(422, ry + 2, 896, 50, 28, 36, 48, 255, 985)
                 draw_text(row_title, 444, ry + 35, 16, 255, 255, 255, 255, 995)
 
-                draw_rect(1080, ry + 11, 140, 32, 20, 24, 30, 255, 986)
-                draw_rect(1080, ry + 11, 140, 1, 160, 170, 180, 255, 987)
-                draw_rect(1080, ry + 42, 140, 1, 160, 170, 180, 255, 987)
-                draw_rect(1080, ry + 11, 1, 32, 160, 170, 180, 255, 987)
-                draw_rect(1219, ry + 11, 1, 32, 160, 170, 180, 255, 987)
-                draw_text(format("[ %s ]", tostring(current_key):upper()), 1100, ry + 33, 14, 255, 232, 0, 255, 995)
+                draw_rect(1060, ry + 11, 140, 32, 20, 24, 30, 255, 986)
+                draw_rect(1060, ry + 11, 140, 1, 160, 170, 180, 255, 987)
+                draw_rect(1060, ry + 42, 140, 1, 160, 170, 180, 255, 987)
+                draw_rect(1060, ry + 11, 1, 32, 160, 170, 180, 255, 987)
+                draw_rect(1199, ry + 11, 1, 32, 160, 170, 180, 255, 987)
+                draw_text(format("[ %s ]", tostring(current_key):upper()), 1080, ry + 33, 14, 255, 232, 0, 255, 995)
 
-                draw_rect(1235, ry + 11, 80, 32, 45, 30, 34, 240, 986)
-                draw_text("RESET", 1255, ry + 33, 13, 245, 195, 195, 255, 995)
+                draw_rect(1215, ry + 11, 85, 32, 45, 30, 34, 240, 986)
+                draw_text("RESET", 1235, ry + 33, 13, 245, 195, 195, 255, 995)
             else
-                draw_rect(420, ry, 920, 54, 14, 18, 26, 220, 983)
-                draw_rect(420, ry + 53, 920, 1, 40, 50, 62, 180, 984)
-                draw_text(row_title, 444, ry + 35, 16, 225, 230, 235, 255, 995)
+                draw_rect(420, ry, 900, 54, 16, 22, 30, 220, 983)
+                draw_rect(420, ry + 53, 900, 1, 38, 48, 62, 180, 984)
+                draw_text(row_title, 444, ry + 35, 16, 215, 222, 230, 255, 995)
 
-                draw_rect(1080, ry + 11, 140, 32, 20, 24, 30, 220, 986)
-                draw_rect(1080, ry + 11, 140, 1, 70, 80, 95, 200, 987)
-                draw_rect(1080, ry + 42, 140, 1, 70, 80, 95, 200, 987)
-                draw_rect(1080, ry + 11, 1, 32, 70, 80, 95, 200, 987)
-                draw_rect(1219, ry + 11, 1, 32, 70, 80, 95, 200, 987)
-                draw_text(format("[ %s ]", tostring(current_key):upper()), 1100, ry + 33, 14, 160, 210, 245, 255, 995)
+                draw_rect(1060, ry + 11, 140, 32, 20, 24, 30, 220, 986)
+                draw_rect(1060, ry + 11, 140, 1, 70, 80, 95, 200, 987)
+                draw_rect(1060, ry + 42, 140, 1, 70, 80, 95, 200, 987)
+                draw_rect(1060, ry + 11, 1, 32, 70, 80, 95, 200, 987)
+                draw_rect(1199, ry + 11, 1, 32, 70, 80, 95, 200, 987)
+                draw_text(format("[ %s ]", tostring(current_key):upper()), 1080, ry + 33, 14, 160, 210, 245, 255, 995)
 
-                draw_rect(1235, ry + 11, 80, 32, 28, 24, 28, 215, 986)
-                draw_text("RESET", 1255, ry + 33, 13, 165, 150, 155, 255, 992)
+                draw_rect(1215, ry + 11, 85, 32, 28, 24, 28, 215, 986)
+                draw_text("RESET", 1235, ry + 33, 13, 165, 150, 155, 255, 992)
             end
         end
 
@@ -4443,40 +4441,40 @@ local function draw_menu_overlay()
             local def_k = tostring(sel_rec.default or "NONE"):upper()
             local live_down = ModBindingsMenu.is_down(sel_rec.id) and "PRESSED (DOWN)" or "IDLE (UP)"
 
-            draw_text(lbl_str:upper(), 1370, 165, 22, 255, 232, 0, 255, 995)
-            draw_rect(1370, 185, 480, 2, 80, 95, 115, 220, 984)
+            draw_text(lbl_str:upper(), 1360, 220, 20, 255, 232, 0, 255, 995)
+            draw_rect(1360, 240, 510, 2, 75, 90, 110, 220, 984)
 
-            draw_rect(1370, 205, 480, 115, 20, 28, 40, 240, 984)
-            draw_rect(1370, 205, 480, 1, 45, 62, 85, 200, 985)
-            draw_text(format("MOD:          %s", cat_str), 1390, 232, 14, 200, 215, 235, 255, 995)
-            draw_text(format("BOUND KEY:    [%s]", cur_k), 1390, 258, 14, 125, 220, 255, 255, 995)
-            draw_text(format("DEFAULT KEY:  [%s]", def_k), 1390, 284, 14, 155, 175, 198, 255, 992)
-            draw_text(format("LIVE STATE:   %s", live_down), 1390, 310, 14, 90, 235, 130, 255, 995)
+            draw_rect(1360, 260, 510, 115, 20, 28, 40, 240, 984)
+            draw_rect(1360, 260, 510, 1, 45, 62, 85, 200, 985)
+            draw_text(format("MOD:          %s", cat_str), 1380, 287, 14, 200, 215, 235, 255, 995)
+            draw_text(format("BOUND KEY:    [%s]", cur_k), 1380, 313, 14, 125, 220, 255, 255, 995)
+            draw_text(format("DEFAULT KEY:  [%s]", def_k), 1380, 339, 14, 155, 175, 198, 255, 992)
+            draw_text(format("LIVE STATE:   %s", live_down), 1380, 365, 14, 90, 235, 130, 255, 995)
 
             local help_lines = wrap_text_lines(
                 "Click the binding row to capture a new keyboard or mouse button. Press Delete to unbind, Escape or Right-Click to cancel, or click RESET to restore the default keybinding.",
-                42, 8
+                44, 8
             )
-            local dy = 350
+            local dy = 405
             for li = 1, #help_lines do
-                draw_text(help_lines[li], 1370, dy, 15, 215, 225, 235, 255, 995)
+                draw_text(help_lines[li], 1360, dy, 15, 215, 225, 235, 255, 995)
                 dy = dy + 25
             end
 
-            draw_rect(1370, 880, 480, 46, 28, 36, 48, 245, 984)
-            draw_rect(1370, 923, 480, 3, 235, 185, 55, 255, 986)
+            draw_rect(1360, 880, 510, 46, 28, 36, 48, 245, 984)
+            draw_rect(1360, 923, 510, 3, 235, 185, 55, 255, 986)
             draw_text("[ BACKSPACE / R-CLICK ]  RESET BINDING", 1420, 908, 14, 255, 220, 130, 255, 995)
         end
 
     -- ==========================================================================
-    -- TAB 3: LOADED MODS & DIAGNOSTICS (Column 2: X=420..1340, Width=920, Y=145..980)
+    -- TAB 3: LOADED MODS & DIAGNOSTICS (Column 2: X=420..1320, Width=900, Y=200..980)
     -- ==========================================================================
     elseif tab == 3 then
         local total = #mods_list
         local sel = UniversalState.menu_selected or 1
         if sel > total then sel = math.max(1, total); UniversalState.menu_selected = sel end
 
-        local page_size = 14
+        local page_size = 13
         local page = floor((sel - 1) / page_size)
         local total_pages = math.max(1, math.ceil(total / page_size))
         local start_idx = page * page_size + 1
@@ -4484,12 +4482,12 @@ local function draw_menu_overlay()
 
         draw_text(format("LOADED MODS  ·  ACTIVE: %d / %d (HEAP: %d KB)",
             total_mods, total, floor(collectgarbage("count"))),
-            420, 138, 15, 245, 245, 245, 255, 995)
+            420, 195, 15, 245, 245, 245, 255, 995)
 
         for i = start_idx, end_idx do
             local item = mods_list[i]
             local is_sel = (i == sel)
-            local ry = 145 + (i - start_idx) * 60
+            local ry = 200 + (i - start_idx) * 60
 
             local badge = item.enabled and "[ENABLED]" or "[DISABLED]"
             local br, bg, bb = item.enabled and 85 or 255, item.enabled and 235 or 120, item.enabled and 125 or 120
@@ -4497,62 +4495,62 @@ local function draw_menu_overlay()
             local cost_str = format("%.2f ms", (item.frame_cost_ms or 0.0) * 1000)
 
             if is_sel then
-                draw_rect(420, ry, 920, 54, 255, 232, 0, 255, 984)
-                draw_rect(422, ry + 2, 916, 50, 28, 36, 48, 255, 985)
+                draw_rect(420, ry, 900, 54, 255, 232, 0, 255, 984)
+                draw_rect(422, ry + 2, 896, 50, 28, 36, 48, 255, 985)
                 draw_text(tostring(item.name), 444, ry + 35, 16, 255, 255, 255, 255, 995)
             else
-                draw_rect(420, ry, 920, 54, 14, 18, 26, 220, 983)
-                draw_rect(420, ry + 53, 920, 1, 40, 50, 62, 180, 984)
-                draw_text(tostring(item.name), 444, ry + 35, 16, 225, 230, 235, 255, 995)
+                draw_rect(420, ry, 900, 54, 16, 22, 30, 220, 983)
+                draw_rect(420, ry + 53, 900, 1, 38, 48, 62, 180, 984)
+                draw_text(tostring(item.name), 444, ry + 35, 16, 215, 222, 230, 255, 995)
             end
 
-            draw_text(src_label, 880, ry + 35, 13, 140, 160, 185, 255, 992)
-            draw_text(cost_str, 1070, ry + 35, 13, 245, 215, 90, 255, 995)
-            draw_text(badge, 1200, ry + 35, 14, br, bg, bb, 255, 995)
+            draw_text(src_label, 860, ry + 35, 13, 140, 160, 185, 255, 992)
+            draw_text(cost_str, 1050, ry + 35, 13, 245, 215, 90, 255, 995)
+            draw_text(badge, 1180, ry + 35, 14, br, bg, bb, 255, 995)
         end
 
         local sel_mod = mods_list[sel]
         if sel_mod then
-            draw_text(tostring(sel_mod.name):upper(), 1370, 165, 22, 255, 232, 0, 255, 995)
-            draw_rect(1370, 185, 480, 2, 80, 95, 115, 220, 984)
+            draw_text(tostring(sel_mod.name):upper(), 1360, 220, 20, 255, 232, 0, 255, 995)
+            draw_rect(1360, 240, 510, 2, 75, 90, 110, 220, 984)
 
             local src_desc = format("Archive: %s  |  Source: %s", tostring(sel_mod.archive), tostring(sel_mod.source_type))
-            draw_text(src_desc, 1390, 215, 14, 200, 215, 235, 255, 995)
+            draw_text(src_desc, 1380, 270, 14, 200, 215, 235, 255, 995)
             local st_label = sel_mod.enabled and "ACTIVE & RUNNING" or "DISABLED (SUPPRESSED)"
             local sr_c = sel_mod.enabled and {90, 235, 130} or {245, 120, 120}
-            draw_text(format("STATE:    %s", st_label), 1390, 240, 14, sr_c[1], sr_c[2], sr_c[3], 255, 995)
-            draw_text(format("CPU COST: %.3f ms (avg per frame)", sel_mod.frame_cost_ms or 0.0), 1390, 265, 14, 245, 215, 90, 255, 995)
+            draw_text(format("STATE:    %s", st_label), 1380, 295, 14, sr_c[1], sr_c[2], sr_c[3], 255, 995)
+            draw_text(format("CPU COST: %.3f ms (avg per frame)", sel_mod.frame_cost_ms or 0.0), 1380, 320, 14, 245, 215, 90, 255, 995)
 
             local dlines = wrap_text_lines(
                 "Dynamic runtime mod loading active. Toggle mod execution dynamically below, or press R to trigger a hot-reload of all patches from disk.",
-                42, 10
+                44, 10
             )
-            local dy = 310
+            local dy = 365
             for li = 1, #dlines do
-                draw_text(dlines[li], 1370, dy, 15, 215, 225, 235, 255, 995)
+                draw_text(dlines[li], 1360, dy, 15, 215, 225, 235, 255, 995)
                 dy = dy + 25
             end
 
             -- Toggle Button
             local tog_text = sel_mod.enabled and "[ CLICK TO DISABLE MOD ]" or "[ CLICK TO ENABLE MOD ]"
             local t_r, t_g, t_b = sel_mod.enabled and 165 or 40, sel_mod.enabled and 50 or 150, sel_mod.enabled and 50 or 75
-            draw_rect(1370, 825, 480, 46, t_r, t_g, t_b, 240, 984)
-            draw_text(tog_text, 1460, 853, 15, 255, 255, 255, 255, 995)
+            draw_rect(1360, 825, 510, 46, t_r, t_g, t_b, 240, 984)
+            draw_text(tog_text, 1450, 853, 15, 255, 255, 255, 255, 995)
 
             -- Reload button
-            draw_rect(1370, 880, 480, 46, 28, 36, 48, 240, 984)
-            draw_rect(1370, 923, 480, 3, 235, 185, 55, 255, 986)
-            draw_text("[ R ]  RELOAD ALL MODS (HOT-RELOAD)", 1445, 908, 14, 255, 225, 120, 255, 995)
+            draw_rect(1360, 880, 510, 46, 28, 36, 48, 240, 984)
+            draw_rect(1360, 923, 510, 3, 235, 185, 55, 255, 986)
+            draw_text("[ R ]  RELOAD ALL MODS (HOT-RELOAD)", 1435, 908, 14, 255, 225, 120, 255, 995)
         end
     end
 
     -- ==========================================================================
-    -- NATIVE FOOTER NAVIGATION BAR (Y=1025)
+    -- NATIVE FOOTER NAVIGATION BAR (Y=1040)
     -- ==========================================================================
-    draw_text("ESC  BACK", 60, 1030, 15, 220, 225, 235, 255, 995)
-    draw_text("TAB  APPLY", 220, 1030, 15, 255, 232, 0, 255, 995)
-    draw_text("R  RESET TO DEFAULT", 390, 1030, 15, 200, 215, 235, 255, 995)
-    draw_text("MOUSE: Click / Drag  |  WHEEL: Scroll  |  Q/E: Categories", 1320, 1030, 13, 140, 155, 175, 255, 995)
+    draw_text("ESC  BACK", 60, 1040, 15, 220, 225, 235, 255, 995)
+    draw_text("TAB  APPLY", 220, 1040, 15, 255, 232, 0, 255, 995)
+    draw_text("R  RESET TO DEFAULT", 390, 1040, 15, 200, 215, 235, 255, 995)
+    draw_text("MOUSE: Click / Drag  |  WHEEL: Scroll  |  Q/E: Categories", 1320, 1040, 13, 140, 155, 175, 255, 995)
 
     -- Toast Notifications
     if UniversalState.toast and UniversalState.toast.expire_at and UniversalState.toast.expire_at > os.clock() then
