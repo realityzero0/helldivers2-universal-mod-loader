@@ -2,11 +2,11 @@
   "Version": 1,
   "Guid": "8c41f92e-3990-4c6e-8260-93a8d9d52b11",
   "Name": "Helldivers 2 Universal Mod Loader - v1.0.0",
-  "Description": "Universal pure-Lua 5.1 mod loader combining Bingus, Chef, BootModLoader, and HD2Runtime with built-in Options & Bindings menus, Dynamic Live Mod Loading, and Real-Time Frame Profiler.",
+  "Description": "Definitive pure-Lua 5.1 universal mod loader for Helldivers 2. Unifies CowboyBingus, ChefSharedLoader, BootModLoader, and HD2Runtime with circuit-breaker crash isolation and polymorphic options/bindings menus.",
   "Options": [
     {
       "Name": "Universal Mod Loader - v1.0.0",
-      "Description": "Universal pure-Lua 5.1 mod loader combining Bingus, Chef, BootModLoader, and HD2Runtime with built-in Options & Bindings menus, Dynamic Live Mod Loading, and Real-Time Frame Profiler.",
+      "Description": "Definitive pure-Lua 5.1 universal mod loader for Helldivers 2. Unifies CowboyBingus, ChefSharedLoader, BootModLoader, and HD2Runtime with circuit-breaker crash isolation and polymorphic options/bindings menus.",
       "Include": [
         "data"
       ],

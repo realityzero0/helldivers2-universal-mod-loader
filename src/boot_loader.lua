@@ -404,7 +404,10 @@ function _G.tonumber(val, base)
     if type(val) == "table" and getmetatable(val) and getmetatable(val).__tonumber then
         return getmetatable(val).__tonumber(val)
     end
-    return orig_tonumber(val, base)
+    if base ~= nil then
+        return orig_tonumber(val, base)
+    end
+    return orig_tonumber(val)
 end
 
 local mock_ptr_mt
@@ -556,27 +559,232 @@ local jit_stub = {
 _G.jit = jit_stub
 
 -- ==============================================================================
--- 5. BINGUS SHARED RUNTIME v1 (100% pure Lua)
+-- 5. BINGUS SHARED RUNTIME v1 (100% pure Lua with Canonical Guard & Statuses)
 -- ==============================================================================
 local bingus_runtime = (function()
-    local runtime = {version = 1, hashes = {}, statuses = {}, versions = {[1] = true}}
+    local M = { VERSION = 1, version = 1 }
+    local RT_KEY = "BingusRuntime"
+    local SUBTABLES = { "hashes", "statuses", "versions" }
 
-    function runtime.hash(content)
+    function M.hash(content)
         return murmur64_key(content)
     end
 
-    function runtime.status(name)
-        return runtime.statuses[name]
+    function M.status(name)
+        local rt = rawget(_G, RT_KEY)
+        if rt and rt.statuses then
+            return rt.statuses[name] or rt.statuses
+        end
+        return {}
     end
 
-    function runtime.shared(environment)
-        environment = environment or _G
-        environment.BingusRuntime = runtime
+    function M.shared(env)
+        env = env or _G
+        local rt = rawget(env, RT_KEY)
+        if type(rt) ~= "table" then
+            rt = {}
+            rawset(env, RT_KEY, rt)
+        end
+        for _, k in ipairs(SUBTABLES) do
+            if type(rawget(rt, k)) ~= "table" then
+                rawset(rt, k, {})
+            end
+        end
+        if type(rawget(rt, "hash_reads")) ~= "number" then
+            rawset(rt, "hash_reads", 0)
+        end
+        rawset(rawget(rt, "versions"), M.VERSION, true)
+        if type(rawget(rt, "shared")) ~= "function" then
+            rawset(rt, "shared", M.shared)
+        end
+        if type(rawget(rt, "guard")) ~= "function" then
+            rawset(rt, "guard", M.guard)
+        end
+        if type(rawget(rt, "hash")) ~= "function" then
+            rawset(rt, "hash", M.hash)
+        end
+        if type(rawget(rt, "status")) ~= "function" then
+            rawset(rt, "status", M.status)
+        end
+        rt.version = 1
+        rt.api = 1
+        return rt
     end
 
-    return runtime
+    function M.guard(spec)
+        local name = type(spec) == "table" and spec.name
+        if type(name) ~= "string" or name == "" then
+            error("guard name required", 0)
+        end
+        local rt = M.shared(spec.env)
+        if rt.statuses[name] and rt.statuses[name].installed then
+            error("guard " .. name .. " already installed", 0)
+        end
+        local status = {
+            errors = 0,
+            installed = false,
+            lower_errors = 0,
+            pauses = 0,
+            state = "new",
+            name = name,
+            version = M.VERSION
+        }
+        rt.statuses[name] = status
+
+        local step_fn = spec.step
+        local after_fn = spec.after
+        local stop_fn = spec.stop
+        local pause_fn = spec.pause
+        local log_fn = spec.log
+        local max_errors = spec.errors or 8
+        local resume_frames = spec.resume or 60
+        local clean_frames = spec.clean or 3600
+
+        local chain_update, chain_shutdown
+        local in_flight, stopped, paused, had_error = false, false, false, false
+        local clean_count, lower_clean_count = 0, 0
+
+        local function log_msg(msg)
+            if log_fn then pcall(log_fn, msg) end
+        end
+
+        local function do_stop(reason)
+            if stopped then return end
+            stopped, paused = true, false
+            status.first_failure = status.first_failure or reason
+            status.state = "stopped: " .. reason
+            log_msg(name .. " stopped: " .. reason)
+            if stop_fn then
+                local ok, err = pcall(stop_fn, reason)
+                if not ok then status.stop_error = tostring(err) end
+            end
+        end
+
+        local function on_error(err)
+            had_error, clean_count = true, 0
+            status.errors = status.errors + 1
+            local msg = tostring(err)
+            status.first_error = status.first_error or msg
+            if status.errors == 1 then
+                status.burst_error = msg
+                log_msg(name .. " error: " .. msg)
+            end
+            if status.errors >= max_errors then
+                do_stop("stopped after " .. max_errors .. " errors: " .. status.burst_error)
+            end
+        end
+
+        local function on_lower_error()
+            lower_clean_count = 0
+            status.lower_errors = status.lower_errors + 1
+            if not pause_fn then return do_stop("the previous update failed") end
+            if status.lower_errors >= max_errors then
+                return do_stop("stopped after " .. max_errors .. " failed updates below this mod")
+            end
+            if paused then return end
+            paused = true
+            status.pauses = status.pauses + 1
+            status.state = "paused: the previous update failed"
+            log_msg(name .. " paused: the previous update failed")
+            local ok, err = pcall(pause_fn, "the previous update failed")
+            if not ok then do_stop("pause failed: " .. tostring(err)) end
+        end
+
+        local function check_resume()
+            if paused and lower_clean_count >= resume_frames then
+                paused = false
+                status.state = "running"
+                log_msg(name .. " resumed after " .. resume_frames .. " clean frames")
+            end
+        end
+
+        local function count_clean()
+            if had_error then return end
+            clean_count = clean_count + 1
+            if clean_count == clean_frames then status.errors = 0 end
+        end
+
+        local function finish_step(...)
+            in_flight = false
+            lower_clean_count = lower_clean_count + 1
+            if lower_clean_count == clean_frames then status.lower_errors = 0 end
+            if not stopped and not paused then
+                if after_fn then
+                    local ok, err = pcall(after_fn)
+                    if not ok then on_error(err) end
+                end
+                count_clean()
+            end
+            return ...
+        end
+
+        local function guarded_update(...)
+            had_error = false
+            if in_flight then
+                in_flight = false
+                if not stopped then on_lower_error() end
+            end
+            check_resume()
+            if step_fn and not stopped and not paused then
+                local ok, err = pcall(step_fn, ...)
+                if not ok then on_error(err) end
+            end
+            in_flight = true
+            return finish_step(chain_update(...))
+        end
+
+        local function guarded_shutdown(...)
+            if in_flight then
+                in_flight = false
+                status.first_failure = status.first_failure or "the previous update failed"
+            end
+            local fail = status.first_failure
+            if not stopped then
+                stopped = true
+                if stop_fn then
+                    local ok, err = pcall(stop_fn, "shutdown")
+                    if not ok then status.stop_error = tostring(err) end
+                end
+            end
+            status.state = fail and ("stopped after: " .. fail) or "stopped"
+            if chain_shutdown then return chain_shutdown(...) end
+        end
+
+        local handle = { status = status }
+
+        function handle.install()
+            local env = spec.env or _G
+            if status.installed then
+                error("guard " .. name .. " already installed", 0)
+            end
+            chain_update = rawget(env, "update")
+            if type(chain_update) ~= "function" then
+                error("game update unavailable", 0)
+            end
+            chain_shutdown = rawget(env, "shutdown")
+            rawset(env, "update", guarded_update)
+            rawset(env, "shutdown", guarded_shutdown)
+            status.installed, status.state = true, "running"
+            return handle
+        end
+
+        function handle.stop(reason)
+            do_stop(tostring(reason))
+        end
+
+        function handle.running()
+            return status.installed and not stopped
+        end
+
+        return handle
+    end
+
+    return M
 end)()
-bingus_runtime.shared(_G)
+
+_G.BingusRuntime = bingus_runtime.shared(_G)
+package.preload["BingusRuntime"] = function() return _G.BingusRuntime end
+package.loaded["BingusRuntime"] = _G.BingusRuntime
 
 -- ==============================================================================
 -- 6. MULTI-STANDARD MOD LOADER GLOBALS & APIS
@@ -587,17 +795,35 @@ local loaded_modules = {}
 -- 1. CowboyBingusModLoader & HD2ModLoader
 local loader_state = {
     api = 1,
+    api_version = 1,
     version = 17,
     revision = "loader-v1.0.0-universal",
     modules = loaded_modules,
     capabilities = {
         api = 1,
+        api_version = 1,
         logs = true,
         discovery = true,
         after_startup = true,
         on_update = true,
-        on_shutdown = true
+        on_shutdown = true,
+        dynamic_hot_reload = true,
+        circuit_breaker = true
     },
+    open_log = function(filename)
+        local appdata = os.getenv and os.getenv("LOCALAPPDATA")
+        if appdata and filename then
+            local dir = appdata .. "/CowboyBingus/Helldivers2/Logs"
+            pcall(function() os.execute('mkdir "' .. dir:gsub('/', '\\') .. '" 2>nul') end)
+            local f = io.open(dir .. "/" .. filename, "a")
+            if f then return f end
+        end
+        return {
+            write = function() end,
+            flush = function() end,
+            close = function() end
+        }
+    end,
     after_startup = function(fn)
         if type(fn) == "function" then
             table.insert(after_startup_queue, fn)
@@ -606,6 +832,10 @@ local loader_state = {
         return false
     end,
     on_update = function(id, fn)
+        if type(id) == "function" and fn == nil then
+            fn = id
+            id = "anonymous_" .. tostring(fn)
+        end
         if type(id) ~= "string" or id == "" then return false end
         if update_hooks[id] == nil and fn ~= nil then
             update_order[#update_order + 1] = id
@@ -614,6 +844,10 @@ local loader_state = {
         return true
     end,
     on_shutdown = function(id, fn)
+        if type(id) == "function" and fn == nil then
+            fn = id
+            id = "anonymous_" .. tostring(fn)
+        end
         if type(id) ~= "string" or id == "" then return false end
         if shutdown_hooks[id] == nil and fn ~= nil then
             shutdown_order[#shutdown_order + 1] = id
@@ -626,13 +860,22 @@ rawset(_G, "CowboyBingusModLoader", loader_state)
 rawset(_G, "HD2ModLoader", loader_state)
 
 -- 2. Boot Mod Loader (VeganSquid)
-local BootModLoader = {
+local BootModLoader
+BootModLoader = {
     api = 1,
+    api_version = 1,
     version = 1,
-    hooks = {},
+    hooks = setmetatable({}, {
+        __index = function(t, k)
+            local list = {}
+            rawset(t, k, list)
+            return list
+        end
+    }),
     hook = function(target, fn)
         if type(target) == "string" and type(fn) == "function" then
             table.insert(BootModLoader.hooks, { target = target, fn = fn })
+            table.insert(BootModLoader.hooks[target], fn)
             return true
         end
         return false
@@ -646,6 +889,7 @@ package.loaded["BootModLoader"] = BootModLoader
 local hd2rt_listeners = {}
 local hd2rt = {
     _VERSION = "0.1.0",
+    version = "0.1.0",
     on = function(evt, cb)
         if type(evt) == "string" and type(cb) == "function" then
             hd2rt_listeners[evt] = hd2rt_listeners[evt] or {}
@@ -666,9 +910,11 @@ local hd2rt = {
     end
 }
 _G.hd2rt = hd2rt
+_G.hd2runtime = hd2rt
 package.preload["hd2rt"] = function() return hd2rt end
 package.preload["hd2runtime"] = function() return hd2rt end
 package.loaded["hd2rt"] = hd2rt
+package.loaded["hd2runtime"] = hd2rt
 
 -- 4. Chef Shared Loader Emulation (API Levels 1, 2, 3)
 local chef_shared_state = {}
@@ -676,6 +922,8 @@ local chef_api = {
     api_level = 3,
     loader_name = "UniversalModLoader",
     loader_version = "1.0.0",
+    is_chef_loader = true,
+    is_universal_loader = true,
     on = function(event_name, callback)
         if event_name == "update" and type(callback) == "function" then
             local id = "chef_update_" .. tostring(#update_order + 1)
@@ -746,28 +994,168 @@ package.loaded["ChefSharedLoader"] = chef_api
 -- Fallback stubs for ModOptionsMenu and ModBindingsMenu so dependent mods don't crash
 -- if they register settings before mods/cowboybingus/mod_options_menu loads.
 if rawget(_G, "ModOptionsMenu") == nil then
+    local registered_opts = {}
     local fallback_opts = {}
-    local mom_stub = {
+    local order_opts = {}
+    local callbacks_opts = {}
+    local mom_stub
+    mom_stub = {
+        revision = 1,
+        values = fallback_opts,
+        registered = registered_opts,
+        order = order_opts,
+        change_callbacks = callbacks_opts,
         register_option = function(id, spec)
-            fallback_opts[id] = (type(spec) == "table" and spec.default) or nil
+            if type(id) ~= "string" or id == "" then return end
+            if not registered_opts[id] then
+                order_opts[#order_opts + 1] = id
+            end
+            registered_opts[id] = spec or {}
+            if fallback_opts[id] == nil and type(spec) == "table" then
+                fallback_opts[id] = spec.default
+            end
         end,
-        get = function(id) return fallback_opts[id] end,
-        set = function(id, v) fallback_opts[id] = v end,
-        values = fallback_opts
+        get = function(id)
+            if fallback_opts[id] ~= nil then return fallback_opts[id] end
+            local s = registered_opts[id]
+            return s and s.default
+        end,
+        set = function(id, v)
+            local old = fallback_opts[id]
+            fallback_opts[id] = v
+            mom_stub.revision = mom_stub.revision + 1
+            local cbs = callbacks_opts[id]
+            if cbs then
+                for i = 1, #cbs do
+                    pcall(cbs[i], v, old)
+                end
+            end
+        end,
+        on_change = function(id, cb)
+            if type(id) == "string" and type(cb) == "function" then
+                callbacks_opts[id] = callbacks_opts[id] or {}
+                table.insert(callbacks_opts[id], cb)
+            end
+        end,
+        reset_option = function(id)
+            local s = registered_opts[id]
+            if s and s.default ~= nil then
+                mom_stub.set(id, s.default)
+            end
+        end,
+        reset = function()
+            for id, s in pairs(registered_opts) do
+                if s and s.default ~= nil then
+                    fallback_opts[id] = s.default
+                end
+            end
+            mom_stub.revision = mom_stub.revision + 1
+        end,
+        log = function(...) end
     }
     _G.ModOptionsMenu = mom_stub
     package.preload["ModOptionsMenu"] = function() return _G.ModOptionsMenu end
+    package.loaded["ModOptionsMenu"] = _G.ModOptionsMenu
 end
 
 if rawget(_G, "ModBindingsMenu") == nil then
-    local mbm_stub = {
-        register_binding = function() end,
-        binding = function() return nil end,
-        is_down = function() return false end,
-        is_pressed = function() return false end
+    local bound_keys = {}
+    local registry_binds = {}
+    local order_binds = {}
+    local sr_keyboard = nil
+    local function get_kb()
+        if sr_keyboard ~= nil then return sr_keyboard end
+        local sr = rawget(_G, "stingray")
+        if sr and sr.Keyboard then sr_keyboard = sr.Keyboard end
+        return sr_keyboard
+    end
+
+    local mbm_stub
+    mbm_stub = {
+        revision = 1,
+        assignments = bound_keys,
+        bindings = registry_binds,
+        registry = registry_binds,
+        order = order_binds,
+        register_binding = function(id, label, default_key, extra)
+            if type(id) ~= "string" or id == "" then return end
+            if not registry_binds[id] then
+                order_binds[#order_binds + 1] = id
+            end
+            local def_k = default_key or (type(extra) == "table" and extra.default) or nil
+            registry_binds[id] = {
+                id = id,
+                label = label or id,
+                default = def_k,
+                extra = extra
+            }
+            if bound_keys[id] == nil and def_k ~= nil then
+                bound_keys[id] = def_k
+            end
+        end,
+        binding = function(id)
+            return bound_keys[id] or (registry_binds[id] and registry_binds[id].default)
+        end,
+        get_binding = function(id)
+            return bound_keys[id] or (registry_binds[id] and registry_binds[id].default)
+        end,
+        set_binding = function(id, key)
+            bound_keys[id] = key
+            mbm_stub.revision = mbm_stub.revision + 1
+        end,
+        reset_binding = function(id)
+            local rec = registry_binds[id]
+            if rec and rec.default then
+                bound_keys[id] = rec.default
+                mbm_stub.revision = mbm_stub.revision + 1
+            end
+        end,
+        is_down = function(id)
+            local k = bound_keys[id] or (registry_binds[id] and registry_binds[id].default)
+            if not k then return false end
+            local kb = get_kb()
+            if kb and type(kb.button) == "function" and type(kb.button_id) == "function" then
+                local bid = kb.button_id(tostring(k):lower())
+                if bid then
+                    local ok, down = pcall(kb.button, bid)
+                    return ok and (down == true or (type(down) == "number" and down > 0.5))
+                end
+            end
+            return false
+        end,
+        is_pressed = function(id)
+            local k = bound_keys[id] or (registry_binds[id] and registry_binds[id].default)
+            if not k then return false end
+            local kb = get_kb()
+            if kb and type(kb.pressed) == "function" and type(kb.button_id) == "function" then
+                local bid = kb.button_id(tostring(k):lower())
+                if bid then
+                    local ok, pressed = pcall(kb.pressed, bid)
+                    return ok and pressed == true
+                end
+            end
+            return false
+        end,
+        is_released = function(id)
+            local k = bound_keys[id] or (registry_binds[id] and registry_binds[id].default)
+            if not k then return false end
+            local kb = get_kb()
+            if kb and type(kb.released) == "function" and type(kb.button_id) == "function" then
+                local bid = kb.button_id(tostring(k):lower())
+                if bid then
+                    local ok, rel = pcall(kb.released, bid)
+                    return ok and rel == true
+                end
+            end
+            return false
+        end,
+        was_pressed = function(id) return mbm_stub.is_pressed(id) end,
+        was_released = function(id) return mbm_stub.is_released(id) end,
+        log = function(...) end
     }
     _G.ModBindingsMenu = mbm_stub
     package.preload["ModBindingsMenu"] = function() return _G.ModBindingsMenu end
+    package.loaded["ModBindingsMenu"] = _G.ModBindingsMenu
 end
 
 -- ==============================================================================
@@ -795,6 +1183,10 @@ log_write("Standards Active: Bingus (API 1 / Runtime v1) | Chef (API 3) | BootMo
 -- ==============================================================================
 -- 8. COMPREHENSIVE ADDON DISCOVERY & SAFE EXECUTION GATEWAY
 -- ==============================================================================
+pcall(function()
+    package.path = package.path .. ";mods/?.lua;mods/?/init.lua;../mods/?.lua;../mods/?/init.lua"
+end)
+
 local candidate_modules = {
     -- Core UI Addon Mod (renders the native [MODS 4] 3-column menu)
     "mods/cowboybingus/mod_options_menu",
@@ -863,10 +1255,13 @@ pcall(function()
     local existing = {}
     for _, name in ipairs(candidate_modules) do existing[name] = true end
 
-    -- Check patches from patch_1 to patch_128 (patch_0 is our loader)
-    for p_num = 1, 128 do
+    -- Check patches from patch_1 to patch_256 (patch_0 is our loader)
+    for p_num = 1, 256 do
         local p_path = "data/" .. family .. ".patch_" .. p_num
         local f = open(p_path, "rb")
+        if not f then
+            f = open("../data/" .. family .. ".patch_" .. p_num, "rb")
+        end
         if f then
             local header = f:read(72)
             if header and #header >= 72 and u32(header, 0) == 0xf0000011 then

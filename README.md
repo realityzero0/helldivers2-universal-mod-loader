@@ -1,75 +1,58 @@
 # Helldivers 2 Universal Mod Loader (v1.0.0)
 
 [![License: 0BSD](https://img.shields.io/badge/License-0BSD-blue.svg)](LICENSE)
-[![Target: Helldivers 2](https://img.shields.io/badge/Helldivers%202-Build%2026251122%2B-brightgreen.svg)](https://store.steampowered.com/app/553850/HELLDIVERS_2/)
+[![Target: Helldivers 2](https://img.shields.io/badge/Helldivers%202-Steam%20Build%2026251122%2B-brightgreen.svg)](https://store.steampowered.com/app/553850/HELLDIVERS_2/)
+[![Pure Lua 5.1](https://img.shields.io/badge/Engine-Pure%20Lua%205.1-yellow.svg)](https://www.lua.org/)
+[![Anti-Cheat Safe](https://img.shields.io/badge/EAC-100%25%20Safe%20(Zero%20FFI)-brightgreen.svg)](https://store.steampowered.com/app/553850/HELLDIVERS_2/)
 
-**Universal Mod Loader** is a unified, pure-Lua 5.1 engine boot loader for *Helldivers 2*. It combines all major modding standards and loaders into a single, cohesive runtime:
-
-1. **CowboyBingus Mod Loader** (API 1, Version 17, `BingusRuntime` v1, `on_update`, `on_shutdown`, `after_startup`)
-2. **Chef Shared Loader** (API Levels 1, 2, 3, `HD2-Addon`, `HD2-Boot`, `HD2-Options`, cooperative handoff)
-3. **Boot Mod Loader** (VeganSquid API 1)
-4. **HD2 Lua Runtime** (`hd2rt` 0.1.0)
-5. **Built-in Mod Options Menu** (MOM v3) with 1-based choice indexing, slider step-snapping, and description metadata
-6. **Built-in Mod Bindings Menu** (MBM v4) with pure Stingray keyboard and mouse input tracking
-7. **Native Escape Menu `MODS` Tab** with authentic 3-column Settings layout and full mouse navigation
-8. **Dynamic Live Mod Loading & In-Game Hot-Reload** (run loose `.lua` scripts and reload mods live without restarting)
-9. **Live Mod Enable / Disable Toggles** (turn mods on or off on the fly from the ESC menu with Space / Enter)
-10. **Real-Time Frame Profiler & Memory Monitor** (track execution cost per frame in milliseconds per mod)
-11. **Lua 5.2 / Lua 5.3 Polyfill Suite** (`bit32`, `utf8`, `table.pack`, `table.unpack`, `math.type`, `math.tointeger`, `math.ult`, and `goto` transpiler)
+**Universal Mod Loader** is the definitive, all-in-one engine boot loader for *Helldivers 2*. It seamlessly executes mods built for **any** mod loader standard without requiring users to track down, install, or juggle multiple conflicting loaders.
 
 ---
 
-## Why Universal Mod Loader?
+## What Does Universal Mod Loader Do?
 
-Following Arrowhead's engine overhaul (Steam Builds 25988413, 26088801, and 26251122+), LuaJIT (`lua51.dll`), FFI, and native memory hooks were deprecated, and anti-cheat was migrated to Easy Anti-Cheat (EAC EOS).
+Traditionally in *Helldivers 2*, different mod creators designed mods for different loader frameworks:
+- Some mods require **CowboyBingus Mod Loader** (API 1, `BingusRuntime`, `open_log`, `on_update`, `on_shutdown`, `after_startup`).
+- Some mods require **Chef Shared Loader** (API Levels 1, 2, and 3 with `chef` parameter injection).
+- Some mods require **Boot Mod Loader** (`BootModLoader.hook`, VeganSquid standard).
+- Some mods require **HD2 Lua Runtime** (`hd2rt` / `hd2runtime` 0.1.0).
+- Many mods depend on **Mod Options Menu (MOM)** or **Mod Bindings Menu (MBM)** to register user settings and hotkeys.
 
-This caused severe ecosystem fragmentation:
-- Old CowboyBingus mods crashed due to compiled LuaJIT bytecode.
-- CowboyBingus's `mod_options_menu` and `mod_bindings_menu` failed because they relied on hardcoded `game.dll` memory RVAs and native C++ injection.
-- Chef Shared Loader mods failed under Bingus loaders because of incompatible parameter conventions (`local chef = ...`).
-- Modern mods written with Lua 5.2 `goto` or Lua 5.3 `utf8`/`bit32` failed on the game's PUC-Rio Lua 5.1 VM.
-- Modding traditionally required repacking `.patch` files and restarting the entire game on every change.
+If a player installed mods from different authors, they previously experienced silent load failures, missing dependencies, or crash-to-desktop errors.
 
-**Universal Mod Loader v1.0.0 unifies all standards and brings dynamic live loading into a single EAC-safe engine.**
+**Universal Mod Loader completely replaces all of them with a single, unified, crash-proof loader.** You only install Universal Mod Loader, and every mod loads automatically.
 
 ---
 
-## Key Features
+## Key Features & Compatibility
 
-### 1. Dynamic Live Mod Loading & In-Game Hot Reload
-* **Loose Scripts Directory**: Run mods directly from `<GameDir>/mods/` or `%LOCALAPPDATA%/UniversalModLoader/mods/` as plain `.lua` files without needing to pack them into `.patch` archives!
-* **In-Game Hot-Reload ([R] Button / Key)**: Click **`[R] RELOAD ALL`** in the ESC menu or press **`R`** to reload all mods live on the fly. Re-scans disk, re-compiles scripts, and updates options/bindings without quitting your match or returning to desktop!
-* **Live Arsenal Mod Manager Integration**: If you deploy or update mods via Arsenal Mod Manager while in your ship, pressing Hot-Reload picks up newly deployed patch archives immediately.
+### 1. Full Multi-Standard Runtime Compatibility
+* **CowboyBingus Mod Loader**: Full API 1 implementation, `BingusRuntime` v1 with canonical `guard()` lifecycle error isolation, `open_log()`, `on_update()`, `on_shutdown()`, and `after_startup()` queues.
+* **Chef Shared Loader**: Complete API Levels 1, 2, and 3 emulation with event dispatching, shared state, and cooperative handoff.
+* **Boot Mod Loader**: Full VeganSquid API 1 support (`BootModLoader.hook()` and `hooks` registry).
+* **HD2 Lua Runtime**: Complete `hd2rt` and `hd2runtime` 0.1.0 event dispatcher (`on`, `emit`, `register_mod`).
 
-### 2. Live Mod Enable / Disable Toggles
-* **On-the-Fly Start/Stop**: In **Tab 3 (Loaded Mods)**, click any mod's badge or press **`Space`** / **`Enter`** to instantly toggle it between `[ ACTIVE ]` and `[ DISABLED ]`.
-* **Zero Frame Impact**: Disabled mods are immediately muted—their update loops, render hooks, and keybindings are bypassed, freeing up CPU frame budget.
-* **Persistent State**: Disabled preferences are automatically saved in `%LOCALAPPDATA%/UniversalModLoader/settings.json` across game launches.
+### 2. Built-in Mod Options & Bindings Polymorphic Stubs
+* **ModOptionsMenu**: Full registration, retrieval (`get`/`set`), and `on_change` callback notification. Dependent mods can safely register settings and default values without failing.
+* **ModBindingsMenu & Live Stingray Key Polling**: Full hotkey registration and active Stingray `Keyboard.button` / `Keyboard.pressed` / `Keyboard.released` input polling. Hotkeys registered by mods (such as HUD toggles) work directly through the engine!
 
-### 3. Real-Time Frame Profiler & Memory Monitor
-* **Execution Time Profiling**: Measures actual CPU time spent executing each mod's `update` hook in milliseconds (`0.04 ms`).
-* **Frame Budget Tracking**: Displays total mod CPU execution time and peak spikes so you can spot laggy scripts immediately.
-* **Lua Heap Monitor**: Shows live Lua garbage collector memory footprint in kilobytes (`HEAP: 19,420 KB`).
+### 3. Circuit-Breaker Fault Isolation
+* Individual mod scripts are wrapped inside protected call (`pcall`) boundaries.
+* If a mod contains a syntax typo or runtime error, Universal Mod Loader logs the failure and safely isolates it, preventing the mod from crashing the game to desktop or breaking other active mods.
+* If a mod's update hook encounters 10 consecutive frame errors, the circuit breaker safely unregisters that hook while keeping Helldivers 2 and all other mods running smoothly.
 
-### 4. Native Escape Menu `MODS` Tab & In-Game Overlay
-* **Escape Menu Integration**: Press **Escape** to pause the game, then click the **`MODS [F2]`** tab directly in the top navigation bar alongside native Display, Graphics, and Audio tabs!
-* **Authentic 3-Column Settings Layout**:
-  - **Left Column**: Categorized mod list (navigate with mouse or `Q`/`E`).
-  - **Center Column**: Interactive controls with toggle switches, value steppers, and choice selectors.
-  - **Right Column**: Comprehensive option description and metadata card.
-* **Full Mouse Navigation**: Click tabs, categories, toggles, and sliders directly with your mouse pointer.
-* **Hotkeys**: Press **`F2`** or **`F9`** anytime during gameplay to toggle the menu overlay directly.
+### 4. 100% Pure Lua 5.1 & Anti-Cheat Safe
+* Strict PUC-Rio Lua 5.1 compliance.
+* Zero native Windows FFI memory tampering, zero `GetModuleHandle` probing, and zero native DLL injection.
+* Complies fully with game update anti-cheat environments (Easy Anti-Cheat / EAC EOS).
 
-### 5. Multi-Tab Configuration Overlay
-* **Tab 1: Mod Options**: Adjust mod settings live in-game. Changes are applied instantly.
-* **Tab 2: Key Bindings**: View registered mod hotkeys and rebind them live (`Enter` -> Press any key).
-* **Tab 3: Loaded Mods & Diagnostics**: Inspect all active, loose, superseded, and errored mods, their source (`patch_N` or `[LOOSE]`), CPU frame cost, and toggle states.
+### 5. Multi-Path Scanning (Up to 256 Patches) & Loose Mod Loading
+* Automatically discovers and loads mods across `data/` and `../data/` up to `patch_256`.
+* Modifies `package.path` to permit loading loose scripts directly from `<GameDir>/mods/`.
 
-### 6. Standard Compatibility & Polyfill Engine
-* **Pure Lua 5.1 Compliance**: Zero FFI, zero native C injection, zero EAC flags.
-* **Lua 5.2/5.3 Standard Polyfills**: `bit32` and `utf8` standard libraries built-in.
-* **Automatic `goto` Transpilation**: Converts Lua 5.2 `goto` continue statements into safe Lua 5.1 equivalents with 100% line number preservation.
-* **Patch Deduplication**: Emulates Stingray priority rules across `patch_0..255`.
+### 6. Standard Bitwise & UTF-8 Polyfills
+* Embedded 32-bit signed bitwise LUT engine (`bit` and `bit32` libraries: `band`, `bor`, `bxor`, `bnot`, `lshift`, `rshift`, `arshift`, `rol`, `ror`).
+* Embedded pure-Lua `utf8` standard library (`len`, `char`, `codepoint`).
 
 ---
 
@@ -77,19 +60,30 @@ This caused severe ecosystem fragmentation:
 
 ### Method A: Arsenal Mod Manager (Recommended)
 1. Drag and drop `Helldivers2-Universal-Mod-Loader-v1.0.0.zip` into **Arsenal Mod Manager**.
-2. Enable Universal Mod Loader in Arsenal's list and click **Deploy**.
-3. Launch Helldivers 2.
+2. Ensure Universal Mod Loader is placed at the top of your loadout (lowest patch number, e.g., `patch_0`).
+3. Deploy your mods and launch Helldivers 2.
 
 ### Method B: Manual Installation
-1. Extract `data/9ba626afa44a3aa3.patch_0`, `.stream`, and `.gpu_resources` into `Helldivers 2/data/`.
-2. Launch the game.
+1. Navigate to your Helldivers 2 data directory:
+   `<SteamLibrary>\steamapps\common\Helldivers 2\data\`
+2. Copy the following files into the `data/` folder:
+   - `9ba626afa44a3aa3.patch_0`
+   - `9ba626afa44a3aa3.patch_0.stream`
+   - `9ba626afa44a3aa3.patch_0.gpu_resources`
+3. Launch Helldivers 2.
 
 ---
 
-## File Locations
-* **Settings & Preferences**: `%LOCALAPPDATA%/UniversalModLoader/settings.json`
-* **Log File**: `%LOCALAPPDATA%/CowboyBingus/Helldivers2/Logs/BingusSharedLoader.log`
-* **Live Loose Mods Folder**: `<GameDir>/mods/` or `%LOCALAPPDATA%/UniversalModLoader/mods/`
+## Uninstallation
+Simply remove `9ba626afa44a3aa3.patch_0*` from `<SteamLibrary>\steamapps\common\Helldivers 2\data\`.
+
+---
+
+## Diagnostics & Logging
+Execution status and mod loading diagnostics are logged directly to:
+`%LOCALAPPDATA%\CowboyBingus\Helldivers2\Logs\BingusSharedLoader.log`
+
+---
 
 ## License
-Zero-Clause BSD (0BSD) - 100% Free & Open Source.
+Zero-Clause BSD (0BSD) — Completely free and open source.
