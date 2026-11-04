@@ -2942,16 +2942,49 @@ local ESC_TOP_MODS_BTN = { x = 1028, y = 95, w = 283, h = 80 }
 -- Win32 FFI cursor declarations removed (EAC EOS safety; pure Stingray input)
 
 local function get_gui_canvas_resolution(sr)
+    local function parse_res(a, b)
+        if type(a) == "number" and type(b) == "number" and a > 0 and b > 0 then
+            return a, b
+        end
+        if a ~= nil then
+            local x, y = nil, nil
+            if sr and sr.Vector2 and type(sr.Vector2.x) == "function" then
+                local okx, rx = pcall(sr.Vector2.x, a)
+                local oky, ry = pcall(sr.Vector2.y, a)
+                if okx and oky and type(rx) == "number" and type(ry) == "number" then
+                    x, y = rx, ry
+                end
+            end
+            if (not x or not y) and sr and sr.Vector3 and type(sr.Vector3.x) == "function" then
+                local okx, rx = pcall(sr.Vector3.x, a)
+                local oky, ry = pcall(sr.Vector3.y, a)
+                if okx and oky and type(rx) == "number" and type(ry) == "number" then
+                    x, y = rx, ry
+                end
+            end
+            if (not x or not y) and type(a) == "table" then
+                x = a.x or a[1]
+                y = a.y or a[2]
+            end
+            if type(x) == "number" and type(y) == "number" and x > 0 and y > 0 then
+                return x, y
+            end
+        end
+        return nil, nil
+    end
+
     if sr and UI_GFX and UI_GFX.gui and sr.Gui and type(sr.Gui.resolution) == "function" then
-        local ok, rw, rh = pcall(sr.Gui.resolution, UI_GFX.gui)
-        if ok and type(rw) == "number" and type(rh) == "number" and rw > 0 and rh > 0 then
-            return rw, rh
+        local ok, r1, r2 = pcall(sr.Gui.resolution, UI_GFX.gui)
+        if ok then
+            local w, h = parse_res(r1, r2)
+            if w and h then return w, h end
         end
     end
     if sr and sr.Gui and type(sr.Gui.resolution) == "function" then
-        local ok, rw, rh = pcall(sr.Gui.resolution)
-        if ok and type(rw) == "number" and type(rh) == "number" and rw > 0 and rh > 0 then
-            return rw, rh
+        local ok, r1, r2 = pcall(sr.Gui.resolution)
+        if ok then
+            local w, h = parse_res(r1, r2)
+            if w and h then return w, h end
         end
     end
     -- Default Stingray virtual canvas for "scale" GUI on 1080p is 1344x756
