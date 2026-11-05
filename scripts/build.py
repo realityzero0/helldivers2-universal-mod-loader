@@ -33,7 +33,8 @@ m["files"] = files_hashes
 manifest_path.write_text(json.dumps(m, indent=2) + "\n", encoding="utf-8")
 
 # Package ZIPs for Arsenal Mod Manager / HD2MM
-zip_out = Path(r"g:\antigravity\Helldivers2-Universal-Mod-Loader-v1.0.0.zip")
+zip_out = Path(r"g:\antigravity\Helldivers2-Universal-Mod-Loader-v1.0.1.zip")
+zip_out_compat = Path(r"g:\antigravity\Helldivers2-Universal-Mod-Loader-v1.0.0.zip")
 package_files = [
     ("UniversalModLoader-README.txt", ROOT / "UniversalModLoader-README.txt"),
     ("UniversalModLoader-manifest.json", ROOT / "UniversalModLoader-manifest.json"),
@@ -47,6 +48,8 @@ package_files = [
 with zipfile.ZipFile(zip_out, "w", compression=zipfile.ZIP_DEFLATED) as z:
     for arcname, fpath in package_files:
         z.write(fpath, arcname=arcname)
+
+shutil.copy2(zip_out, zip_out_compat)
 
 
 

@@ -1,5 +1,11 @@
 # Changelog — Helldivers 2 Universal Mod Loader
 
+## [1.0.1] - Hotfix Release
+### Fixed
+- **Launch Freeze / Black Screen on Startup**: Eliminated `os.execute` child process spawning in `open_log()` which caused Easy Anti-Cheat (EAC EOS) to suspend the engine thread and hang indefinitely on startup when dependent mods requested log handles.
+- **Mod Lifecycle Safety**: Streamlined `BingusRuntime.guard()` to prevent `_G.update` execution locks during early boot.
+- **Filesystem Path Overhead**: Cleaned package search paths to eliminate unnecessary directory probing under anti-cheat.
+
 ## [1.0.0] - Initial Release
 ### Added
 - **Multi-Standard Engine Bootloader**: Unified runtime providing native support for CowboyBingus (API 1, BingusRuntime v1), Chef Shared Loader (API Levels 1, 2, 3), Boot Mod Loader (VeganSquid API 1), and HD2 Lua Runtime (hd2rt 0.1.0).

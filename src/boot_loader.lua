@@ -1,4 +1,4 @@
--- Universal Mod Loader v1.0.0 for Helldivers 2 (Steam Builds 25988413 / 26088801 / 26251122+ / Lua 5.1)
+-- Universal Mod Loader v1.0.1 for Helldivers 2 (Steam Builds 25988413 / 26088801 / 26251122+ / Lua 5.1)
 -- Replaces engine boot resource 0xF476DF93691895FA in bundle 9ba626afa44a3aa3
 -- Unifies All Helldivers 2 Modding Standards:
 --   1. Bingus Shared Loader (CowboyBingus / v17 / v20 / v21 / API 1 + BingusRuntime v1)
@@ -12,7 +12,7 @@
 local A = rawget(_G, 'stingray') and stingray.Application
 if A and type(A.can_get) == 'function' and A.can_get('lua', 'mods/chef_shared_loader/core_1')
     and rawget(_G, 'ChefSharedLoader') == nil then
-  rawset(_G, 'ChefSharedLoaderHandoff', { from = 'Universal Mod Loader v1.0.0' })
+  rawset(_G, 'ChefSharedLoaderHandoff', { from = 'Universal Mod Loader v1.0.1' })
   local ok, err = pcall(require, 'mods/chef_shared_loader/core_1')
   if ok then return end
 end
@@ -673,7 +673,7 @@ local loader_state = {
     api = 1,
     api_version = 1,
     version = 17,
-    revision = "loader-v1.0.0-universal",
+    revision = "loader-v1.0.1-universal",
     modules = loaded_modules,
     capabilities = {
         api = 1,
@@ -1052,7 +1052,7 @@ local function log_write(msg)
     end
 end
 
-log_write("Universal Mod Loader v1.0.0 initializing on " .. _VERSION)
+log_write("Universal Mod Loader v1.0.1 initializing on " .. _VERSION)
 log_write("Standards Active: Bingus (API 1 / Runtime v1) | Chef (API 3) | BootModLoader (API 1) | HD2Runtime (0.1.0)")
 
 -- ==============================================================================
