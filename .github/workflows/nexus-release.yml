@@ -1,0 +1,62 @@
+name: Release to Nexus Mods & GitHub
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 1.0.2)'
+        required: false
+        default: '1.0.1'
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Verify Stingray Data Integrity
+        run: |
+          python scripts/verify.py
+
+      - name: Build Distribution Packages
+        run: |
+          python scripts/build.py
+
+      - name: Determine Version
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Package Release Zip
+        run: |
+          cd release_v1
+          zip -r ../Helldivers2-Universal-Mod-Loader-v${{ steps.vars.outputs.VERSION }}.zip *
+          cd ..
+
+      - name: Upload to Nexus Mods
+        uses: Nexus-Mods/upload-action@v1
+        with:
+          api_key: ${{ secrets.NEXUS_API_KEY }}
+          mod_id: ${{ secrets.NEXUS_MOD_ID }}
+          file_id: ${{ secrets.NEXUS_FILE_ID }}
+          filename: Helldivers2-Universal-Mod-Loader-v${{ steps.vars.outputs.VERSION }}.zip
+          version: ${{ steps.vars.outputs.VERSION }}
+          display_name: Helldivers 2 Universal Mod Loader v${{ steps.vars.outputs.VERSION }}
+          description: Automatically compiled and verified release package.
+          category: 'main'
+          archive_existing_version: true
+          primary_mod_manager_download: true
+          allow_mod_manager_download: true
+          update_mod_version: true

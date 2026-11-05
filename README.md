@@ -1,11 +1,15 @@
-# Helldivers 2 Universal Mod Loader (v1.0.0)
+# Helldivers 2 Universal Mod Loader (v1.0.1)
 
+[![Nexus Mods](https://img.shields.io/badge/Nexus_Mods-Mod_18527-orange?logo=nexusmods)](https://www.nexusmods.com/helldivers2/mods/18527)
 [![License: 0BSD](https://img.shields.io/badge/License-0BSD-blue.svg)](LICENSE)
 [![Target: Helldivers 2](https://img.shields.io/badge/Helldivers%202-Steam%20Build%2026251122%2B-brightgreen.svg)](https://store.steampowered.com/app/553850/HELLDIVERS_2/)
 [![Pure Lua 5.1](https://img.shields.io/badge/Engine-Pure%20Lua%205.1-yellow.svg)](https://www.lua.org/)
 [![Anti-Cheat Safe](https://img.shields.io/badge/EAC-100%25%20Safe%20(Zero%20FFI)-brightgreen.svg)](https://store.steampowered.com/app/553850/HELLDIVERS_2/)
 
 **Universal Mod Loader** is the definitive, all-in-one engine boot loader for *Helldivers 2*. It seamlessly executes mods built for **any** mod loader standard without requiring users to track down, install, or juggle multiple conflicting loaders.
+
+* **Nexus Mods:** [https://www.nexusmods.com/helldivers2/mods/18527](https://www.nexusmods.com/helldivers2/mods/18527)
+* **GitHub Repository:** [https://github.com/realityzero0/helldivers2-universal-mod-loader](https://github.com/realityzero0/helldivers2-universal-mod-loader)
 
 ---
 
@@ -43,12 +47,12 @@ If a player installed mods from different authors, they previously experienced s
 
 ### 4. 100% Pure Lua 5.1 & Anti-Cheat Safe
 * Strict PUC-Rio Lua 5.1 compliance.
-* Zero native Windows FFI memory tampering, zero `GetModuleHandle` probing, and zero native DLL injection.
+* Zero native Windows FFI memory tampering, zero `GetModuleHandle` probing, zero `os.execute` child process spawning, and zero native DLL injection.
 * Complies fully with game update anti-cheat environments (Easy Anti-Cheat / EAC EOS).
 
 ### 5. Multi-Path Scanning (Up to 256 Patches) & Loose Mod Loading
 * Automatically discovers and loads mods across `data/` and `../data/` up to `patch_256`.
-* Modifies `package.path` to permit loading loose scripts directly from `<GameDir>/mods/`.
+* Permits loading loose scripts directly from `<GameDir>/mods/` or `%LOCALAPPDATA%/UniversalModLoader/mods/`.
 
 ### 6. Standard Bitwise & UTF-8 Polyfills
 * Embedded 32-bit signed bitwise LUT engine (`bit` and `bit32` libraries: `band`, `bor`, `bxor`, `bnot`, `lshift`, `rshift`, `arshift`, `rol`, `ror`).
@@ -59,8 +63,8 @@ If a player installed mods from different authors, they previously experienced s
 ## Installation
 
 ### Method A: Arsenal Mod Manager (Recommended)
-1. Drag and drop `Helldivers2-Universal-Mod-Loader-v1.0.0.zip` into **Arsenal Mod Manager**.
-2. Ensure Universal Mod Loader is placed at the top of your loadout (lowest patch number, e.g., `patch_0`).
+1. Drag and drop `Helldivers2-Universal-Mod-Loader-v1.0.1.zip` into **Arsenal Mod Manager**.
+2. Ensure Universal Mod Loader is placed at the top of your loadout (Position 1 / lowest patch number, e.g., `patch_0`).
 3. Deploy your mods and launch Helldivers 2.
 
 ### Method B: Manual Installation
@@ -75,7 +79,7 @@ If a player installed mods from different authors, they previously experienced s
 ---
 
 ## Uninstallation
-Simply remove `9ba626afa44a3aa3.patch_0*` from `<SteamLibrary>\steamapps\common\Helldivers 2\data\`.
+Disable in your mod manager, or delete `9ba626afa44a3aa3.patch_0*` from `<SteamLibrary>\steamapps\common\Helldivers 2\data\`.
 
 ---
 
