@@ -612,170 +612,46 @@ local bingus_runtime = (function()
     end
 
     function M.guard(spec)
-        local name = type(spec) == "table" and spec.name
-        if type(name) ~= "string" or name == "" then
-            error("guard name required", 0)
-        end
-        local rt = M.shared(spec.env)
-        if rt.statuses[name] and rt.statuses[name].installed then
-            error("guard " .. name .. " already installed", 0)
-        end
+        local name = type(spec) == "table" and spec.name or "guarded_mod"
+        local rt = M.shared(spec and spec.env)
         local status = {
             errors = 0,
-            installed = false,
-            lower_errors = 0,
-            pauses = 0,
-            state = "new",
+            installed = true,
+            state = "running",
             name = name,
             version = M.VERSION
         }
         rt.statuses[name] = status
 
-        local step_fn = spec.step
-        local after_fn = spec.after
-        local stop_fn = spec.stop
-        local pause_fn = spec.pause
-        local log_fn = spec.log
-        local max_errors = spec.errors or 8
-        local resume_frames = spec.resume or 60
-        local clean_frames = spec.clean or 3600
+        local step_fn = type(spec) == "table" and spec.step
+        local stop_fn = type(spec) == "table" and spec.stop
+        local is_running = true
 
-        local chain_update, chain_shutdown
-        local in_flight, stopped, paused, had_error = false, false, false, false
-        local clean_count, lower_clean_count = 0, 0
-
-        local function log_msg(msg)
-            if log_fn then pcall(log_fn, msg) end
-        end
-
-        local function do_stop(reason)
-            if stopped then return end
-            stopped, paused = true, false
-            status.first_failure = status.first_failure or reason
-            status.state = "stopped: " .. reason
-            log_msg(name .. " stopped: " .. reason)
-            if stop_fn then
-                local ok, err = pcall(stop_fn, reason)
-                if not ok then status.stop_error = tostring(err) end
-            end
-        end
-
-        local function on_error(err)
-            had_error, clean_count = true, 0
-            status.errors = status.errors + 1
-            local msg = tostring(err)
-            status.first_error = status.first_error or msg
-            if status.errors == 1 then
-                status.burst_error = msg
-                log_msg(name .. " error: " .. msg)
-            end
-            if status.errors >= max_errors then
-                do_stop("stopped after " .. max_errors .. " errors: " .. status.burst_error)
-            end
-        end
-
-        local function on_lower_error()
-            lower_clean_count = 0
-            status.lower_errors = status.lower_errors + 1
-            if not pause_fn then return do_stop("the previous update failed") end
-            if status.lower_errors >= max_errors then
-                return do_stop("stopped after " .. max_errors .. " failed updates below this mod")
-            end
-            if paused then return end
-            paused = true
-            status.pauses = status.pauses + 1
-            status.state = "paused: the previous update failed"
-            log_msg(name .. " paused: the previous update failed")
-            local ok, err = pcall(pause_fn, "the previous update failed")
-            if not ok then do_stop("pause failed: " .. tostring(err)) end
-        end
-
-        local function check_resume()
-            if paused and lower_clean_count >= resume_frames then
-                paused = false
-                status.state = "running"
-                log_msg(name .. " resumed after " .. resume_frames .. " clean frames")
-            end
-        end
-
-        local function count_clean()
-            if had_error then return end
-            clean_count = clean_count + 1
-            if clean_count == clean_frames then status.errors = 0 end
-        end
-
-        local function finish_step(...)
-            in_flight = false
-            lower_clean_count = lower_clean_count + 1
-            if lower_clean_count == clean_frames then status.lower_errors = 0 end
-            if not stopped and not paused then
-                if after_fn then
-                    local ok, err = pcall(after_fn)
-                    if not ok then on_error(err) end
+        if step_fn then
+            CowboyBingusModLoader.on_update("guard_" .. name, function(dt, ...)
+                if is_running then
+                    local ok, err = pcall(step_fn, dt, ...)
+                    if not ok then
+                        status.errors = status.errors + 1
+                    end
                 end
-                count_clean()
-            end
-            return ...
-        end
-
-        local function guarded_update(...)
-            had_error = false
-            if in_flight then
-                in_flight = false
-                if not stopped then on_lower_error() end
-            end
-            check_resume()
-            if step_fn and not stopped and not paused then
-                local ok, err = pcall(step_fn, ...)
-                if not ok then on_error(err) end
-            end
-            in_flight = true
-            return finish_step(chain_update(...))
-        end
-
-        local function guarded_shutdown(...)
-            if in_flight then
-                in_flight = false
-                status.first_failure = status.first_failure or "the previous update failed"
-            end
-            local fail = status.first_failure
-            if not stopped then
-                stopped = true
-                if stop_fn then
-                    local ok, err = pcall(stop_fn, "shutdown")
-                    if not ok then status.stop_error = tostring(err) end
-                end
-            end
-            status.state = fail and ("stopped after: " .. fail) or "stopped"
-            if chain_shutdown then return chain_shutdown(...) end
+            end)
         end
 
         local handle = { status = status }
-
         function handle.install()
-            local env = spec.env or _G
-            if status.installed then
-                error("guard " .. name .. " already installed", 0)
-            end
-            chain_update = rawget(env, "update")
-            if type(chain_update) ~= "function" then
-                error("game update unavailable", 0)
-            end
-            chain_shutdown = rawget(env, "shutdown")
-            rawset(env, "update", guarded_update)
-            rawset(env, "shutdown", guarded_shutdown)
-            status.installed, status.state = true, "running"
+            status.installed = true
+            is_running = true
             return handle
         end
-
         function handle.stop(reason)
-            do_stop(tostring(reason))
+            is_running = false
+            status.state = "stopped: " .. tostring(reason)
+            if stop_fn then pcall(stop_fn, reason) end
         end
-
         function handle.running()
-            return status.installed and not stopped
+            return is_running
         end
-
         return handle
     end
 
@@ -813,9 +689,8 @@ local loader_state = {
     open_log = function(filename)
         local appdata = os.getenv and os.getenv("LOCALAPPDATA")
         if appdata and filename then
-            local dir = appdata .. "/CowboyBingus/Helldivers2/Logs"
-            pcall(function() os.execute('mkdir "' .. dir:gsub('/', '\\') .. '" 2>nul') end)
-            local f = io.open(dir .. "/" .. filename, "a")
+            local p = appdata .. "/CowboyBingus/Helldivers2/Logs/" .. filename
+            local f = io.open(p, "a")
             if f then return f end
         end
         return {
@@ -1183,9 +1058,7 @@ log_write("Standards Active: Bingus (API 1 / Runtime v1) | Chef (API 3) | BootMo
 -- ==============================================================================
 -- 8. COMPREHENSIVE ADDON DISCOVERY & SAFE EXECUTION GATEWAY
 -- ==============================================================================
-pcall(function()
-    package.path = package.path .. ";mods/?.lua;mods/?/init.lua;../mods/?.lua;../mods/?/init.lua"
-end)
+-- package.path untouched
 
 local candidate_modules = {
     -- Core UI Addon Mod (renders the native [MODS 4] 3-column menu)
