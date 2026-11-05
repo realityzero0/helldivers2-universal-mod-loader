@@ -1,0 +1,29 @@
+name: Sync Nexus Bug Reports to GitHub Issues
+
+on:
+  schedule:
+    - cron: '0 0,12 * * *'  # Runs twice daily at 00:00 and 12:00 UTC
+  workflow_dispatch:        # Allows manual trigger at any time
+
+jobs:
+  sync-bugs:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run Bug Sync Script
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEXUS_API_KEY: ${{ secrets.NEXUS_API_KEY }}
+        run: |
+          python scripts/sync_bugs.py

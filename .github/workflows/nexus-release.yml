@@ -13,6 +13,9 @@ on:
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -26,24 +29,21 @@ jobs:
         run: |
           python scripts/verify.py
 
-      - name: Build Distribution Packages
-        run: |
-          python scripts/build.py
-
       - name: Determine Version
         id: vars
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
           else
-            echo "VERSION=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+            # Strip leading 'v' if present in tag name
+            RAW_TAG="${{ github.event.release.tag_name }}"
+            CLEAN_VERSION="${RAW_TAG#v}"
+            echo "VERSION=${CLEAN_VERSION}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Package Release Zip
+      - name: Build Distribution Packages
         run: |
-          cd release_v1
-          zip -r ../Helldivers2-Universal-Mod-Loader-v${{ steps.vars.outputs.VERSION }}.zip *
-          cd ..
+          python scripts/build.py
 
       - name: Upload to Nexus Mods
         uses: Nexus-Mods/upload-action@v1
@@ -51,7 +51,7 @@ jobs:
           api_key: ${{ secrets.NEXUS_API_KEY }}
           mod_id: ${{ secrets.NEXUS_MOD_ID }}
           file_id: ${{ secrets.NEXUS_FILE_ID }}
-          filename: Helldivers2-Universal-Mod-Loader-v${{ steps.vars.outputs.VERSION }}.zip
+          filename: dist/Helldivers2-Universal-Mod-Loader-v${{ steps.vars.outputs.VERSION }}.zip
           version: ${{ steps.vars.outputs.VERSION }}
           display_name: Helldivers 2 Universal Mod Loader v${{ steps.vars.outputs.VERSION }}
           description: Automatically compiled and verified release package.
@@ -60,3 +60,9 @@ jobs:
           primary_mod_manager_download: true
           allow_mod_manager_download: true
           update_mod_version: true
+
+      - name: Attach Archive to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/Helldivers2-Universal-Mod-Loader-v${{ steps.vars.outputs.VERSION }}.zip

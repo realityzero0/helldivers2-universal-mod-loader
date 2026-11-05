@@ -29,12 +29,17 @@ files_hashes = {
 
 manifest_path = ROOT / "UniversalModLoader-manifest.json"
 m = json.loads(manifest_path.read_text(encoding="utf-8"))
+version = m.get("version", "1.0.1")
 m["files"] = files_hashes
 manifest_path.write_text(json.dumps(m, indent=2) + "\n", encoding="utf-8")
 
-# Package ZIPs for Arsenal Mod Manager / HD2MM
-zip_out = Path(r"g:\antigravity\Helldivers2-Universal-Mod-Loader-v1.0.1.zip")
-zip_out_compat = Path(r"g:\antigravity\Helldivers2-Universal-Mod-Loader-v1.0.0.zip")
+# Package ZIPs for Arsenal Mod Manager / HD2MM in portable dist/ directory
+dist_dir = ROOT / "dist"
+dist_dir.mkdir(parents=True, exist_ok=True)
+
+zip_out = dist_dir / f"Helldivers2-Universal-Mod-Loader-v{version}.zip"
+zip_latest = dist_dir / "Helldivers2-Universal-Mod-Loader-latest.zip"
+
 package_files = [
     ("UniversalModLoader-README.txt", ROOT / "UniversalModLoader-README.txt"),
     ("UniversalModLoader-manifest.json", ROOT / "UniversalModLoader-manifest.json"),
@@ -49,20 +54,28 @@ with zipfile.ZipFile(zip_out, "w", compression=zipfile.ZIP_DEFLATED) as z:
     for arcname, fpath in package_files:
         z.write(fpath, arcname=arcname)
 
-shutil.copy2(zip_out, zip_out_compat)
+shutil.copy2(zip_out, zip_latest)
 
+# Optional local copy if g:\antigravity exists
+local_work = Path(r"g:\antigravity")
+if local_work.exists() and local_work.is_dir():
+    try:
+        shutil.copy2(zip_out, local_work / f"Helldivers2-Universal-Mod-Loader-v{version}.zip")
+        shutil.copy2(zip_out, local_work / "Helldivers2-Universal-Mod-Loader-v1.0.0.zip")
+    except Exception:
+        pass
 
-
-# Sync release_v1 artifact directory if present in brain
-release_v1 = Path(r"C:\Users\drews\.gemini\antigravity\brain\e6c8c351-3fc4-4332-9d71-f1fc99a33eb3\release_v1")
-release_v1.mkdir(parents=True, exist_ok=True)
-(release_v1 / "data").mkdir(parents=True, exist_ok=True)
-shutil.copy2(patch0, release_v1 / "data" / "9ba626afa44a3aa3.patch_0")
-shutil.copy2(ROOT / "data" / "9ba626afa44a3aa3.patch_0.stream", release_v1 / "data" / "9ba626afa44a3aa3.patch_0.stream")
-shutil.copy2(ROOT / "data" / "9ba626afa44a3aa3.patch_0.gpu_resources", release_v1 / "data" / "9ba626afa44a3aa3.patch_0.gpu_resources")
-shutil.copy2(ROOT / "UniversalModLoader-manifest.json", release_v1 / "UniversalModLoader-manifest.json")
-shutil.copy2(ROOT / "manifest.json", release_v1 / "manifest.json")
-shutil.copy2(ROOT / "UniversalModLoader-README.txt", release_v1 / "UniversalModLoader-README.txt")
-shutil.copy2(ROOT / "thumbnail.png", release_v1 / "thumbnail.png")
+# Optional artifact directory copy if present
+brain_artifact = Path(r"C:\Users\drews\.gemini\antigravity\brain\e6c8c351-3fc4-4332-9d71-f1fc99a33eb3\release_v1")
+if brain_artifact.parent.exists():
+    brain_artifact.mkdir(parents=True, exist_ok=True)
+    (brain_artifact / "data").mkdir(parents=True, exist_ok=True)
+    shutil.copy2(patch0, brain_artifact / "data" / "9ba626afa44a3aa3.patch_0")
+    shutil.copy2(ROOT / "data" / "9ba626afa44a3aa3.patch_0.stream", brain_artifact / "data" / "9ba626afa44a3aa3.patch_0.stream")
+    shutil.copy2(ROOT / "data" / "9ba626afa44a3aa3.patch_0.gpu_resources", brain_artifact / "data" / "9ba626afa44a3aa3.patch_0.gpu_resources")
+    shutil.copy2(ROOT / "UniversalModLoader-manifest.json", brain_artifact / "UniversalModLoader-manifest.json")
+    shutil.copy2(ROOT / "manifest.json", brain_artifact / "manifest.json")
+    shutil.copy2(ROOT / "UniversalModLoader-README.txt", brain_artifact / "UniversalModLoader-README.txt")
+    shutil.copy2(ROOT / "thumbnail.png", brain_artifact / "thumbnail.png")
 
 print(f"SUCCESS: Built {zip_out} ({zip_out.stat().st_size} bytes)")
