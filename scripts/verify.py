@@ -5,14 +5,20 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT / "scripts"))
 import archive
 
-ZIP_PATH = Path(r"g:\antigravity\Helldivers2-Universal-Mod-Loader-v1.0.0.zip")
+ZIP_PATH = ROOT / "dist" / "Helldivers2-Universal-Mod-Loader-latest.zip"
+if not ZIP_PATH.exists():
+    ZIP_PATH = Path(r"g:\antigravity\Helldivers2-Universal-Mod-Loader-v2.0.0.zip")
 assert ZIP_PATH.exists(), f"ZIP not found: {ZIP_PATH}"
+
+print(f"Verifying package: {ZIP_PATH} ({ZIP_PATH.stat().st_size} bytes)")
 
 with zipfile.ZipFile(ZIP_PATH, "r") as z:
     m = json.loads(z.read("UniversalModLoader-manifest.json").decode("utf-8"))
+    print(f"Manifest version: {m.get('version')} (revision: {m.get('revision')})")
+    
     for fname, expected in m["files"].items():
         actual = hashlib.sha256(z.read(fname)).hexdigest().upper()
-        assert actual == expected, f"Hash mismatch for {fname}"
+        assert actual == expected, f"Hash mismatch for {fname}: expected {expected}, got {actual}"
         print(f"  [OK] Hash matched for {fname}")
 
     patch0 = z.read("data/9ba626afa44a3aa3.patch_0")
@@ -22,4 +28,10 @@ with zipfile.ZipFile(ZIP_PATH, "r") as z:
     assert payload is not None, "Missing boot resource in patch"
     print(f"  [OK] Stingray archive valid. Resource payload: {len(payload)} bytes")
 
-print("ALL ARCHIVE INTEGRITY CHECKS PASSED!")
+    # Verify boot resource payload contains Lua header
+    size, unk = struct.unpack_from('<II', payload, 0)
+    lua_code = payload[8:8+size].decode('utf-8', errors='ignore')
+    assert "Universal Mod Loader v2.0.0" in lua_code, "Missing v2.0.0 version string in boot resource"
+    print(f"  [OK] Payload contains verified v2.0.0 bootloader ({size} bytes of Lua)")
+
+print("\nALL ARCHIVE INTEGRITY CHECKS PASSED FOR v2.0.0!")

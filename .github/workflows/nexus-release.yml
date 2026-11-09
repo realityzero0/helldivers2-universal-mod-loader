@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. 1.0.2)'
+        description: 'Release version (e.g. 2.0.0)'
         required: false
-        default: '1.0.1'
+        default: '2.0.0'
 
 jobs:
   build-and-publish:
@@ -41,6 +41,24 @@ jobs:
             echo "VERSION=${CLEAN_VERSION}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Extract Changelog for Release
+        id: changelog
+        run: |
+          python -c "
+          import os
+          from pathlib import Path
+          txt = Path('CHANGELOG.md').read_text(encoding='utf-8')
+          parts = txt.split('## [')
+          body = ''
+          if len(parts) > 1:
+              body = '## [' + parts[1].strip()
+          else:
+              body = txt.strip()
+          delimiter = 'CHANGELOG_EOF'
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as f:
+              f.write(f'body<<{delimiter}\n{body}\n{delimiter}\n')
+          "
+
       - name: Build Distribution Packages
         run: |
           python scripts/build.py
@@ -54,7 +72,8 @@ jobs:
           filename: dist/Helldivers2-Universal-Mod-Loader-v${{ steps.vars.outputs.VERSION }}.zip
           version: ${{ steps.vars.outputs.VERSION }}
           display_name: Helldivers 2 Universal Mod Loader v${{ steps.vars.outputs.VERSION }}
-          description: Automatically compiled and verified release package.
+          description: "Helldivers 2 Universal Mod Loader v${{ steps.vars.outputs.VERSION }} - Indestructible pure-Lua universal runtime with Chef compatibility, F9 scaling menu, and 14-locale auto-detection."
+          changelog: ${{ steps.changelog.outputs.body }}
           category: 'main'
           archive_existing_version: true
           primary_mod_manager_download: true
@@ -66,3 +85,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/Helldivers2-Universal-Mod-Loader-v${{ steps.vars.outputs.VERSION }}.zip
+          body: ${{ steps.changelog.outputs.body }}

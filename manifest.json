@@ -1,12 +1,12 @@
 {
-  "Version": 1,
+  "Version": 2,
   "Guid": "8c41f92e-3990-4c6e-8260-93a8d9d52b11",
-  "Name": "Helldivers 2 Universal Mod Loader - v1.0.1",
-  "Description": "Definitive pure-Lua 5.1 universal mod loader for Helldivers 2. Unifies CowboyBingus, ChefSharedLoader, BootModLoader, and HD2Runtime with circuit-breaker crash isolation and polymorphic options/bindings menus.",
+  "Name": "Helldivers 2 Universal Mod Loader - v2.0.0",
+  "Description": "The definitive pure-Lua 5.1 indestructible universal runtime for Helldivers 2. Unifies CowboyBingus, ChefSharedLoader, BootModLoader, hd2rt, and Rat's Shared Loader (Armor Transmog 1.1.2) with F9 in-game settings menu, circuit-breaker crash isolation, and anti-cheat compliance.",
   "Options": [
     {
-      "Name": "Universal Mod Loader - v1.0.1",
-      "Description": "Definitive pure-Lua 5.1 universal mod loader for Helldivers 2. Unifies CowboyBingus, ChefSharedLoader, BootModLoader, and HD2Runtime with circuit-breaker crash isolation and polymorphic options/bindings menus.",
+      "Name": "Universal Mod Loader - v2.0.0",
+      "Description": "The definitive pure-Lua 5.1 indestructible universal runtime for Helldivers 2. Unifies CowboyBingus, ChefSharedLoader, BootModLoader, hd2rt, and Rat's Shared Loader (Armor Transmog 1.1.2) with F9 in-game settings menu, circuit-breaker crash isolation, and anti-cheat compliance.",
       "Include": [
         "data"
       ],

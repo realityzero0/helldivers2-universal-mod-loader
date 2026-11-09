@@ -1,0 +1,68 @@
+name: 🐛 Bug Report
+description: Report an issue, unexpected behavior, or crash in Universal Mod Loader.
+title: "[Bug]: <Concise Summary>"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### Universal Mod Loader Bug Report
+        Before opening a ticket, please verify that Universal Mod Loader is deployed as **Position 1 (`patch_0`)** in your mod manager.
+
+  - type: input
+    id: uml_version
+    attributes:
+      label: Universal Mod Loader Version
+      placeholder: "e.g. v2.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: game_build
+    attributes:
+      label: Helldivers 2 Steam Build Number
+      placeholder: "e.g. 26251122"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install_method
+    attributes:
+      label: Mod Manager / Installation Method
+      options:
+        - "Arsenal Mod Manager"
+        - "Helldivers 2 Mod Manager (HD2MM)"
+        - "Manual Installation (Direct to Steam data/ folder)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Description of the Issue
+      description: Explain clearly what happened and what you expected to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro_steps
+    attributes:
+      label: Reproduction Steps
+      description: What exact steps reproduce this issue every time?
+      value: |
+        1. Deploy Universal Mod Loader as patch_0
+        2. Install mod '<Name>'
+        3. Launch game via Steam
+        4. Observe <result>
+    validations:
+      required: true
+
+  - type: textarea
+    id: log_file
+    attributes:
+      label: Log File Contents (Required)
+      description: |
+        Paste the full contents of `%LOCALAPPDATA%\CowboyBingus\Helldivers2\Logs\BingusSharedLoader.log`.
+        This is required to diagnose any mod loader issue.
+    validations:
+      required: true

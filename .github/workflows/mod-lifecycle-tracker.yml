@@ -1,0 +1,113 @@
+name: "Mod Compatibility Lifecycle & 90-Day Abandonment Tracker"
+
+on:
+  schedule:
+    # Runs at 12:00 UTC on the 1st of every month for Monthly Stewardship Check-Ins
+    - cron: '0 12 1 * *'
+  workflow_dispatch:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  lifecycle-audit:
+    name: "Evaluate 60-Day Check-In & 90-Day Abandonment Thresholds"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Process Compatibility & Stewardship Issues
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const now = new Date();
+            const DAY_MS = 24 * 60 * 60 * 1000;
+            const CHECKIN_DAYS = 60;
+            const ABANDONED_DAYS = 90;
+
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100
+            });
+
+            for (const issue of issues) {
+              if (issue.pull_request) continue;
+
+              const labels = issue.labels.map(l => (typeof l === 'string' ? l : l.name));
+              const isCompat = labels.includes('compatibility-report') || labels.includes('stewardship');
+              if (!isCompat) continue;
+
+              const body = issue.body || '';
+
+              // 1. Permanent Exemption for Static / Feature-Complete Mods
+              if (body.includes('Static / Feature-Complete') && !labels.includes('static-complete')) {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  labels: ['static-complete']
+                });
+                labels.push('static-complete');
+              }
+
+              if (labels.includes('static-complete')) {
+                console.log(`Issue #${issue.number} (${issue.title}) is marked static-complete; permanently exempt from abandonment timers.`);
+                continue;
+              }
+
+              const updatedAt = new Date(issue.updated_at);
+              const inactiveDays = Math.floor((now - updatedAt) / DAY_MS);
+
+              // 2. 90-Day (3 Months) Auto-Abandonment Threshold
+              if (inactiveDays >= ABANDONED_DAYS && !labels.includes('abandoned-upstream')) {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  labels: ['abandoned-upstream']
+                });
+
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: [
+                    '### 🔴 Automated 90-Day Lifecycle Notice: Marked as Abandoned Upstream',
+                    '',
+                    `This mod entry has had no author updates or community verification activity for **${inactiveDays} days** (90+ day threshold) and is now automatically marked as **\`abandoned-upstream\`**.`,
+                    '',
+                    '- **If this mod is simply finished and does not need updates:** Anyone can reply or submit a [Stewardship Check-In](../../issues/new?template=mod_stewardship.yml) to mark it **🔵 Static / Feature-Complete (`static-complete`)**, which permanently exempts it from abandonment flags.',
+                    '- **If this mod is broken on the current Helldivers 2 build:** It is officially open for community maintainers to fork, repair, or adopt.'
+                  ].join('\n')
+                });
+                continue;
+              }
+
+              // 3. 60-Day Monthly Stewardship Check-In Ping
+              if (inactiveDays >= CHECKIN_DAYS && inactiveDays < ABANDONED_DAYS && !labels.includes('needs-check-in') && !labels.includes('abandoned-upstream')) {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  labels: ['needs-check-in']
+                });
+
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: [
+                    '### 🟡 Monthly Community Check-In Requested (60+ Days Since Last Verification)',
+                    '',
+                    `It has been **${inactiveDays} days** since this mod was last verified on the latest *Helldivers 2* patch.`,
+                    '',
+                    '- **Still working great?** Leave a quick comment below with your current game build to reset the 90-day timer!',
+                    '- **Is this mod feature-complete / static?** Let us know so we can apply the **🔵 `static-complete`** badge (static mods never expire).',
+                    '- **Broken after a recent Arrowhead patch?** Paste your `BingusSharedLoader.log` excerpt so modders can see what broke.'
+                  ].join('\n')
+                });
+              }
+            }

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Nexus Mods Bug Tracker
+    url: https://www.nexusmods.com/helldivers2/mods/18527?tab=bugs
+    about: View existing community bug tickets mirrored directly from Nexus Mods.
+  - name: Community Compatibility Matrix
+    url: https://github.com/realityzero0/helldivers2-universal-mod-loader/blob/main/docs/COMPATIBILITY.md
+    about: Check the live verified compatibility matrix for third-party Helldivers 2 mods.

@@ -1,0 +1,48 @@
+name: 🛡️ Mod Stewardship & Status Check-In
+description: Declare a mod's maintenance status, mark it static/complete, or provide a monthly patch verification.
+title: "[Stewardship]: <Mod Name>"
+labels: ["stewardship"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### Community Mod Stewardship Registry
+        Use this form to declare the maintenance state of a mod or provide a monthly verification check-in.
+
+  - type: input
+    id: mod_name
+    attributes:
+      label: Mod Name & Nexus Link
+      placeholder: "e.g. Armor Transmog (https://www.nexusmods.com/helldivers2/mods/18420)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: stewardship_status
+    attributes:
+      label: Mod Stewardship State
+      description: |
+        Select the current lifecycle state of this mod:
+      options:
+        - "🔵 Static / Feature-Complete (Mod is finished, stable, and requires NO further updates; immune to abandonment warnings)"
+        - "🟢 Actively Maintained (Author actively developing or updating)"
+        - "🟡 Verified Stable (Monthly community check-in: tested and working on current patch)"
+        - "🔴 Abandoned Upstream (Author inactive for 90+ days; open for community fork/adoption)"
+    validations:
+      required: true
+
+  - type: input
+    id: verifier_role
+    attributes:
+      label: Your Relationship to the Mod
+      placeholder: "Original Mod Author / Dedicated Player / Community Maintainer"
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification_details
+    attributes:
+      label: Verification Details
+      description: Explain why this mod is static/complete or details of your testing on the current game patch.
+    validations:
+      required: true

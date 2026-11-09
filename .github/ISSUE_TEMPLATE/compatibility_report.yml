@@ -1,0 +1,94 @@
+name: 🔍 Mod Compatibility Report
+description: Submit a structured compatibility test report for a Helldivers 2 mod.
+title: "[Compat]: <Mod Name>"
+labels: ["compatibility-report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### Community Mod Compatibility Registry
+        Thank you for contributing to the community compatibility matrix!
+        Please fill out this structured form completely so maintainers and developers can catalog and verify the status of this mod.
+
+  - type: input
+    id: mod_name
+    attributes:
+      label: Mod Name
+      description: Exact name of the third-party mod as listed on Nexus Mods or GitHub.
+      placeholder: "e.g. Armor Transmog, HellHub Radar, Super Earth HUD"
+    validations:
+      required: true
+
+  - type: input
+    id: nexus_url
+    attributes:
+      label: Nexus Mods URL or Download Link
+      description: Web link to the mod's official release page.
+      placeholder: "https://www.nexusmods.com/helldivers2/mods/XXXX"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: loader_standard
+    attributes:
+      label: Target Loader Standard
+      description: Which modloader standard was this mod originally designed for?
+      options:
+        - "Chef Shared Loader (CSL)"
+        - "CowboyBingus Mod Loader (API 1 / BingusRuntime)"
+        - "Boot Mod Loader (VeganSquid)"
+        - "HD2 Lua Runtime (hd2rt)"
+        - "Rat's Shared Loader (Armor Transmog)"
+        - "Native Universal Mod Loader (v2.0.0+)"
+        - "Unknown / Other"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: status
+    attributes:
+      label: Compatibility Result
+      description: How does this mod run under Universal Mod Loader?
+      options:
+        - "🟢 Verified Working (100% Functional, No Errors)"
+        - "🟡 Minor Issues / Partial Functionality (Features work with minor cosmetic glitches)"
+        - "🔴 Broken / Crash to Desktop (Engine crash or failed to hook)"
+    validations:
+      required: true
+
+  - type: input
+    id: game_version
+    attributes:
+      label: Helldivers 2 Build Number
+      description: The Steam build or patch version you tested on.
+      placeholder: "e.g. Steam Build 26251122 (Patch 1.003.x)"
+    validations:
+      required: true
+
+  - type: input
+    id: uml_version
+    attributes:
+      label: Universal Mod Loader Version
+      description: The version of Universal Mod Loader installed.
+      placeholder: "e.g. v2.0.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: log_excerpt
+    attributes:
+      label: Loader Log Excerpt
+      description: |
+        Paste the relevant lines from `%LOCALAPPDATA%\CowboyBingus\Helldivers2\Logs\BingusSharedLoader.log`.
+        Look for lines containing `[UniversalLoader]` or `[ChefMod]`.
+      placeholder: "[UniversalLoader] Loaded mod: mods/author/mod_1..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional_notes
+    attributes:
+      label: Detailed Observations & Steps
+      description: Describe what you observed in-game (drop pod sequences, F9 menu settings, mission extractions).
+    validations:
+      required: false
