@@ -25,10 +25,6 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Verify Stingray Data Integrity
-        run: |
-          python scripts/verify.py
-
       - name: Determine Version
         id: vars
         run: |
@@ -62,6 +58,10 @@ jobs:
       - name: Build Distribution Packages
         run: |
           python scripts/build.py
+
+      - name: Verify Stingray Data Integrity
+        run: |
+          python scripts/verify.py
 
       - name: Upload to Nexus Mods
         uses: Nexus-Mods/upload-action@v1.0.0-beta.11

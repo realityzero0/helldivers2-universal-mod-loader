@@ -7,7 +7,16 @@ import archive
 
 ZIP_PATH = ROOT / "dist" / "Helldivers2-Universal-Mod-Loader-latest.zip"
 if not ZIP_PATH.exists():
-    ZIP_PATH = Path(r"g:\antigravity\Helldivers2-Universal-Mod-Loader-v2.0.0.zip")
+    candidates = list((ROOT / "dist").glob("Helldivers2-Universal-Mod-Loader-*.zip"))
+    if candidates:
+        ZIP_PATH = candidates[0]
+    elif Path(r"g:\antigravity\Helldivers2-Universal-Mod-Loader-v2.0.0.zip").exists():
+        ZIP_PATH = Path(r"g:\antigravity\Helldivers2-Universal-Mod-Loader-v2.0.0.zip")
+    else:
+        import subprocess
+        subprocess.check_call([sys.executable, str(ROOT / "scripts" / "build.py")])
+        if (ROOT / "dist" / "Helldivers2-Universal-Mod-Loader-latest.zip").exists():
+            ZIP_PATH = ROOT / "dist" / "Helldivers2-Universal-Mod-Loader-latest.zip"
 assert ZIP_PATH.exists(), f"ZIP not found: {ZIP_PATH}"
 
 print(f"Verifying package: {ZIP_PATH} ({ZIP_PATH.stat().st_size} bytes)")
