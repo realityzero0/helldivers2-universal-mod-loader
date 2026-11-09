@@ -8,17 +8,23 @@ This guide explains how to gather logs, test compatibility, and submit actionabl
 
 Whenever Universal Mod Loader initializes and boots your mods, it writes a detailed execution log.
 
-* **Log Location on Windows:**
+* **Primary Log Location on Windows:**
   ```text
   %LOCALAPPDATA%\CowboyBingus\Helldivers2\Logs\BingusSharedLoader.log
   ```
   *(Press `Win + R`, paste the path above, and press `Enter` to open it in Notepad).*
 
+* **Clean-Install Fallback Location:**
+  If CowboyBingus was never installed on your PC, the log is located in your Helldivers 2 data folder:
+  ```text
+  %APPDATA%\Arrowhead\Helldivers2\BingusSharedLoader.log
+  ```
+
 * **Settings File Location:**
   ```text
   %LOCALAPPDATA%\CowboyBingus\Helldivers2\Logs\uml_mod_settings.json
   ```
-  *(Also mirrored to `%LOCALAPPDATA%\UniversalModLoader\mod_settings.json` when present).*
+  *(Or `%APPDATA%\Arrowhead\Helldivers2\uml_mod_settings.json` on clean installations).*
 
 ---
 

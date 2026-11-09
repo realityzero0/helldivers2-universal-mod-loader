@@ -62,8 +62,24 @@
 
 ---
 
+## 🔍 How to Find Your Logs (For Bug Reporting)
+If a mod breaks, fails to load, or you encounter unexpected behavior, grab your log file before submitting a ticket. Universal Mod Loader writes all diagnostics and mod errors to:
+
+* **Primary Path:**
+  ```text
+  %LOCALAPPDATA%\CowboyBingus\Helldivers2\Logs\BingusSharedLoader.log
+  ```
+* **Clean-Install Fallback:**
+  ```text
+  %APPDATA%\Arrowhead\Helldivers2\BingusSharedLoader.log
+  ```
+*(Press `Win + R`, paste either path above into the box, and press `Enter` to view your log).*
+
+---
+
 ## 📚 Documentation & Developer Guides
 * [Modding API Developer Reference](docs/MODDING_API.md) — Create custom Helldivers 2 mods with F9 options, hotkeys, and event hooks in 60 seconds.
 * [Frequently Asked Questions (FAQ)](docs/FAQ.md) — Compatibility, Easy Anti-Cheat safety, MDL3, and troubleshooting.
-* [Community Compatibility Registry](docs/COMPATIBILITY.md) — Live catalog of verified mods.
+* [Community Compatibility Registry](docs/COMPATIBILITY.md) — Live catalog of verified mods (open for community reports).
+* [Bug & Troubleshooting Guide](docs/REPORTING_GUIDE.md) — How to submit logs and report broken mods.
 * [Detailed Changelog](CHANGELOG.md) — Complete release history and technical analyses.
