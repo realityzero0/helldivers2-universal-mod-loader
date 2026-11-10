@@ -433,6 +433,8 @@ local function run_test()
             sf4:write(orig_settings_content4)
             sf4:close()
         end
+    else
+        os.remove(settings_path4)
     end
     if orig_log_content then
         local lf = io.open(log_path, "wb")

@@ -24,9 +24,11 @@ local appdata = os.getenv("APPDATA") or os.getenv("LOCALAPPDATA") or "."
 local settings_path = (os.getenv("APPDATA") or ".") .. "/Arrowhead/Helldivers2/uml_mod_settings.json"
 local settings_path2 = (os.getenv("LOCALAPPDATA") or ".") .. "/UniversalModLoader/uml_mod_settings.json"
 local settings_path3 = (os.getenv("LOCALAPPDATA") or ".") .. "/UniversalModLoader/mod_settings.json"
+local settings_path4 = "uml_mod_settings.json"
 local orig_settings_content = nil
 local orig_settings_content2 = nil
 local orig_settings_content3 = nil
+local orig_settings_content4 = nil
 local sf_chk = io.open(settings_path, "rb")
 if sf_chk then
     orig_settings_content = sf_chk:read("*a")
@@ -44,6 +46,12 @@ if sf_chk3 then
     orig_settings_content3 = sf_chk3:read("*a")
     sf_chk3:close()
     os.remove(settings_path3)
+end
+local sf_chk4 = io.open(settings_path4, "rb")
+if sf_chk4 then
+    orig_settings_content4 = sf_chk4:read("*a")
+    sf_chk4:close()
+    os.remove(settings_path4)
 end
 
 -- Load bootloader into clean mock environment
@@ -332,4 +340,13 @@ if orig_settings_content3 then
         f_res3:write(orig_settings_content3)
         f_res3:close()
     end
+end
+if orig_settings_content4 then
+    local f_res4 = io.open(settings_path4, "wb")
+    if f_res4 then
+        f_res4:write(orig_settings_content4)
+        f_res4:close()
+    end
+else
+    os.remove(settings_path4)
 end

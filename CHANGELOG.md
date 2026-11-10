@@ -32,7 +32,16 @@
 >   3. **Preload Shadowing Elimination:** Removed `"mods/transmog"` from `rat_aliases` so it can never shadow the actual Armor Transmog module in `package.loaded`. Added `is_loader_obj` guard ensuring loader shims are never mistaken for loaded mods.  
 >   4. **Full Chef Context Interop:** Expanded `create_chef_mod_context` with `register_option`, `register`, `listen`, `hook`, `add_hook`, `after_startup`, `warn`, `error`, `info`, and `shared`.  
 >   5. **Dedicated In-Game F9 Sidebar Menus:** Every detected mod automatically gets its own titled sidebar item (e.g. `TREASURE RADAR`, `NARROW HUD`, `NIGHT VISION - FLASHLIGHT`, `SCOPE ZOOM`, `ARMOR TRANSMOG`, `LOADOUT REGULATIONS`) with multi-category fold support and zero options dumped into "GENERAL MODS".  
->
+
+#### 2. Engine Hardening, Fuzzing & Resilience
+* **Archive Scanner Bounds & DoS Prevention:** Header parser now bounds `count` based on actual file size (`math.min(count, math.floor((file_size - table_start) / 80), 8192)`), preventing unbounded loops on corrupted headers. Added bounds checks on envelope offsets and lengths (`body_len <= 32MB`), and strictly rejects precompiled bytecode (`\027Lua`).
+* **Resilient JSON Tokenizer:** Replaced regex-based JSON parser with a quoted-string aware tokenizer supporting embedded commas, braces, and escape sequences (`\"`, `\\`, `\n`). Automatically writes `.bak` fallback if a settings file is corrupted.
+* **Non-Finite Float Sanitization:** Stripped `NaN` (`v ~= v`) and Infinity (`math.huge`) from settings serialization, preventing non-compliant JSON.
+* **Polymorphic RSL Dot & Colon Syntax:** Fixed `rat.register` and `rat.on` when invoked via dot notation by properly rebinding `self` to `rat_api`.
+* **Nil Option ID Protection:** Guarded `get` / `set` across UML, Chef, and MOM stubs against nil or empty IDs.
+* **Choice Option UI Fallback:** Guarded `spec.choices` in both F9 render and navigation, defaulting safely to `{"OFF", "ON"}` if choices are omitted.
+* **Hot-Reload Hook Purging:** Implemented `unregister_mod_hooks` in Ctrl+F5 hot-reload to purge prior event and update hooks, preventing duplicate execution.
+
 ---
 
 ## [2.0.2] - Community UX & Hierarchical Menu Release

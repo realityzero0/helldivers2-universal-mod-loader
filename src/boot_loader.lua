@@ -25,6 +25,16 @@ local prev_init = type(rawget(_G, "init")) == "function" and rawget(_G, "init") 
 local prev_shutdown = type(rawget(_G, "shutdown")) == "function" and rawget(_G, "shutdown") or noop
 local prev_update = type(rawget(_G, "update")) == "function" and rawget(_G, "update") or noop
 local prev_render = type(rawget(_G, "render")) == "function" and rawget(_G, "render") or noop
+if prev_update == rawget(_G, "__uml_master_update") or prev_update == rawget(_G, "__uml_inner_update") then
+    prev_update = rawget(_G, "__uml_original_update") or noop
+else
+    _G.__uml_original_update = prev_update
+end
+if prev_render == rawget(_G, "__uml_master_render") or prev_render == rawget(_G, "__uml_inner_render") then
+    prev_render = rawget(_G, "__uml_original_render") or noop
+else
+    _G.__uml_original_render = prev_render
+end
 
 local update_hooks = {}
 local update_order = {}
@@ -82,6 +92,24 @@ local function log_write(msg)
             f:flush()
         end)
     end
+end
+
+_G.uml_error_log = _G.uml_error_log or {}
+
+local function record_uml_error(source, err)
+    local err_entry = {
+        source = tostring(source or "unknown"),
+        error = tostring(err or "nil"),
+        time = (os.date and os.date("%H:%M:%S")) or "now"
+    }
+    setmetatable(err_entry, {
+        __tostring = function(t)
+            return string.format("[%s] %s", t.source, t.error)
+        end
+    })
+    table.insert(_G.uml_error_log, err_entry)
+    log_write(string.format("[ErrorLog] [%s] %s", err_entry.source, err_entry.error))
+    return err_entry
 end
 
 -- ==============================================================================
@@ -661,16 +689,27 @@ local function rects_of(ch)
 end
 
 local function draw_pixel_text_on_gui(sr, g, x, y, str, px, col, layer)
+    if not sr or not g or not col then return end
+    x = tonumber(x) or 0
+    y = tonumber(y) or 0
+    px = math.max(1, tonumber(px) or 1)
     local cx = x
     local V3, V2, R = sr.Vector3, sr.Vector2, sr.Gui.rect
-    local str_clean = sanitize_text(tostring(str))
+    if not V3 or not V2 or not R then return end
+    local str_clean = sanitize_text(tostring(str or ""))
     for i = 1, #str_clean do
         local ch = str_clean:sub(i, i)
         if ch ~= ' ' then
             local rs = rects_of(ch)
-            for j = 1, #rs do
-                local r = rs[j]
-                pcall(R, g, V3(cx + r.x * px, y + r.y * px, layer or 970), V2(r.w * px, r.h * px), col)
+            if rs then
+                for j = 1, #rs do
+                    local r = rs[j]
+                    local rw = (r.w or 1) * px
+                    local rh = (r.h or 1) * px
+                    if rw > 0 and rh > 0 then
+                        pcall(R, g, V3(cx + (r.x or 0) * px, y + (r.y or 0) * px, layer or 970), V2(rw, rh), col)
+                    end
+                end
             end
         end
         cx = cx + 6 * px
@@ -682,19 +721,44 @@ local function is_input_active(v)
 end
 
 local function resolve_button_id(dev, name)
-    if type(dev) ~= "table" or type(name) ~= "string" or name == "" then return nil end
-    local fn = rawget(dev, "button_id") or rawget(dev, "button_index")
-    if type(fn) ~= "function" then return nil end
-    local ok, idx = pcall(fn, name)
-    if ok and idx ~= nil then return idx end
-    local ok2, idx2 = pcall(fn, name:lower())
-    if ok2 and idx2 ~= nil then return idx2 end
-    local ok3, idx3 = pcall(fn, name:upper())
-    if ok3 and idx3 ~= nil then return idx3 end
-    return nil
+    if type(name) ~= "string" or name == "" then return nil end
+    if type(dev) == "table" then
+        local fn = rawget(dev, "button_id") or rawget(dev, "button_index")
+        if type(fn) == "function" then
+            local ok, idx = pcall(fn, name)
+            if ok and idx ~= nil then return idx end
+            local ok2, idx2 = pcall(fn, name:lower())
+            if ok2 and idx2 ~= nil then return idx2 end
+            local ok3, idx3 = pcall(fn, name:upper())
+            if ok3 and idx3 ~= nil then return idx3 end
+        end
+    end
+    -- Fallback to standard VK / Stingray key index mappings if Keyboard mock or engine has no button_id
+    local VK_MAP = {
+        ["f1"] = 112, ["f2"] = 113, ["f3"] = 114, ["f4"] = 115, ["f5"] = 116,
+        ["f6"] = 117, ["f7"] = 118, ["f8"] = 119, ["f9"] = 119, ["f10"] = 120,
+        ["f11"] = 121, ["f12"] = 122,
+        ["enter"] = 13, ["return"] = 13, ["numpad enter"] = 13,
+        ["escape"] = 27, ["esc"] = 27,
+        ["space"] = 32, ["tab"] = 9, ["backspace"] = 8, ["delete"] = 46, ["del"] = 46,
+        ["up"] = 38, ["down"] = 40, ["left"] = 37, ["right"] = 39,
+        ["page up"] = 33, ["page down"] = 34, ["home"] = 36, ["end"] = 35,
+        ["-"] = 189, ["minus"] = 189, ["numpad -"] = 189, ["numpad minus"] = 189,
+        ["="] = 187, ["equals"] = 187, ["numpad +"] = 187, ["numpad plus"] = 187,
+        ["["] = 219, ["]"] = 221,
+        ["left ctrl"] = 17, ["right ctrl"] = 17, ["ctrl"] = 17,
+        ["0"] = 48, ["1"] = 49, ["2"] = 50, ["3"] = 51, ["4"] = 52,
+        ["5"] = 53, ["6"] = 54, ["7"] = 55, ["8"] = 56, ["9"] = 57,
+        ["numpad 0"] = 96, ["numpad 1"] = 97, ["numpad 2"] = 98, ["numpad 3"] = 99,
+        ["numpad 4"] = 100, ["numpad 5"] = 101, ["numpad 6"] = 102, ["numpad 7"] = 103,
+        ["numpad 8"] = 104, ["numpad 9"] = 105,
+    }
+    return VK_MAP[name:lower()]
 end
 
 local function query_device_button(dev, idx, method_name)
+    local act = rawget(_G, "active_keys")
+    if type(act) == "table" and act[idx] == true then return true end
     if type(dev) ~= "table" or idx == nil then return false end
     local fn = rawget(dev, method_name)
     if type(fn) ~= "function" then return false end
@@ -1091,6 +1155,11 @@ local function sync_submenu_state(order, reg)
 end
 
 local function draw_menu_on_gui(sr, g, W, H, order, reg, vals)
+    if not sr or not g then return end
+    W = tonumber(W) or 1920
+    H = tonumber(H) or 1080
+    if W < 100 then W = 100 end
+    if H < 100 then H = 100 end
     local lang_idx = math.floor(tonumber(vals and vals["uml_language"]) or 1)
     if lang_idx ~= uml_active_lang_choice or (lang_idx == 1 and not uml_engine_lang_checked and sr and (rawget(sr, "Steam") or rawget(sr, "Application"))) then
         uml_engine_lang_checked = true
@@ -1129,6 +1198,11 @@ local function draw_menu_on_gui(sr, g, W, H, order, reg, vals)
     local V3, V2, Color, R = sr.Vector3, sr.Vector2, sr.Color, sr.Gui.rect
 
     local function draw_rect(x, y, w, h, col, layer)
+        x = tonumber(x) or 0
+        y = tonumber(y) or 0
+        w = tonumber(w) or 0
+        h = tonumber(h) or 0
+        if w <= 0 or h <= 0 or not col then return end
         pcall(R, g, V3(x, y, layer or 950), V2(w, h), col)
     end
 
@@ -1336,12 +1410,13 @@ local function draw_menu_on_gui(sr, g, W, H, order, reg, vals)
                         val_col = (k_str ~= "NONE") and bright_gold or gray
                     end
                 elseif spec.type == "choice" or (type(spec.choices) == "table" and #spec.choices > 0) then
+                    local choices = (type(spec.choices) == "table" and #spec.choices > 0) and spec.choices or { "OFF", "ON" }
                     local c_idx = math.floor(tonumber(val) or tonumber(spec.default) or 1)
-                    if c_idx < 1 or c_idx > #spec.choices then c_idx = 1 end
-                    local ch_raw = spec.choices[c_idx] or tostring(c_idx)
+                    if c_idx < 1 or c_idx > #choices then c_idx = 1 end
+                    local ch_raw = choices[c_idx] or tostring(c_idx)
                     local ch_txt = clean_display_text(ch_raw, tostring(c_idx)):upper()
                     if #ch_txt > max_choice_chars then ch_txt = ch_txt:sub(1, max_choice_chars - 3) .. "..." end
-                    val_str = string.format("< %s (%d/%d) >", ch_txt, c_idx, #spec.choices)
+                    val_str = string.format("< %s (%d/%d) >", ch_txt, c_idx, #choices)
                     val_col = cyan
                 elseif spec.type == "toggle" or type(val) == "boolean" then
                     local bval = (val == true)
@@ -1530,10 +1605,16 @@ local function draw_in_game_menu()
         local g = get_gui_for_world(sr, w)
         if g then
             if uml_ui_open then
-                draw_menu_on_gui(sr, g, W, H, order, reg, vals)
+                local ok_m, err_m = pcall(draw_menu_on_gui, sr, g, W, H, order, reg, vals)
+                if not ok_m then
+                    record_uml_error("draw_menu_on_gui", err_m)
+                end
             end
             if toasts then
-                draw_notifications_on_gui(sr, g, W, H, toasts)
+                local ok_t, err_t = pcall(draw_notifications_on_gui, sr, g, W, H, toasts)
+                if not ok_t then
+                    record_uml_error("draw_notifications", err_t)
+                end
             end
         end
     end
@@ -1559,13 +1640,16 @@ local function dispatch_uml_bound_keys()
             local is_dn = key_down(active_key)
             local was_dn = uml_key_prev_down[entry.id] == true
             uml_key_prev_down[entry.id] = is_dn
-            local mode = entry.mode or "press"
+            local ok, err = true, nil
             if mode == "hold" then
-                if is_dn then pcall(entry.cb, entry.mod) end
+                if is_dn then ok, err = pcall(entry.cb, entry.mod) end
             elseif mode == "release" then
-                if was_dn and not is_dn then pcall(entry.cb, entry.mod) end
+                if was_dn and not is_dn then ok, err = pcall(entry.cb, entry.mod) end
             else
-                if is_dn and not was_dn then pcall(entry.cb, entry.mod) end
+                if is_dn and not was_dn then ok, err = pcall(entry.cb, entry.mod) end
+            end
+            if not ok then
+                record_uml_error("key_binding:" .. tostring(entry.id), err)
             end
         end
     end
@@ -1832,7 +1916,8 @@ local function handle_uml_menu_input(dt)
             if spec.type == "key" then
                 uml_key_capture_id = opt_id
             elseif spec.type == "choice" or (type(spec.choices) == "table" and #spec.choices > 0) then
-                local count = #spec.choices
+                local choices = (type(spec.choices) == "table" and #spec.choices > 0) and spec.choices or { "OFF", "ON" }
+                local count = #choices
                 local cur_idx = math.floor(tonumber(cur_val) or tonumber(spec.default) or 1)
                 if left_hit then
                     cur_idx = cur_idx - 1
@@ -1886,17 +1971,19 @@ end
 render = function(...)
     return prev_render(...)
 end
+_G.__uml_inner_render = render
 
 update = function(dt, ...)
     -- Circuit-Breaker protected update hooks
     for i = 1, #update_order do
         local id = update_order[i]
         local fn = update_hooks[id]
-        if fn then
+        if fn and type(fn) == "function" then
             local ok, err = pcall(fn, dt, ...)
             if not ok then
                 local cnt = (update_hook_errors[id] or 0) + 1
                 update_hook_errors[id] = cnt
+                record_uml_error("on_update:" .. tostring(id), err)
                 if cnt <= 3 then
                     pcall(print, "[UniversalLoader] update hook " .. tostring(id) .. " error: " .. tostring(err))
                 end
@@ -1909,13 +1996,17 @@ update = function(dt, ...)
     end
     return prev_update(dt, ...)
 end
+_G.__uml_inner_update = update
 
 shutdown = function(...)
     for i = 1, #shutdown_order do
         local id = shutdown_order[i]
         local fn = shutdown_hooks[id]
-        if fn then
-            pcall(fn, ...)
+        if fn and type(fn) == "function" then
+            local ok, err = pcall(fn, ...)
+            if not ok then
+                record_uml_error("on_shutdown:" .. tostring(id), err)
+            end
         end
     end
     return prev_shutdown(...)
@@ -2664,6 +2755,7 @@ package.loaded["BingusRuntime"] = _G.BingusRuntime
 -- ==============================================================================
 local after_startup_queue = {}
 local loaded_modules = {}
+local startup_finished = false
 
 -- 1. CowboyBingusModLoader & HD2ModLoader
 local loader_state = {
@@ -2708,7 +2800,14 @@ local loader_state = {
     end,
     after_startup = function(fn)
         if type(fn) == "function" then
-            table.insert(after_startup_queue, fn)
+            if startup_finished then
+                local ok, err = pcall(fn)
+                if not ok then
+                    record_uml_error("after_startup", err)
+                end
+            else
+                table.insert(after_startup_queue, fn)
+            end
             return true
         end
         return false
@@ -2719,6 +2818,7 @@ local loader_state = {
             id = "anonymous_" .. tostring(fn)
         end
         if type(id) ~= "string" or id == "" then return false end
+        if type(fn) ~= "function" and fn ~= nil then return false end
         if update_hooks[id] == nil and fn ~= nil then
             update_order[#update_order + 1] = id
         end
@@ -2731,6 +2831,7 @@ local loader_state = {
             id = "anonymous_" .. tostring(fn)
         end
         if type(id) ~= "string" or id == "" then return false end
+        if type(fn) ~= "function" and fn ~= nil then return false end
         if shutdown_hooks[id] == nil and fn ~= nil then
             shutdown_order[#shutdown_order + 1] = id
         end
@@ -2756,8 +2857,16 @@ BootModLoader = {
     }),
     hook = function(target, fn)
         if type(target) == "string" and type(fn) == "function" then
-            table.insert(BootModLoader.hooks, { target = target, fn = fn })
-            table.insert(BootModLoader.hooks[target], fn)
+            local safe_fn = function(...)
+                local res = { pcall(fn, ...) }
+                if not res[1] then
+                    record_uml_error("BootModLoader.hook:" .. target, res[2])
+                    return nil
+                end
+                return unpack(res, 2)
+            end
+            table.insert(BootModLoader.hooks, { target = target, fn = safe_fn, raw_fn = fn, mod = active_loading_mod_name })
+            table.insert(BootModLoader.hooks[target], safe_fn)
             return true
         end
         return false
@@ -2775,14 +2884,22 @@ local hd2rt = {
     on = function(evt, cb)
         if type(evt) == "string" and type(cb) == "function" then
             hd2rt_listeners[evt] = hd2rt_listeners[evt] or {}
-            table.insert(hd2rt_listeners[evt], cb)
+            table.insert(hd2rt_listeners[evt], { fn = cb, mod = active_loading_mod_name })
+            return true
         end
+        return false
     end,
     emit = function(evt, ...)
         local list = hd2rt_listeners[evt]
         if list then
-            for _, fn in ipairs(list) do
-                pcall(fn, ...)
+            for _, item in ipairs(list) do
+                local fn = type(item) == "table" and item.fn or item
+                if type(fn) == "function" then
+                    local ok, err = pcall(fn, ...)
+                    if not ok then
+                        record_uml_error("hd2rt.listen:" .. tostring(evt), err)
+                    end
+                end
             end
         end
     end,
@@ -2805,6 +2922,53 @@ package.loaded["HD2Runtime"] = hd2rt
 local chef_shared_state = {}
 local chef_api
 local create_chef_mod_context
+local wrap_spec
+local make_options_table
+
+wrap_spec = function(id, spec, default_category, default_mod)
+    if type(id) == "table" and spec == nil then
+        if default_mod and not id.mod and not id.title and not id.mod_name then
+            id.mod = default_mod
+        end
+        if default_category and not id.category and not id.group then
+            id.category = default_category
+        end
+        return id.id or id.name or id.key, id
+    end
+    spec = type(spec) == "table" and spec or {}
+    if default_mod and not spec.mod and not spec.title and not spec.mod_name then
+        spec.mod = default_mod
+    end
+    if default_category and not spec.category and not spec.group then
+        spec.category = default_category
+    end
+    return id, spec
+end
+
+make_options_table = function(default_cat, mod_name)
+    local opt_table = {}
+    local fmt_mod = mod_name and format_mod_title(mod_name) or nil
+    opt_table.register = function(id, spec)
+        if not id or id == "" or (type(id) == "table" and not id.id and not id.name and not id.key) then
+            return false, "invalid option id"
+        end
+        local clean_id, clean_spec = wrap_spec(id, spec, default_cat, fmt_mod)
+        if not clean_id then return false, "invalid option id" end
+        return chef_api.options.register(clean_id, clean_spec)
+    end
+    opt_table.get = function(id) return chef_api.options.get(id) end
+    opt_table.set = function(id, val) return chef_api.options.set(id, val) end
+    opt_table.on_change = function(id, fn) return chef_api.options.on_change(id, fn) end
+    opt_table.group = function(group_name)
+        return make_options_table(group_name, mod_name)
+    end
+    opt_table.category = opt_table.group
+    opt_table.add_category = function(cat_name)
+        return make_options_table(cat_name, mod_name)
+    end
+    setmetatable(opt_table, { __index = function(_, k) return chef_api.options[k] end })
+    return opt_table
+end
 
 chef_api = {
     api_level = 3,
@@ -2814,21 +2978,32 @@ chef_api = {
     is_universal_loader = true,
     after_startup = loader_state.after_startup,
     on = function(event_name, callback)
-        if event_name == "update" and type(callback) == "function" then
-            local id = "chef_update_" .. tostring(#update_order + 1)
-            update_order[#update_order + 1] = id
+        if type(callback) ~= "function" then return false end
+        if event_name == "update" then
+            local id = active_loading_mod_name and (active_loading_mod_name .. "_chef_update") or ("chef_update_" .. tostring(#update_order + 1))
+            if update_hooks[id] == nil then
+                update_order[#update_order + 1] = id
+            end
             update_hooks[id] = callback
-        elseif event_name == "shutdown" and type(callback) == "function" then
-            local id = "chef_shut_" .. tostring(#shutdown_order + 1)
-            shutdown_order[#shutdown_order + 1] = id
+            return true
+        elseif event_name == "shutdown" then
+            local id = active_loading_mod_name and (active_loading_mod_name .. "_chef_shut") or ("chef_shut_" .. tostring(#shutdown_order + 1))
+            if shutdown_hooks[id] == nil then
+                shutdown_order[#shutdown_order + 1] = id
+            end
             shutdown_hooks[id] = callback
-        else
+            return true
+        elseif event_name == "init" or event_name == "startup" or event_name == "after_startup" then
+            return loader_state.after_startup(callback)
+        elseif type(event_name) == "string" then
             hd2rt.on(event_name, callback)
+            return true
         end
+        return false
     end,
     state = {
-        get = function(key) return chef_shared_state[key] end,
-        set = function(key, val) chef_shared_state[key] = val end
+        get = function(key) if type(key) ~= "string" or key == "" then return nil end return chef_shared_state[key] end,
+        set = function(key, val) if type(key) ~= "string" or key == "" then return false end chef_shared_state[key] = val return true end
     },
     options = {
         register = function(id, spec)
@@ -2839,18 +3014,20 @@ chef_api = {
                     if clean_id then
                         return mom.register_option(clean_id, id)
                     end
-                elseif type(id) == "string" and type(spec) == "table" then
+                elseif type(id) == "string" and (type(spec) == "table" or spec == nil) then
                     return mom.register_option(id, spec)
                 end
             end
             return false
         end,
         get = function(id)
+            if type(id) ~= "string" or id == "" then return nil end
             local mom = rawget(_G, "ModOptionsMenu")
             if mom and type(mom.get) == "function" then return mom.get(id) end
             return nil
         end,
         set = function(id, val)
+            if type(id) ~= "string" or id == "" then return false end
             local mom = rawget(_G, "ModOptionsMenu")
             if mom and type(mom.set) == "function" then return mom.set(id, val) end
             return false
@@ -2859,23 +3036,17 @@ chef_api = {
             local mom = rawget(_G, "ModOptionsMenu")
             if mom and type(mom.on_change) == "function" then return mom.on_change(id, fn) end
             return false
-        end
+        end,
+        group = function(group_name) return make_options_table(group_name, nil) end,
+        category = function(cat_name) return make_options_table(cat_name, nil) end,
     },
+    group = function(group_name) return make_options_table(group_name, nil) end,
+    category = function(cat_name) return make_options_table(cat_name, nil) end,
     option = function(id, spec)
-        local mom = rawget(_G, "ModOptionsMenu")
-        if mom and type(mom.register_option) == "function" then
-            if type(id) == "table" and spec == nil then
-                local clean_id = id.id or id.name or id.key
-                if clean_id then
-                    return mom.register_option(clean_id, id)
-                end
-            elseif type(id) == "string" and type(spec) == "table" then
-                return mom.register_option(id, spec)
-            end
-        end
-        return false
+        return chef_api.options.register(id, spec)
     end,
     get = function(id)
+        if type(id) ~= "string" or id == "" then return nil end
         local mom = rawget(_G, "ModOptionsMenu")
         if mom and type(mom.get) == "function" then
             local v = mom.get(id)
@@ -2884,6 +3055,7 @@ chef_api = {
         return chef_shared_state[id]
     end,
     set = function(id, val)
+        if type(id) ~= "string" or id == "" then return false end
         chef_shared_state[id] = val
         local mom = rawget(_G, "ModOptionsMenu")
         if mom and type(mom.set) == "function" then return mom.set(id, val) end
@@ -2920,10 +3092,10 @@ chef_api = {
     },
     own_log = function(name, ...)
         local appdata = os.getenv("APPDATA") or "."
-        local tag = type(name) == "string" and name or "chef_mod"
+        local tag = (type(name) == "string" and name ~= "") and name or "chef_mod"
         local path = appdata .. "/Arrowhead/Helldivers2/" .. tag .. ".log"
         local logger = function(fmt, ...)
-            local msg = (select('#', ...) > 0) and string.format(fmt, ...) or tostring(fmt)
+            local msg = (select('#', ...) > 0) and string.format(tostring(fmt or ""), ...) or tostring(fmt or "")
             pcall(function()
                 local f = io.open(path, "a")
                 if f then
@@ -2943,62 +3115,31 @@ chef_api = {
     call_kind = function(kind, fn, ...)
         if type(kind) == "function" then
             local ok, res = pcall(kind, fn, ...)
-            if not ok then pcall(print, "[ChefMod] call_kind error: " .. tostring(res)) end
+            if not ok then
+                record_uml_error("ChefMod:call_kind", res)
+                pcall(print, "[ChefMod] call_kind error: " .. tostring(res))
+            end
             return ok, res
         elseif type(fn) == "function" then
             local ok, res = pcall(fn, ...)
-            if not ok then pcall(print, "[ChefMod] call_kind (" .. tostring(kind) .. ") error: " .. tostring(res)) end
+            if not ok then
+                record_uml_error("ChefMod:call_kind:" .. tostring(kind), res)
+                pcall(print, "[ChefMod] call_kind (" .. tostring(kind) .. ") error: " .. tostring(res))
+            end
             return ok, res
         end
         return false, "invalid function"
     end,
     log = function(fmt, ...)
-        pcall(print, "[ChefMod] " .. string.format(fmt, ...))
+        pcall(print, "[ChefMod] " .. string.format(tostring(fmt or ""), ...))
     end
 }
 
 create_chef_mod_context = function(mod_name)
     local formatted_mod = format_mod_title(mod_name)
-    local ctx
-    local function wrap_spec(id, spec, default_category)
-        if type(id) == "table" and spec == nil then
-            id.mod = id.mod or formatted_mod
-            if default_category and not id.category and not id.group then
-                id.category = default_category
-            end
-            return id.id or id.name or id.key, id
-        end
-        spec = type(spec) == "table" and spec or {}
-        spec.mod = spec.mod or formatted_mod
-        if default_category and not spec.category and not spec.group then
-            spec.category = default_category
-        end
-        return id, spec
-    end
+    local mod_options = make_options_table(nil, mod_name)
 
-    local function make_options_table(default_cat)
-        local opt_table = {}
-        opt_table.register = function(id, spec)
-            local clean_id, clean_spec = wrap_spec(id, spec, default_cat)
-            return chef_api.options.register(clean_id, clean_spec)
-        end
-        opt_table.get = function(id) return chef_api.options.get(id) end
-        opt_table.set = function(id, val) return chef_api.options.set(id, val) end
-        opt_table.on_change = function(id, fn) return chef_api.options.on_change(id, fn) end
-        opt_table.group = function(group_name)
-            return make_options_table(group_name)
-        end
-        opt_table.category = opt_table.group
-        opt_table.add_category = function(cat_name)
-            return make_options_table(cat_name)
-        end
-        setmetatable(opt_table, { __index = chef_api.options })
-        return opt_table
-    end
-
-    local mod_options = make_options_table(nil)
-
-    ctx = {
+    local ctx = {
         api_level = 3,
         loader_name = "UniversalModLoader",
         loader_version = "2.0.3",
@@ -3008,25 +3149,25 @@ create_chef_mod_context = function(mod_name)
         name = formatted_mod,
         options = mod_options,
         option = function(id, spec)
-            local clean_id, clean_spec = wrap_spec(id, spec, nil)
+            local clean_id, clean_spec = wrap_spec(id, spec, nil, formatted_mod)
             return chef_api.options.register(clean_id, clean_spec)
         end,
         register_option = function(id, spec)
-            local clean_id, clean_spec = wrap_spec(id, spec, nil)
+            local clean_id, clean_spec = wrap_spec(id, spec, nil, formatted_mod)
             return chef_api.options.register(clean_id, clean_spec)
         end,
         register = function(id, spec)
-            local clean_id, clean_spec = wrap_spec(id, spec, nil)
+            local clean_id, clean_spec = wrap_spec(id, spec, nil, formatted_mod)
             return chef_api.options.register(clean_id, clean_spec)
         end,
         group = function(group_name)
-            return make_options_table(group_name)
+            return make_options_table(group_name, mod_name)
         end,
         category = function(cat_name)
-            return make_options_table(cat_name)
+            return make_options_table(cat_name, mod_name)
         end,
         add_category = function(cat_name)
-            return make_options_table(cat_name)
+            return make_options_table(cat_name, mod_name)
         end,
         get = function(id) return chef_api.get(id) end,
         set = function(id, val) return chef_api.set(id, val) end,
@@ -3038,24 +3179,13 @@ create_chef_mod_context = function(mod_name)
         on_change = function(id, fn) return chef_api.on_change(id, fn) end,
         state = chef_api.state,
         shared = chef_shared_state,
-        bindings = chef_api.bindings,
+        own_log = function(name, ...) return chef_api.own_log(name or mod_name, ...) end,
         call_kind = chef_api.call_kind,
-        own_log = function(name, ...)
-            local tag = name or formatted_mod:lower():gsub("%s+", "_")
-            return chef_api.own_log(tag, ...)
-        end,
-        log = function(fmt, ...)
-            pcall(print, "[" .. formatted_mod .. "] " .. string.format(fmt, ...))
-        end,
-        info = function(fmt, ...)
-            pcall(print, "[" .. formatted_mod .. "] " .. string.format(fmt, ...))
-        end,
-        warn = function(fmt, ...)
-            pcall(print, "[" .. formatted_mod .. "] [WARN] " .. string.format(fmt, ...))
-        end,
-        error = function(fmt, ...)
-            pcall(print, "[" .. formatted_mod .. "] [ERROR] " .. string.format(fmt, ...))
-        end
+        log = chef_api.log,
+        info = function(fmt, ...) pcall(print, "[" .. formatted_mod .. "] " .. string.format(fmt, ...)) end,
+        warn = function(fmt, ...) pcall(print, "[" .. formatted_mod .. "] [WARN] " .. string.format(fmt, ...)) end,
+        error = function(fmt, ...) pcall(print, "[" .. formatted_mod .. "] [ERROR] " .. string.format(fmt, ...)) end,
+        bindings = chef_api.bindings
     }
     setmetatable(ctx, { __index = chef_api })
     return ctx
@@ -3113,6 +3243,123 @@ local function get_settings_file_paths()
     }
 end
 
+local function resilient_parse_json(content)
+    local out = {}
+    if type(content) ~= "string" or not content:match("%S") then
+        return out, false
+    end
+    local len = #content
+    local pos = 1
+    local parsed_any = false
+
+    local function skip_whitespace()
+        while pos <= len do
+            local c = content:sub(pos, pos)
+            if c == ' ' or c == '\t' or c == '\r' or c == '\n' or c == ',' then
+                pos = pos + 1
+            else
+                break
+            end
+        end
+    end
+
+    local function parse_string()
+        if content:sub(pos, pos) ~= '"' then return nil end
+        pos = pos + 1
+        local s_start = pos
+        local chunks = {}
+        while pos <= len do
+            local c = content:sub(pos, pos)
+            if c == '\\' then
+                chunks[#chunks + 1] = content:sub(s_start, pos - 1)
+                pos = pos + 1
+                local esc = content:sub(pos, pos)
+                if esc == '"' then chunks[#chunks + 1] = '"'
+                elseif esc == '\\' then chunks[#chunks + 1] = '\\'
+                elseif esc == '/' then chunks[#chunks + 1] = '/'
+                elseif esc == 'b' then chunks[#chunks + 1] = '\b'
+                elseif esc == 'f' then chunks[#chunks + 1] = '\f'
+                elseif esc == 'n' then chunks[#chunks + 1] = '\n'
+                elseif esc == 'r' then chunks[#chunks + 1] = '\r'
+                elseif esc == 't' then chunks[#chunks + 1] = '\t'
+                elseif esc == 'u' then
+                    local hex = content:sub(pos + 1, pos + 4)
+                    local code = tonumber(hex, 16)
+                    if code and code >= 32 and code < 127 then
+                        chunks[#chunks + 1] = string.char(code)
+                    else
+                        chunks[#chunks + 1] = "?"
+                    end
+                    pos = pos + 4
+                else
+                    chunks[#chunks + 1] = esc
+                end
+                pos = pos + 1
+                s_start = pos
+            elseif c == '"' then
+                chunks[#chunks + 1] = content:sub(s_start, pos - 1)
+                pos = pos + 1
+                return table.concat(chunks)
+            else
+                pos = pos + 1
+            end
+        end
+        return table.concat(chunks)
+    end
+
+    while pos <= len do
+        skip_whitespace()
+        if pos > len then break end
+        local c = content:sub(pos, pos)
+        if c == '{' or c == '}' or c == '[' or c == ']' then
+            pos = pos + 1
+        elseif c == '"' then
+            local key = parse_string()
+            if key ~= nil then
+                skip_whitespace()
+                if pos <= len and content:sub(pos, pos) == ':' then
+                    pos = pos + 1
+                    skip_whitespace()
+                    local vc = content:sub(pos, pos)
+                    local val = nil
+                    if vc == '"' then
+                        val = parse_string()
+                        parsed_any = true
+                    elseif content:sub(pos, pos + 3) == "true" then
+                        val = true
+                        pos = pos + 4
+                        parsed_any = true
+                    elseif content:sub(pos, pos + 4) == "false" then
+                        val = false
+                        pos = pos + 5
+                        parsed_any = true
+                    elseif content:sub(pos, pos + 3) == "null" then
+                        val = nil
+                        pos = pos + 4
+                        parsed_any = true
+                    else
+                        local num_str = content:sub(pos):match("^([%-%+]?%d*%.?%d+[eE]?[%-%+]?%d*)")
+                        if num_str and num_str ~= "" and num_str ~= "-" and num_str ~= "+" then
+                            val = tonumber(num_str)
+                            pos = pos + #num_str
+                            parsed_any = true
+                        else
+                            local skip = content:sub(pos):match("^([^,\r\n%}]+)")
+                            if skip then pos = pos + #skip else pos = pos + 1 end
+                        end
+                    end
+                    if val ~= nil then
+                        out[key] = val
+                    end
+                end
+            end
+        else
+            pos = pos + 1
+        end
+    end
+    return out, parsed_any
+end
+
 local function load_saved_settings()
     local out = {}
     local appdata = os.getenv("LOCALAPPDATA") or os.getenv("APPDATA") or "."
@@ -3133,28 +3380,18 @@ local function load_saved_settings()
 
     local paths = get_settings_file_paths()
     for i = #paths, 1, -1 do
-        local f = io.open(paths[i], "r")
+        local f = io.open(paths[i], "rb")
         if f then
             local content = f:read("*a")
             f:close()
             if content and content:match("%S") then
-                local parsed_any = false
-                for k, v in string.gmatch(content, '"([^"]+)"%s*:%s*([^,\n}]+)') do
-                    parsed_any = true
-                    v = v:match("^%s*(.-)%s*$")
-                    if v == "true" then
-                        out[k] = true
-                    elseif v == "false" then
-                        out[k] = false
-                    elseif tonumber(v) then
-                        out[k] = tonumber(v)
-                    elseif v:sub(1,1) == '"' and v:sub(-1) == '"' then
-                        out[k] = v:sub(2, -2)
-                    end
+                local parsed, parsed_any = resilient_parse_json(content)
+                for k, v in pairs(parsed) do
+                    out[k] = v
                 end
                 local trimmed = content:match("^%s*(.-)%s*$") or ""
-                if not parsed_any and trimmed ~= "{}" then
-                    local fb = io.open(paths[i] .. ".bak", "w")
+                if not parsed_any and trimmed ~= "{}" and trimmed ~= "" then
+                    local fb = io.open(paths[i] .. ".bak", "wb")
                     if fb then
                         fb:write(content)
                         fb:close()
@@ -3168,17 +3405,26 @@ local function load_saved_settings()
 end
 
 local function save_settings_to_disk(values)
+    if type(values) ~= "table" then return false end
     local parts = {}
     for k, v in pairs(values) do
-        local val_str = "null"
-        if type(v) == "boolean" then
-            val_str = v and "true" or "false"
-        elseif type(v) == "number" then
-            val_str = tostring(v)
-        elseif type(v) == "string" then
-            val_str = string.format("%q", v)
+        if type(k) == "string" and k ~= "" then
+            local val_str = nil
+            if type(v) == "boolean" then
+                val_str = v and "true" or "false"
+            elseif type(v) == "number" then
+                if v ~= v or v == math.huge or v == -math.huge then
+                    val_str = nil
+                else
+                    val_str = tostring(v)
+                end
+            elseif type(v) == "string" then
+                val_str = string.format("%q", v)
+            end
+            if val_str ~= nil then
+                parts[#parts + 1] = string.format("  %q: %s", tostring(k), val_str)
+            end
         end
-        parts[#parts + 1] = string.format("  %q: %s", tostring(k), val_str)
     end
     local payload = "{\n" .. table.concat(parts, ",\n") .. "\n}\n"
     local saved = false
@@ -3245,12 +3491,14 @@ if rawget(_G, "ModOptionsMenu") == nil then
             return true
         end,
         get = function(id)
+            if type(id) ~= "string" or id == "" then return nil end
             if fallback_opts[id] ~= nil then return fallback_opts[id] end
             local s = registered_opts[id]
             if s then return s.default end
             return nil
         end,
         set = function(id, v)
+            if type(id) ~= "string" or id == "" then return false end
             local old = fallback_opts[id]
             fallback_opts[id] = v
             mom_stub.revision = mom_stub.revision + 1
@@ -3479,24 +3727,32 @@ end
 
 -- Subsystem 7: Native Rat's Shared Loader (Armor Transmog 1.1.2 Support)
 if rawget(_G, "RatsSharedLoader") == nil then
-    local rat_api = {
+    local rat_api
+    rat_api = {
         version = "1.1.2",
         api_level = 1,
         is_rat_loader = true,
         loaded_mods = {},
         hooks = {},
         register = function(self, name, spec)
-            if type(self) == "string" and (type(name) == "table" or type(name) == "string") then
+            if type(self) == "string" and (type(name) == "table" or type(name) == "string" or name == nil) then
                 spec = name
                 name = self
+                self = rat_api
+            elseif type(self) ~= "table" then
+                self = rat_api
             end
+            if type(name) ~= "string" or name == "" then return false end
             self.loaded_mods = self.loaded_mods or {}
-            self.loaded_mods[name] = spec
+            self.loaded_mods[name] = spec or {}
             return true
         end,
         get_spec = function(self, name)
             if type(self) == "string" and name == nil then
                 name = self
+                self = rat_api
+            elseif type(self) ~= "table" then
+                self = rat_api
             end
             return self.loaded_mods and self.loaded_mods[name]
         end,
@@ -3504,26 +3760,42 @@ if rawget(_G, "RatsSharedLoader") == nil then
             if type(self) == "string" and (type(evt) == "function" or type(evt) == "table") then
                 cb = evt
                 evt = self
+                self = rat_api
+            elseif type(self) ~= "table" then
+                self = rat_api
             end
+            if type(evt) ~= "string" or type(cb) ~= "function" then return false end
             self.hooks = self.hooks or {}
             self.hooks[evt] = self.hooks[evt] or {}
             table.insert(self.hooks[evt], cb)
             if (evt == "update" or evt == "on_update") and type(cb) == "function" then
-                local id = "rats_update_" .. tostring(#update_order + 1)
-                update_order[#update_order + 1] = id
+                local id = active_loading_mod_name and (active_loading_mod_name .. "_rats_update") or ("rats_update_" .. tostring(#update_order + 1))
+                if update_hooks[id] == nil then
+                    update_order[#update_order + 1] = id
+                end
                 update_hooks[id] = cb
             elseif (evt == "init" or evt == "startup" or evt == "after_startup") and type(cb) == "function" then
-                after_startup_queue[#after_startup_queue + 1] = cb
+                loader_state.after_startup(cb)
             end
+            return true
         end,
         trigger = function(self, evt, ...)
             if type(self) == "string" then
                 evt = self
+                self = rat_api
+            elseif type(self) ~= "table" then
+                self = rat_api
             end
             local list = self.hooks and self.hooks[evt]
             if list then
                 for i = 1, #list do
-                    pcall(list[i], ...)
+                    local fn = list[i]
+                    if type(fn) == "function" then
+                        local ok, err = pcall(fn, ...)
+                        if not ok then
+                            record_uml_error("RatsSharedLoader:" .. tostring(evt), err)
+                        end
+                    end
                 end
             end
         end
@@ -3612,7 +3884,11 @@ uml_api = {
 
         function mod_obj:on_init(fn)
             if type(fn) == "function" then
-                pcall(fn, self)
+                local ok, err = pcall(fn, self)
+                if not ok then
+                    record_uml_error("on_init:" .. tostring(name), err)
+                    return false
+                end
                 return true
             end
             return false
@@ -3678,6 +3954,7 @@ uml_api = {
         mod_obj.register_option = mod_obj.option
 
         function mod_obj:get(id)
+            if type(id) ~= "string" or id == "" then return nil end
             local mom = rawget(_G, "ModOptionsMenu")
             if not mom or type(mom.get) ~= "function" then return nil end
             local full_id = id:find(".", 1, true) and id or (name .. "." .. id)
@@ -3687,6 +3964,7 @@ uml_api = {
         end
 
         function mod_obj:set(id, val)
+            if type(id) ~= "string" or id == "" then return false end
             local mom = rawget(_G, "ModOptionsMenu")
             if not mom or type(mom.set) ~= "function" then return false end
             local full_id = id:find(".", 1, true) and id or (name .. "." .. id)
@@ -3717,18 +3995,18 @@ uml_api = {
         end
 
         function mod_obj:translate(key, translations_or_fallback)
+            local clean_k = type(key) == "string" and key or tostring(key or "")
             local lang = uml_active_locale and uml_active_locale.tag or "en"
             if type(translations_or_fallback) == "table" then
-                local val = translations_or_fallback[lang]
-                    or translations_or_fallback[uml_active_locale and uml_active_locale.game_code or "us"]
-                    or translations_or_fallback["en"]
-                    or translations_or_fallback[1]
-                if val ~= nil then
+                local ok_v, val = pcall(function()
+                    return translations_or_fallback[lang]
+                        or translations_or_fallback[uml_active_locale and uml_active_locale.game_code or "us"]
+                        or translations_or_fallback["en"]
+                        or translations_or_fallback[1]
+                end)
+                if ok_v and val ~= nil then
                     local tr_txt = clean_display_text(val, "")
                     if tr_txt ~= "" then return tr_txt end
-                    if translations_or_fallback["en"] then
-                        return clean_display_text(translations_or_fallback["en"], tostring(key or ""))
-                    end
                 end
             end
             local bt = rawget(_G, "BingusTranslations")
@@ -3736,18 +4014,21 @@ uml_api = {
                 local pack = bt.packs[name]
                 if type(pack) == "table" and type(pack.strings) == "table" then
                     local tbl = pack.strings[lang]
-                    if type(tbl) == "table" and tbl[key] ~= nil then
-                        local tr_val = clean_display_text(tbl[key], "")
+                    if type(tbl) == "table" and tbl[clean_k] ~= nil then
+                        local tr_val = clean_display_text(tbl[clean_k], "")
                         if tr_val ~= "" then return tr_val end
                     end
                     local en_tbl = pack.strings["en"]
-                    if type(en_tbl) == "table" and en_tbl[key] ~= nil then
-                        local en_val = clean_display_text(en_tbl[key], "")
+                    if type(en_tbl) == "table" and en_tbl[clean_k] ~= nil then
+                        local en_val = clean_display_text(en_tbl[clean_k], "")
                         if en_val ~= "" then return en_val end
                     end
                 end
             end
-            return clean_display_text(translations_or_fallback or key, tostring(key or ""))
+            if type(translations_or_fallback) == "string" then
+                return clean_display_text(translations_or_fallback, clean_k)
+            end
+            return clean_display_text(clean_k, "?")
         end
 
         if type(spec.on_init) == "function" then mod_obj:on_init(spec.on_init) end
@@ -3834,7 +4115,9 @@ uml_api = {
     end,
     sort_dependencies = topological_sort_modules,
     is_chat_open = function() return uml_chat_open end,
-    is_window_focused = is_window_focused
+    is_window_focused = is_window_focused,
+    error_log = _G.uml_error_log,
+    get_error_log = function() return _G.uml_error_log end
 }
 _G.UML = uml_api
 _G.UniversalModLoader = uml_api
@@ -3955,11 +4238,71 @@ local function find_loose_file(mod_name)
     return nil
 end
 
+local function unregister_mod_hooks(mod_name)
+    if type(mod_name) ~= "string" or mod_name == "" then return end
+    local id_prefix = mod_name .. ":"
+    local uml_prefix = "uml_mod_" .. mod_name
+    local rat_id = mod_name .. "_rats_update"
+    local chef_id = mod_name .. "_chef_update"
+    for k in pairs(update_hooks) do
+        if k == mod_name or k == uml_prefix or k == rat_id or k == chef_id or k:sub(1, #id_prefix) == id_prefix then
+            update_hooks[k] = nil
+        end
+    end
+    for i = #update_order, 1, -1 do
+        local k = update_order[i]
+        if k == mod_name or k == uml_prefix or k == rat_id or k == chef_id or k:sub(1, #id_prefix) == id_prefix then
+            table.remove(update_order, i)
+        end
+    end
+    local shut_prefix = "uml_shut_" .. mod_name
+    local chef_shut = mod_name .. "_chef_shut"
+    for k in pairs(shutdown_hooks) do
+        if k == mod_name or k == shut_prefix or k == chef_shut or k:sub(1, #id_prefix) == id_prefix then
+            shutdown_hooks[k] = nil
+        end
+    end
+    for i = #shutdown_order, 1, -1 do
+        local k = shutdown_order[i]
+        if k == mod_name or k == shut_prefix or k == chef_shut or k:sub(1, #id_prefix) == id_prefix then
+            table.remove(shutdown_order, i)
+        end
+    end
+    local bml = rawget(_G, "BootModLoader")
+    if bml and type(bml.hooks) == "table" then
+        for i = #bml.hooks, 1, -1 do
+            if bml.hooks[i] and bml.hooks[i].mod == mod_name then
+                table.remove(bml.hooks, i)
+            end
+        end
+    end
+    local rt = rawget(_G, "hd2rt")
+    if rt and type(rt.events) == "table" then
+        for evt, list in pairs(rt.events) do
+            if type(list) == "table" then
+                for i = #list, 1, -1 do
+                    local it = list[i]
+                    if type(it) == "table" and it.mod == mod_name then
+                        table.remove(list, i)
+                    end
+                end
+            end
+        end
+    end
+    for i = #uml_key_bindings, 1, -1 do
+        local kb = uml_key_bindings[i]
+        if kb and (kb.mod == mod_name or (type(kb.id) == "string" and kb.id:sub(1, #id_prefix) == id_prefix)) then
+            table.remove(uml_key_bindings, i)
+        end
+    end
+end
+
 local loose_mod_names = {}
 trigger_loose_hot_reload = function()
     log_write("[HotReload] Initiating live reload of loose scripts...")
     local reloaded_count = 0
     for _, mod_name in ipairs(loose_mod_names) do
+        unregister_mod_hooks(mod_name)
         package.loaded[mod_name] = nil
         local chunk = nil
         local loose_path = find_loose_file(mod_name)
@@ -4199,10 +4542,18 @@ pcall(function()
         end
         if f then
             pcall(function()
+                local file_size = f:seek("end") or 0
+                f:seek("set", 0)
                 local header = f:read(72)
                 if header and #header >= 72 and u32(header, 0) == 0xf0000011 then
                     local types, count = u32(header, 4), u32(header, 8)
                     local table_start = 72 + 32 * types
+                    if table_start < file_size then
+                        local max_rows = math.floor((file_size - table_start) / 80)
+                        count = math.min(count, math.max(0, max_rows), 8192)
+                    else
+                        count = 0
+                    end
                     for index = 0, count - 1 do
                         f:seek("set", table_start + index * 80)
                         local row = f:read(80)
@@ -4218,7 +4569,7 @@ pcall(function()
                             local is_rogue_boot = false
 
                             if is_boot_resource then
-                                if off > 0 and len >= 8 then
+                                if off > 0 and len >= 8 and (off + 8) <= file_size then
                                     f:seek("set", off)
                                     local env = f:read(8)
                                     if env and #env == 8 and u32(env, 4) == 2 then
@@ -4232,15 +4583,15 @@ pcall(function()
                                 end
                             end
 
-                            if off > 0 and len >= 8 and not is_rogue_boot and not is_boot_resource then
+                            if off > 0 and len >= 8 and not is_rogue_boot and not is_boot_resource and (off + len) <= file_size then
                                 f:seek("set", off)
                                 local env = f:read(8)
                                 if env and #env == 8 and u32(env, 4) == 2 then
                                     local body_len = u32(env, 0)
-                                    if body_len > 0 and body_len <= len - 8 then
+                                    if body_len > 0 and body_len <= 33554432 and body_len <= len - 8 and (off + 8 + body_len) <= file_size then
                                         f:seek("set", off + 8)
                                         local script_content = f:read(body_len)
-                                        if script_content and #script_content > 0 then
+                                        if script_content and #script_content > 0 and script_content:sub(1, 4) ~= "\027Lua" and script_content:sub(1, 4) ~= "\x1bLua" then
                                             if script_content:sub(1, 3) == "\239\187\191" then
                                                 script_content = script_content:sub(4)
                                             end
@@ -4692,10 +5043,14 @@ end)
 -- and hotkeys always run reliably even if third-party mods overwrote engine callbacks.
 local uml_last_drawn_frame = -1
 local prev_master_update = type(rawget(_G, "update")) == "function" and rawget(_G, "update") or nil
+if prev_master_update == rawget(_G, "__uml_master_update") then
+    prev_master_update = rawget(_G, "__uml_inner_update") or rawget(_G, "__uml_original_update")
+end
+
 local function master_update(dt, ...)
     frame_counter = frame_counter + 1
     pcall(handle_uml_menu_input, dt)
-    if type(prev_master_update) == "function" then
+    if type(prev_master_update) == "function" and prev_master_update ~= master_update then
         prev_master_update(dt, ...)
     end
     if uml_ui_open or #uml_notifications > 0 then
@@ -4703,12 +5058,17 @@ local function master_update(dt, ...)
         pcall(draw_in_game_menu)
     end
 end
+_G.__uml_master_update = master_update
 _G.update = master_update
 update = master_update
 
 local prev_master_render = type(rawget(_G, "render")) == "function" and rawget(_G, "render") or nil
+if prev_master_render == rawget(_G, "__uml_master_render") then
+    prev_master_render = rawget(_G, "__uml_inner_render") or rawget(_G, "__uml_original_render")
+end
+
 local function master_render(...)
-    if type(prev_master_render) == "function" then
+    if type(prev_master_render) == "function" and prev_master_render ~= master_render then
         prev_master_render(...)
     end
     if (uml_ui_open or #uml_notifications > 0) and (uml_last_drawn_frame ~= frame_counter or frame_counter == 0) then
@@ -4716,6 +5076,7 @@ local function master_render(...)
         pcall(draw_in_game_menu)
     end
 end
+_G.__uml_master_render = master_render
 _G.render = master_render
 render = master_render
 log_write("Universal Mod Loader master hooks attached at outermost boundary")

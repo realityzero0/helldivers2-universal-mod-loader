@@ -295,7 +295,7 @@ return { name = "TreasureRadar", active = true }
     end
 
     -- MurmurHash64 key bytes for "mods/treasure_radar" as computed by UML's 64-bit MurmurHash64 engine
-    local radar_hash_bytes = string.char(0x66, 0xc5, 0x3b, 0xab, 0x04, 0x29, 0xac, 0xc2)
+    local radar_hash_bytes = murmur64_key_test("mods/treasure_radar")
 
     -- Entry row (80 bytes = 7 Qs + 6 Is):
     -- [8 bytes key][8 bytes type][8 bytes offset][32 bytes 0][4 bytes len][4 bytes 0][4 bytes 0][4 bytes 16][4 bytes 16][4 bytes 0]
