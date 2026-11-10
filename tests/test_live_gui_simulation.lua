@@ -144,7 +144,7 @@ local function run_test()
     assert(mom.api == 1 and mom.version >= 3, "ModOptionsMenu must expose api=1, version>=3")
     assert(mbm, "ModBindingsMenu must exist")
     assert(mbm.api == 1 and mbm.version >= 4, "ModBindingsMenu must expose api=1, version>=4")
-    assert(uml and (uml.version == "2.0.1" or uml.version == "2.0.0"), "UML v2.0.1 global must exist")
+    assert(uml and (uml.version == "2.0.2" or uml.version == "2.0.1" or uml.version == "2.0.0"), "UML v2.0.2 global must exist")
     assert(#mom.order >= 6, "Must have at least 6 registered default options, got " .. tostring(#mom.order))
     print(string.format("  [PASS] ModOptionsMenu (v%d), ModBindingsMenu (v%d), & UML (%s) ABI verified", mom.version, mbm.version, uml.version))
 

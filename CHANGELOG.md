@@ -1,5 +1,31 @@
 # Changelog — Helldivers 2 Universal Mod Loader
 
+## [2.0.2] - Community UX & Hierarchical Menu Release
+### Community Feedback & Direct Issue Resolutions
+
+#### 1. Per-Mod Context Isolation & Hierarchical Category Folds
+> **Quote from @Luvr117:**  
+> *"I love this mod in theory but it seems like it just adds every mod configuration option under one big "general mod" list and seems to lose all the nesting that makes the options menu navigable in Chef Loader.*  
+> *Installed mods were H2UML, Projectile Path Preview, Scope Zoom, Loadout Regulations, and Uniformity. All installed via Arsenal, UML at highest priority."*
+>
+> * **Why it occurred:**  
+>   1. **Static Singleton Global Options Context:** In v2.0.1, `ChefSharedLoader` was exposed as a static global singleton table. When mods like Projectile Path Preview, Scope Zoom, Loadout Regulations, and Uniformity registered options without explicitly passing `spec.mod`, the loader could not attribute the options to the calling mod and dumped all options across all installed mods into a flattened `"GENERAL MODS"` submenu.  
+>   2. **Missing Hierarchical Category Folds:** In the F9 menu, all options within a submenu were rendered flat with no category fold structure. Pressing the Right Arrow key on the first item immediately changed the option's value rather than expanding category sections.  
+> * **What was done to fix it in v2.0.2:**  
+>   1. **Per-Mod Chef Context Instance (`create_chef_mod_context`):** Implemented contextual proxy instances of `chef_api` automatically created for each mod during boot and preloading. Injects `spec.mod` automatically onto every option registered via `chef.option(...)`, `chef.options.register(...)`, `chef.group(...)`, and `chef.category(...)`.  
+>   2. **Smart Calling Stack Resolution (`infer_caller_mod_name`):** Added a call-stack inspector using `debug.getinfo` (levels 2–8) that automatically extracts the calling mod's basename and attributes options even if registered outside standard boot loops.  
+>   3. **Hierarchical Category Fold Navigation:** Implemented dynamic category parsing (`spec.category`, `spec.group`, `spec.folder`, `spec.section`, or slash/colon delimiters like `Category/Option`). Submenus with multiple categories render distinct Category Fold Headers with `[+]` / `[-]` indicators, item counts, and indented option rows.  
+>   4. **Accident-Proof Input Handling:** Left/Right arrow keys on Category Fold Headers strictly expand and collapse folds without altering any underlying mod option values. Left/Right on option rows smoothly toggles or steps settings.  
+>   5. **Single-Category Graceful Flat Render:** Mods with a single category (like UML Core, Eagle HUD, Sentry HUD) render options directly without extra fold headers, preserving fast single-click responsiveness.
+
+#### 2. Robust Loose Script Path Resolution & CWD Hardening
+* **Working Directory CWD Hardening:** Added `../mods/` and `../data/` support to `package.path` and `find_loose_file` candidates, ensuring mods in `<GameRoot>/mods/` are instantly resolved even when `helldivers2.exe` executes with working directory set to `<GameRoot>/bin/`.
+* **Clean Path Normalization:** Fixed loose path candidate generator to strip `mods/` prefixes prior to candidate concatenation, preventing malformed paths like `mods/mods/...`.
+* **Extended Archive Header Scanner:** Expanded patch scanner header matching to recognize `-- HD2-Mod:`, `-- @addon`, `-- Addon:`, and `-- Mod:` with full inline comment, quote, and `.lua` extension stripping.
+* **Expanded Rat's Shared Loader Compatibility:** Hardened `RatsSharedLoader` to polymorphically support dot-notation (`rat.on(...)`), colon-notation (`rat:on(...)`), `hook`, `add_hook`, `listen`, `register`, `register_mod`, and registered all Transmog/Rat module aliases.
+
+---
+
 ## [2.0.1] - Maintenance & Ecosystem Compatibility Release
 ### Community Feedback & Direct Issue Resolutions
 

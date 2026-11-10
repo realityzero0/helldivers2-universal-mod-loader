@@ -1,4 +1,4 @@
--- Universal Mod Loader v2.0.1 for Helldivers 2 (Steam Builds 25988413 / 26088801 / 26251122+ / Lua 5.1)
+-- Universal Mod Loader v2.0.2 for Helldivers 2 (Steam Builds 25988413 / 26088801 / 26251122+ / Lua 5.1)
 -- Replaces engine boot resource 0xF476DF93691895FA in bundle 9ba626afa44a3aa3
 -- Unifies All Helldivers 2 Modding Standards:
 --   1. Bingus Shared Loader (CowboyBingus / v17 / v20 / v21 / API 1 + BingusRuntime v1)
@@ -11,7 +11,7 @@
 
 -- Subsystem 0: Dynamic Package Search Paths (Loose Script Discovery)
 if package and type(package.path) == "string" then
-    local extra = ";./?.lua;./mods/?.lua;./mods/?/?.lua;./mods/?/init.lua;mods/?.lua;mods/?/?.lua;mods/?/init.lua;data/?.lua"
+    local extra = ";./?.lua;./mods/?.lua;./mods/?/?.lua;./mods/?/init.lua;mods/?.lua;mods/?/?.lua;mods/?/init.lua;data/?.lua;../mods/?.lua;../mods/?/?.lua;../mods/?/init.lua;../data/?.lua"
     if not package.path:find("mods/?.lua", 1, true) then
         package.path = package.path .. extra
     end
@@ -65,7 +65,7 @@ local function open_log()
         if f then
             log_handle = f
             active_log_path = path
-            f:write(string.format("\n--- Universal Mod Loader v2.0.1 Booted at %s ---\n", os.date and os.date("%Y-%m-%d %H:%M:%S") or "now"))
+            f:write(string.format("\n--- Universal Mod Loader v2.0.2 Booted at %s ---\n", os.date and os.date("%Y-%m-%d %H:%M:%S") or "now"))
             f:flush()
             return log_handle
         end
@@ -342,20 +342,20 @@ end
 set_active_uml_locale("auto")
 
 local UML_UI_STRINGS = {
-    ["en"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  OPTION %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
-    ["en-GB"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  OPTION %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
-    ["fr"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - SOUS-MENUS MODS", pane_mods = "[VOLET: LISTE MODS]", pane_opts = "[VOLET: OPTIONS]", mods = "MODS (%d)  [1-0 ACCES]", submenu = "SOUS-MENU: %s  |  OPTION %d/%d  |  PAGE %d/%d (%d/PG)", on = "< OUI >", off = "< NON >", desc_mod = "MOD SELECTIONNE: %s (%d OPTIONS) - APPUYEZ SUR DROITE, ESPACE OU 1-0 POUR MODIFIER LES OPTIONS. [-]/[=] POUR TAILLE UI." },
-    ["de"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - MOD-UNTERMENUS", pane_mods = "[BEREICH: MOD-LISTE]", pane_opts = "[BEREICH: OPTIONEN]", mods = "MODS (%d)  [1-0 WAHL]", submenu = "UNTERMENU: %s  |  OPTION %d/%d  |  SEITE %d/%d (%d/S.)", on = "< EIN >", off = "< AUS >", desc_mod = "AKTIVER MOD: %s (%d OPTIONEN) - RECHTS, LEERTASTE ODER 1-0 ZUM BEARBEITEN DRUCKEN. [-]/[=] FUR UI-SKALIERUNG." },
-    ["it"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - SOTTOMENU MOD", pane_mods = "[PANNELLO: MOD]", pane_opts = "[PANNELLO: OPZIONI]", mods = "MOD (%d)  [1-0 SALTA]", submenu = "SOTTOMENU: %s  |  OPZIONE %d/%d  |  PAG %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "MOD SELEZIONATA: %s (%d OPZIONI) - PREMI DESTRA, SPAZIO O 1-0 PER MODIFICARE LE OPZIONI. [-]/[=] SCALA UI." },
-    ["es"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  OPCION %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PULSA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
-    ["es-419"]  = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  OPCION %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PRESIONA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
-    ["pt-BR"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - SUBMENUS DE MODS", pane_mods = "[PAINEL: MODS]", pane_opts = "[PAINEL: OPCOES]", mods = "MODS (%d)  [1-0 ATALHO]", submenu = "SUBMENU: %s  |  OPCAO %d/%d  |  PAG %d/%d (%d/PG)", on = "< LIG >", off = "< DES >", desc_mod = "MOD SELECIONADO: %s (%d OPCOES) - PRESSIONE DIREITA, ESPACO OU 1-0 PARA EDITAR OPCOES. [-]/[=] ESCALA UI." },
-    ["pl"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - PODMENU MODOW", pane_mods = "[PANEL: LISTA MODOW]", pane_opts = "[PANEL: OPCJE]", mods = "MODY (%d)  [1-0 SKOK]", submenu = "PODMENU: %s  |  OPCJA %d/%d  |  STR %d/%d (%d/STR)", on = "< WL >", off = "< WYL >", desc_mod = "WYBRANY MOD: %s (%d OPCJI) - NACISNIJ PRAWO, SPACJE LUB 1-0 ABY EDYTOWAC OPCJE. [-]/[=] SKALA UI." },
-    ["ru"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - PODMENYU MODOV", pane_mods = "[PANEL: SPISOK MODOV]", pane_opts = "[PANEL: NASTROYKI]", mods = "MODY (%d)  [1-0 VYBOR]", submenu = "PODMENYU: %s  |  OPTSIYA %d/%d  |  STR %d/%d (%d/STR)", on = "< VKL >", off = "< VYKL >", desc_mod = "VYBRAN MOD: %s (%d OPTSIY) - NAZHMITE VPRAVO, PROBEL ILI 1-0 DLYA NASTROYKI. [-]/[=] MASSHTAB UI." },
-    ["ja"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - MOD SUBMENUS (JA)", pane_mods = "[PANE: MOD ICHIRAN]", pane_opts = "[PANE: SETTEI]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  SETTEI %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SENTAKU MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
-    ["ko"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - MOD SUBMENUS (KO)", pane_mods = "[PANE: MOD MOKROK]", pane_opts = "[PANE: SEOLJEONG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  OPTION %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SEONTAEK MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
-    ["zh-Hans"] = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - MOD SUBMENUS (ZHS)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XUANXIANG %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
-    ["zh-Hant"] = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - MOD SUBMENUS (ZHT)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XUANXIANG %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["en"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
+    ["en-GB"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
+    ["fr"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - SOUS-MENUS MODS", pane_mods = "[VOLET: LISTE MODS]", pane_opts = "[VOLET: OPTIONS]", mods = "MODS (%d)  [1-0 ACCES]", submenu = "SOUS-MENU: %s  |  ELEMENT %d/%d  |  PAGE %d/%d (%d/PG)", on = "< OUI >", off = "< NON >", desc_mod = "MOD SELECTIONNE: %s (%d OPTIONS) - APPUYEZ SUR DROITE, ESPACE OU 1-0 POUR MODIFIER LES OPTIONS. [-]/[=] POUR TAILLE UI." },
+    ["de"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - MOD-UNTERMENUS", pane_mods = "[BEREICH: MOD-LISTE]", pane_opts = "[BEREICH: OPTIONEN]", mods = "MODS (%d)  [1-0 WAHL]", submenu = "UNTERMENU: %s  |  EINTRAG %d/%d  |  SEITE %d/%d (%d/S.)", on = "< EIN >", off = "< AUS >", desc_mod = "AKTIVER MOD: %s (%d OPTIONEN) - RECHTS, LEERTASTE ODER 1-0 ZUM BEARBEITEN DRUCKEN. [-]/[=] FUR UI-SKALIERUNG." },
+    ["it"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - SOTTOMENU MOD", pane_mods = "[PANNELLO: MOD]", pane_opts = "[PANNELLO: OPZIONI]", mods = "MOD (%d)  [1-0 SALTA]", submenu = "SOTTOMENU: %s  |  VOCE %d/%d  |  PAG %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "MOD SELEZIONATA: %s (%d OPZIONI) - PREMI DESTRA, SPAZIO O 1-0 PER MODIFICARE LE OPZIONI. [-]/[=] SCALA UI." },
+    ["es"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  ELEMENTO %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PULSA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
+    ["es-419"]  = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  ELEMENTO %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PRESIONA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
+    ["pt-BR"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - SUBMENUS DE MODS", pane_mods = "[PAINEL: MODS]", pane_opts = "[PAINEL: OPCOES]", mods = "MODS (%d)  [1-0 ATALHO]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAG %d/%d (%d/PG)", on = "< LIG >", off = "< DES >", desc_mod = "MOD SELECIONADO: %s (%d OPCOES) - PRESSIONE DIREITA, ESPACO OU 1-0 PARA EDITAR OPCOES. [-]/[=] ESCALA UI." },
+    ["pl"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - PODMENU MODOW", pane_mods = "[PANEL: LISTA MODOW]", pane_opts = "[PANEL: OPCJE]", mods = "MODY (%d)  [1-0 SKOK]", submenu = "PODMENU: %s  |  POZYCJA %d/%d  |  STR %d/%d (%d/STR)", on = "< WL >", off = "< WYL >", desc_mod = "WYBRANY MOD: %s (%d OPCJI) - NACISNIJ PRAWO, SPACJE LUB 1-0 ABY EDYTOWAC OPCJE. [-]/[=] SKALA UI." },
+    ["ru"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - PODMENYU MODOV", pane_mods = "[PANEL: SPISOK MODOV]", pane_opts = "[PANEL: NASTROYKI]", mods = "MODY (%d)  [1-0 VYBOR]", submenu = "PODMENYU: %s  |  ELEMENT %d/%d  |  STR %d/%d (%d/STR)", on = "< VKL >", off = "< VYKL >", desc_mod = "VYBRAN MOD: %s (%d OPTSIY) - NAZHMITE VPRAVO, PROBEL ILI 1-0 DLYA NASTROYKI. [-]/[=] MASSHTAB UI." },
+    ["ja"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - MOD SUBMENUS (JA)", pane_mods = "[PANE: MOD ICHIRAN]", pane_opts = "[PANE: SETTEI]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  KOMOKU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SENTAKU MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["ko"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - MOD SUBMENUS (KO)", pane_mods = "[PANE: MOD MOKROK]", pane_opts = "[PANE: SEOLJEONG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  HANGMOK %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SEONTAEK MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["zh-Hans"] = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - MOD SUBMENUS (ZHS)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XIANGMU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["zh-Hant"] = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - MOD SUBMENUS (ZHT)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XIANGMU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
 }
 
 -- Unicode -> ASCII Transliteration Tables (Latin-1, Latin Extended-A, Cyrillic, Fullwidth, Punctuation)
@@ -580,6 +580,8 @@ local uml_ui_focus = "mods"
 local uml_ui_mod_idx = 1
 local uml_ui_opt_idx_by_mod = {}
 local uml_ui_selected_idx = 1
+local uml_ui_fold_states = {}
+local active_loading_mod_name = nil
 local uml_last_page_size = 24
 local uml_menu_open_logged = false
 local uml_key_capture_id = nil
@@ -869,28 +871,98 @@ local function get_mouse_wheel_steps()
     return 0
 end
 
-local function resolve_mod_group_name(opt_id, spec)
-    local raw_mod = spec and (spec.mod or spec.category or spec.title or spec.mod_id)
-    local clean = raw_mod and clean_display_text(raw_mod, "") or ""
-    if clean == "" and type(opt_id) == "string" then
-        local prefix = opt_id:match("^([^%.]+)%.")
-        if prefix and prefix ~= "" then
-            clean = prefix:gsub("_", " ")
+local function format_mod_title(s)
+    if type(s) ~= "string" or s == "" then return "GENERAL MODS" end
+    s = s:gsub("^@", ""):gsub("%.lua$", "")
+    s = s:gsub("^.*[/\\]", "")
+    s = s:gsub("^[Mm][Oo][Dd]_", ""):gsub("^[Mm][Oo][Dd][Ss]_", "")
+    local low = s:lower()
+    if low:find("smarter_guard_dog", 1, true) or low:find("smarterguarddog", 1, true) then return "SMARTER GUARD DOGS" end
+    if low:find("seaf_artillery", 1, true) or low:find("seafartillery", 1, true) then return "SEAF ARTILLERY" end
+    if low:find("driver_hud", 1, true) or low:find("driverhud", 1, true) then return "DRIVER HUD" end
+    if low:find("mortar", 1, true) then return "MORTAR HUD" end
+    if low:find("eagle_hud", 1, true) or low:find("eaglehud", 1, true) then return "EAGLE HUD" end
+    if low:find("sentry_hud", 1, true) or low:find("sentryhud", 1, true) then return "SENTRY HUD" end
+    if low:find("reticle_ammo", 1, true) or low:find("reticleammo", 1, true) then return "RETICLE AMMO HUD" end
+    if low:find("vehicle_seat", 1, true) or low:find("vehicleseat", 1, true) or low:find("vss", 1, true) then return "VEHICLE SEAT SWITCH" end
+    if low:find("helmet_headlamp", 1, true) or low:find("headlamp", 1, true) then return "HELMET HEADLAMP" end
+    if low:find("projectile_path", 1, true) or low == "ppp" or low:find("projectilepath", 1, true) then return "PROJECTILE PATH PREVIEW" end
+    if low:find("scope_zoom", 1, true) or low:find("scopezoom", 1, true) or low == "sz" then return "SCOPE ZOOM" end
+    if low:find("loadout_reg", 1, true) or low:find("loadoutreg", 1, true) then return "LOADOUT REGULATIONS" end
+    if low:find("uniformity", 1, true) or low:find("match_color", 1, true) or low == "libra" then return "UNIFORMITY" end
+    if low == "uml" or low == "uml_core" or low == "universal_mod_loader" then return "UML CORE" end
+
+    s = s:gsub("([a-z])([A-Z])", "%1 %2"):gsub("[%-_]+", " "):gsub("%s+", " ")
+    local up = s:match("^%s*(.-)%s*$"):upper()
+    return (up ~= "" and up ~= "?") and up or "GENERAL MODS"
+end
+
+local function infer_caller_mod_name()
+    if type(debug) ~= "table" or type(debug.getinfo) ~= "function" then return nil end
+    for level = 2, 8 do
+        local info = debug.getinfo(level, "S")
+        if info and info.source and info.source ~= "=[C]" and info.source ~= "=(command line)"
+            and not info.source:find("boot_loader", 1, true)
+            and not info.source:find("test_", 1, true)
+            and not info.source:find("tests[/\\]") then
+            local src = info.source:gsub("^@", "")
+            local base = src:match("([^/\\]+)%.lua$") or src:match("([^/\\]+)$")
+            if base and base ~= "" and base ~= "boot_loader" then
+                return format_mod_title(base)
+            end
         end
     end
-    local up = clean:upper()
-    if up == "" or up == "?" then return "GENERAL MODS" end
-    if up == "UML" or up == "UML CORE" or up == "UNIVERSAL MOD LOADER" then return "UML CORE" end
-    if up:find("VEHICLE", 1, true) and up:find("SEAT", 1, true) then return "VEHICLE SEAT SWITCH" end
-    if up:find("EAGLE HUD", 1, true) then return "EAGLE HUD" end
-    if up:find("RETICLE AMMO", 1, true) then return "RETICLE AMMO HUD" end
-    if up:find("SMARTER GUARD DOG", 1, true) then return "SMARTER GUARD DOGS" end
-    if up:find("HELMET HEADLAMP", 1, true) then return "HELMET HEADLAMP" end
-    if up:find("MORTAR HUD", 1, true) then return "MORTAR HUD" end
-    if up:find("SENTRY HUD", 1, true) then return "SENTRY HUD" end
-    if up:find("SEAF ARTILLERY", 1, true) then return "SEAF ARTILLERY" end
-    if up:find("DRIVER HUD", 1, true) then return "DRIVER HUD" end
-    return up
+    return nil
+end
+
+local function resolve_mod_group_name(opt_id, spec)
+    local raw_mod = spec and (spec.mod or spec.mod_name or spec.title or spec.mod_id)
+    if type(raw_mod) == "function" then
+        local ok, res = pcall(raw_mod)
+        if ok and res then raw_mod = res end
+    end
+    local clean = raw_mod and clean_display_text(raw_mod, "") or ""
+    if clean == "" and type(opt_id) == "string" then
+        local prefix = opt_id:match("^([^%.%:/]+)[%.%:/]")
+        if prefix and prefix ~= "" then
+            clean = format_mod_title(prefix)
+        end
+    end
+    if clean == "" and active_loading_mod_name then
+        clean = format_mod_title(active_loading_mod_name)
+    end
+    if clean == "" then
+        clean = infer_caller_mod_name() or ""
+    end
+    return format_mod_title(clean)
+end
+
+local function resolve_option_category(opt_id, spec)
+    local raw_cat = spec and (spec.category or spec.group or spec.folder or spec.section or spec.parent or spec.subgroup)
+    if type(raw_cat) == "function" then
+        local ok, res = pcall(raw_cat)
+        if ok and res then raw_cat = res end
+    end
+    local clean = raw_cat and clean_display_text(raw_cat, "") or ""
+    if clean == "" and type(opt_id) == "string" then
+        local c1 = opt_id:match("^[^/:]+[/:][^/:]*[/:]?([^/:]+)[/:]")
+        if c1 and c1 ~= "" then
+            clean = c1:gsub("[%-_]+", " ")
+        else
+            local slash_cat = opt_id:match("^([^/:]+)[/:]")
+            if slash_cat and slash_cat ~= "" and not slash_cat:find("%.") then
+                clean = slash_cat:gsub("[%-_]+", " ")
+            else
+                local m_part, cat_part = opt_id:match("^([^%.]+)%.([^%.]+)%.")
+                if cat_part and cat_part ~= "" then
+                    clean = cat_part:gsub("[%-_]+", " ")
+                end
+            end
+        end
+    end
+    clean = clean:gsub("([a-z])([A-Z])", "%1 %2"):gsub("[%-_]+", " "):gsub("%s+", " ")
+    local up = clean:match("^%s*(.-)%s*$"):upper()
+    return (up ~= "" and up ~= "?") and up or "GENERAL"
 end
 
 local function build_mod_groups(order, reg)
@@ -900,16 +972,94 @@ local function build_mod_groups(order, reg)
         local opt_id = order[i]
         local spec = reg[opt_id] or {}
         local gname = resolve_mod_group_name(opt_id, spec)
+        local cat_name = resolve_option_category(opt_id, spec)
         local grp = by_name[gname]
         if not grp then
-            grp = { name = gname, ids = {}, global_indices = {} }
+            grp = {
+                name = gname,
+                ids = {},
+                global_indices = {},
+                categories = {},
+                categories_by_name = {}
+            }
             by_name[gname] = grp
             groups[#groups + 1] = grp
         end
         grp.ids[#grp.ids + 1] = opt_id
         grp.global_indices[#grp.global_indices + 1] = i
+
+        local cat = grp.categories_by_name[cat_name]
+        if not cat then
+            cat = { name = cat_name, ids = {}, global_indices = {} }
+            grp.categories_by_name[cat_name] = cat
+            grp.categories[#grp.categories + 1] = cat
+        end
+        cat.ids[#cat.ids + 1] = opt_id
+        cat.global_indices[#cat.global_indices + 1] = i
     end
     return groups
+end
+
+local function build_group_visible_items(grp, reg)
+    if not grp then return {} end
+    local categories = grp.categories or {}
+    local num_cats = #categories
+
+    -- Flat view if mod has only 1 category (no multi-category hierarchy)
+    if num_cats <= 1 then
+        local items = {}
+        for i = 1, #grp.ids do
+            local opt_id = grp.ids[i]
+            items[#items + 1] = {
+                is_category = false,
+                opt_id = opt_id,
+                global_idx = grp.global_indices[i],
+                indent = 0,
+                category_name = (num_cats > 0) and categories[1].name or "GENERAL",
+                spec = reg[opt_id] or {}
+            }
+        end
+        return items
+    end
+
+    -- Hierarchical Folded Categories (when mod has > 1 category)
+    local items = {}
+    for c_idx = 1, num_cats do
+        local cat = categories[c_idx]
+        local fold_key = grp.name .. "::" .. cat.name
+        local is_collapsed = uml_ui_fold_states[fold_key]
+        if is_collapsed == nil then
+            if num_cats > 3 then
+                is_collapsed = (c_idx > 1)
+            else
+                is_collapsed = false
+            end
+            uml_ui_fold_states[fold_key] = is_collapsed
+        end
+
+        items[#items + 1] = {
+            is_category = true,
+            category_name = cat.name,
+            child_count = #cat.ids,
+            fold_key = fold_key,
+            collapsed = is_collapsed
+        }
+
+        if not is_collapsed then
+            for i = 1, #cat.ids do
+                local opt_id = cat.ids[i]
+                items[#items + 1] = {
+                    is_category = false,
+                    opt_id = opt_id,
+                    global_idx = cat.global_indices[i],
+                    indent = 1,
+                    category_name = cat.name,
+                    spec = reg[opt_id] or {}
+                }
+            end
+        end
+    end
+    return items
 end
 
 local function sync_submenu_state(order, reg)
@@ -918,18 +1068,22 @@ local function sync_submenu_state(order, reg)
     if num_groups == 0 then
         uml_ui_mod_idx = 1
         uml_ui_selected_idx = 1
-        return groups, nil, 1
+        return groups, nil, 1, {}
     end
     if uml_ui_mod_idx < 1 then uml_ui_mod_idx = 1 end
     if uml_ui_mod_idx > num_groups then uml_ui_mod_idx = num_groups end
     local cur_grp = groups[uml_ui_mod_idx]
-    local g_count = #cur_grp.ids
+    local items = build_group_visible_items(cur_grp, reg)
+    local item_count = #items
     local opt_idx = uml_ui_opt_idx_by_mod[cur_grp.name] or 1
     if opt_idx < 1 then opt_idx = 1 end
-    if g_count > 0 and opt_idx > g_count then opt_idx = g_count end
+    if item_count > 0 and opt_idx > item_count then opt_idx = item_count end
     uml_ui_opt_idx_by_mod[cur_grp.name] = opt_idx
-    uml_ui_selected_idx = cur_grp.global_indices[opt_idx] or 1
-    return groups, cur_grp, opt_idx
+    local cur_item = items[opt_idx]
+    if cur_item and not cur_item.is_category then
+        uml_ui_selected_idx = cur_item.global_idx or 1
+    end
+    return groups, cur_grp, opt_idx, items
 end
 
 local function draw_menu_on_gui(sr, g, W, H, order, reg, vals)
@@ -990,7 +1144,7 @@ local function draw_menu_on_gui(sr, g, W, H, order, reg, vals)
     local cyan = Color(255, 110, 210, 250)
     local divider_col = Color(255, 55, 72, 100)
 
-    local groups, cur_grp, cur_opt_idx = sync_submenu_state(order, reg)
+    local groups, cur_grp, cur_opt_idx, items = sync_submenu_state(order, reg)
     local num_groups = #groups
     local is_mods_focus = (uml_ui_focus == "mods")
 
@@ -1100,97 +1254,129 @@ local function draw_menu_on_gui(sr, g, W, H, order, reg, vals)
     end
 
     -- =========================================================================
-    -- RIGHT PANE: SELECTED MOD'S OPTIONS SUBMENU
+    -- RIGHT PANE: SELECTED MOD'S OPTIONS SUBMENU (WITH HIERARCHICAL FOLDS)
     -- =========================================================================
     local sel_spec = nil
     local sel_id = nil
-    if not cur_grp or #cur_grp.ids == 0 then
+    local sel_item = nil
+    if not cur_grp or not items or #items == 0 then
         draw_pixel_text_on_gui(sr, g, rx0 + 16, row_start_y - line_h, "UNIVERSAL MOD LOADER IS ACTIVE.", px, bright_gold, 970)
         draw_pixel_text_on_gui(sr, g, rx0 + 16, row_start_y - 2 * line_h, "NO REGISTERED MOD OPTIONS FOUND.", px, gray, 970)
     else
-        local grp_total = #cur_grp.ids
+        local item_total = #items
         local opt_page_size = dynamic_page_size
         local opt_page = math.floor((cur_opt_idx - 1) / opt_page_size)
-        local opt_total_pages = math.ceil(grp_total / opt_page_size)
+        local opt_total_pages = math.max(1, math.ceil(item_total / opt_page_size))
         local opt_start = opt_page * opt_page_size + 1
-        local opt_end = math.min(grp_total, opt_start + opt_page_size - 1)
+        local opt_end = math.min(item_total, opt_start + opt_page_size - 1)
 
-        sel_id = cur_grp.ids[cur_opt_idx]
-        sel_spec = sel_id and reg[sel_id] or {}
+        sel_item = items[cur_opt_idx]
+        sel_id = sel_item and sel_item.opt_id
+        sel_spec = sel_item and sel_item.spec
 
         local grp_title = cur_grp.name
         if #grp_title > 38 then grp_title = grp_title:sub(1, 35) .. "..." end
-        local right_hdr = string.format(ui_str.submenu, grp_title, cur_opt_idx, grp_total, opt_page + 1, opt_total_pages, opt_page_size)
+        local right_hdr = string.format(ui_str.submenu, grp_title, cur_opt_idx, item_total, opt_page + 1, opt_total_pages, opt_page_size)
         draw_pixel_text_on_gui(sr, g, rx0 + 14, sub_y, right_hdr, small_px, (not is_mods_focus) and green or gray, 970)
 
         local pane_char_cap = math.floor((rpw - 36) / (6 * px))
         local max_choice_chars = math.max(18, math.floor(pane_char_cap * 0.42))
 
         for idx = opt_start, opt_end do
-            local opt_id = cur_grp.ids[idx]
-            local spec = reg[opt_id] or {}
-            -- CRITICAL: Explicit nil check so boolean false is never overwritten by spec.default!
-            local val = vals[opt_id]
-            if val == nil then
-                val = spec.default
-            end
+            local item = items[idx]
             local is_selected = (idx == cur_opt_idx)
             local row_y = row_start_y - (idx - opt_start + 1) * line_h
 
-            local val_str = tostring(val)
-            local val_col = white
-            if spec.type == "key" then
-                if uml_key_capture_id == opt_id then
-                    val_str = "[PRESS KEY]"
-                    val_col = bright_gold
-                else
-                    local k_str = (type(val) == "string" and val ~= "" and val ~= "off") and val:upper() or "NONE"
-                    val_str = "[" .. k_str .. "]"
-                    val_col = (k_str ~= "NONE") and bright_gold or gray
-                end
-            elseif spec.type == "choice" or (type(spec.choices) == "table" and #spec.choices > 0) then
-                local c_idx = math.floor(tonumber(val) or tonumber(spec.default) or 1)
-                if c_idx < 1 or c_idx > #spec.choices then c_idx = 1 end
-                local ch_raw = spec.choices[c_idx] or tostring(c_idx)
-                local ch_txt = clean_display_text(ch_raw, tostring(c_idx)):upper()
-                if #ch_txt > max_choice_chars then ch_txt = ch_txt:sub(1, max_choice_chars - 3) .. "..." end
-                val_str = string.format("< %s (%d/%d) >", ch_txt, c_idx, #spec.choices)
-                val_col = cyan
-            elseif spec.type == "toggle" or type(val) == "boolean" then
-                local bval = (val == true)
-                val_str = bval and (ui_str.on or "< ON >") or (ui_str.off or "< OFF >")
-                val_col = bval and green or red
-            elseif spec.type == "slider" or type(val) == "number" then
-                local nval = tonumber(val) or tonumber(spec.default) or tonumber(spec.min) or 0
-                local st = tonumber(spec.step) or 0
-                local num_s = (st >= 1 or (st == 0 and math.floor(nval) == nval)) and tostring(math.floor(nval + 0.5)) or string.format("%.2f", nval)
-                val_str = "< " .. num_s .. " >"
-                val_col = cyan
-            end
+            if item.is_category then
+                local fold_sym = item.collapsed and "[+] " or "[-] "
+                local cat_title = fold_sym .. item.category_name
+                local count_msg = string.format("(%d) %s", item.child_count, item.collapsed and "[RIGHT] EXPAND" or "[LEFT] FOLD")
+                local count_w = #count_msg * 6 * small_px
+                local count_x = rx0 + rpw - 18 - count_w
 
-            local raw_label = clean_display_text(spec.label, opt_id):upper()
-            local val_w = #val_str * 6 * px
-            local val_x = rx0 + rpw - 18 - val_w
-            local avail_px = val_x - (rx0 + 16) - 16
-            local max_chars = math.max(16, math.floor(avail_px / (6 * px)) - 2)
-            if #raw_label > max_chars then
-                raw_label = raw_label:sub(1, max_chars - 3) .. "..."
-            end
-
-            if is_selected then
-                if not is_mods_focus then
-                    draw_rect(rx0 + 6, row_y, rpw - 14, line_h, sel_blue, 955)
-                    draw_rect(rx0 + 6, row_y, 4, line_h, sel_bar, 958)
-                    draw_pixel_text_on_gui(sr, g, rx0 + 16, row_y + text_pad_y, "> " .. raw_label, px, bright_gold, 970)
+                if is_selected then
+                    if not is_mods_focus then
+                        draw_rect(rx0 + 6, row_y, rpw - 14, line_h, sel_blue, 955)
+                        draw_rect(rx0 + 6, row_y, 4, line_h, sel_bar, 958)
+                        draw_pixel_text_on_gui(sr, g, rx0 + 16, row_y + text_pad_y, "> " .. cat_title, px, bright_gold, 970)
+                        draw_pixel_text_on_gui(sr, g, count_x, row_y + mod_text_pad_y, count_msg, small_px, bright_gold, 970)
+                    else
+                        draw_rect(rx0 + 6, row_y, rpw - 14, line_h, sel_dim, 955)
+                        draw_pixel_text_on_gui(sr, g, rx0 + 16, row_y + text_pad_y, "  " .. cat_title, px, cyan, 970)
+                        draw_pixel_text_on_gui(sr, g, count_x, row_y + mod_text_pad_y, count_msg, small_px, cyan, 970)
+                    end
                 else
-                    draw_rect(rx0 + 6, row_y, rpw - 14, line_h, sel_dim, 955)
-                    draw_pixel_text_on_gui(sr, g, rx0 + 16, row_y + text_pad_y, "  " .. raw_label, px, white, 970)
+                    draw_rect(rx0 + 6, row_y, rpw - 14, line_h, Color(248, 24, 32, 44), 954)
+                    draw_rect(rx0 + 6, row_y, 3, line_h, divider_col, 957)
+                    draw_pixel_text_on_gui(sr, g, rx0 + 16, row_y + text_pad_y, "  " .. cat_title, px, cyan, 970)
+                    draw_pixel_text_on_gui(sr, g, count_x, row_y + mod_text_pad_y, count_msg, small_px, gray, 970)
                 end
             else
-                draw_pixel_text_on_gui(sr, g, rx0 + 16, row_y + text_pad_y, "  " .. raw_label, px, white, 970)
-            end
+                local opt_id = item.opt_id
+                local spec = item.spec or reg[opt_id] or {}
+                -- CRITICAL: Explicit nil check so boolean false is never overwritten by spec.default!
+                local val = vals[opt_id]
+                if val == nil then
+                    val = spec.default
+                end
 
-            draw_pixel_text_on_gui(sr, g, val_x, row_y + text_pad_y, val_str, px, val_col, 970)
+                local val_str = tostring(val)
+                local val_col = white
+                if spec.type == "key" then
+                    if uml_key_capture_id == opt_id then
+                        val_str = "[PRESS KEY]"
+                        val_col = bright_gold
+                    else
+                        local k_str = (type(val) == "string" and val ~= "" and val ~= "off") and val:upper() or "NONE"
+                        val_str = "[" .. k_str .. "]"
+                        val_col = (k_str ~= "NONE") and bright_gold or gray
+                    end
+                elseif spec.type == "choice" or (type(spec.choices) == "table" and #spec.choices > 0) then
+                    local c_idx = math.floor(tonumber(val) or tonumber(spec.default) or 1)
+                    if c_idx < 1 or c_idx > #spec.choices then c_idx = 1 end
+                    local ch_raw = spec.choices[c_idx] or tostring(c_idx)
+                    local ch_txt = clean_display_text(ch_raw, tostring(c_idx)):upper()
+                    if #ch_txt > max_choice_chars then ch_txt = ch_txt:sub(1, max_choice_chars - 3) .. "..." end
+                    val_str = string.format("< %s (%d/%d) >", ch_txt, c_idx, #spec.choices)
+                    val_col = cyan
+                elseif spec.type == "toggle" or type(val) == "boolean" then
+                    local bval = (val == true)
+                    val_str = bval and (ui_str.on or "< ON >") or (ui_str.off or "< OFF >")
+                    val_col = bval and green or red
+                elseif spec.type == "slider" or type(val) == "number" then
+                    local nval = tonumber(val) or tonumber(spec.default) or tonumber(spec.min) or 0
+                    local st = tonumber(spec.step) or 0
+                    local num_s = (st >= 1 or (st == 0 and math.floor(nval) == nval)) and tostring(math.floor(nval + 0.5)) or string.format("%.2f", nval)
+                    val_str = "< " .. num_s .. " >"
+                    val_col = cyan
+                end
+
+                local raw_label = clean_display_text(spec.label, opt_id):upper()
+                local val_w = #val_str * 6 * px
+                local val_x = rx0 + rpw - 18 - val_w
+                local indent_px = (item.indent or 0) * (14 * px)
+                local avail_px = val_x - (rx0 + 16 + indent_px) - 16
+                local max_chars = math.max(14, math.floor(avail_px / (6 * px)) - 2)
+                if #raw_label > max_chars then
+                    raw_label = raw_label:sub(1, max_chars - 3) .. "..."
+                end
+
+                local label_x = rx0 + 16 + indent_px
+                if is_selected then
+                    if not is_mods_focus then
+                        draw_rect(rx0 + 6, row_y, rpw - 14, line_h, sel_blue, 955)
+                        draw_rect(rx0 + 6, row_y, 4, line_h, sel_bar, 958)
+                        draw_pixel_text_on_gui(sr, g, label_x, row_y + text_pad_y, "> " .. raw_label, px, bright_gold, 970)
+                    else
+                        draw_rect(rx0 + 6, row_y, rpw - 14, line_h, sel_dim, 955)
+                        draw_pixel_text_on_gui(sr, g, label_x, row_y + text_pad_y, "  " .. raw_label, px, white, 970)
+                    end
+                else
+                    draw_pixel_text_on_gui(sr, g, label_x, row_y + text_pad_y, "  " .. raw_label, px, white, 970)
+                end
+
+                draw_pixel_text_on_gui(sr, g, val_x, row_y + text_pad_y, val_str, px, val_col, 970)
+            end
         end
     end
 
@@ -1200,6 +1386,8 @@ local function draw_menu_on_gui(sr, g, W, H, order, reg, vals)
     local desc_txt = ""
     if is_mods_focus and cur_grp then
         desc_txt = string.format(ui_str.desc_mod, cur_grp.name, #cur_grp.ids)
+    elseif sel_item and sel_item.is_category then
+        desc_txt = string.format("CATEGORY: %s   |   CONTAINS %d OPTIONS   |   [RIGHT/ENTER] EXPAND FOLD   [LEFT] COLLAPSE FOLD", sel_item.category_name, sel_item.child_count)
     elseif sel_spec then
         local raw_d = clean_display_text(sel_spec.description or "", ""):upper()
         local raw_l = clean_display_text(sel_spec.label or sel_id or "", ""):upper()
@@ -1221,7 +1409,7 @@ local function draw_menu_on_gui(sr, g, W, H, order, reg, vals)
     draw_rect(x0, footer_y, pw, 2, divider_col, 954)
     local footer_controls = is_mods_focus
         and "[UP/DN/WHEEL] SELECT MOD   [RIGHT/SPACE/TAB] OPEN SUBMENU   [1-0] QUICK MOD   [-/=] UI SCALE   [F9/ESC] CLOSE"
-        or  "[UP/DN/WHEEL] SELECT OPTION   [LEFT/RIGHT] CHANGE   [BACKSPACE/TAB] MOD LIST   [1-0] MOD   [-/=] SCALE   [DEL] RESET"
+        or  "[UP/DN/WHEEL] SELECT   [LEFT/RIGHT] CHANGE/FOLD   [BACKSPACE/TAB] MOD LIST   [1-0] MOD   [-/=] SCALE   [DEL] RESET"
     local ctrl_text_y = y_bottom + math.max(4, math.floor((ctrl_h - 7 * small_px) / 2))
     draw_pixel_text_on_gui(sr, g, x0 + 16, ctrl_text_y, footer_controls, small_px, gray, 970)
 end
@@ -1429,7 +1617,7 @@ local function handle_uml_menu_input(dt)
     local mbm = rawget(_G, "ModBindingsMenu")
     local order = mom and mom.order or {}
     local reg = mom and mom.registered or {}
-    local groups, cur_grp, cur_opt_idx = sync_submenu_state(order, reg)
+    local groups, cur_grp, cur_opt_idx, items = sync_submenu_state(order, reg)
     local num_groups = #groups
 
     -- Key capture mode for keybinding rows
@@ -1574,8 +1762,8 @@ local function handle_uml_menu_input(dt)
         return
     end
 
-    if cur_grp and #cur_grp.ids > 0 then
-        local g_count = #cur_grp.ids
+    if cur_grp and items and #items > 0 then
+        local g_count = #items
         if up_hit then
             cur_opt_idx = cur_opt_idx - 1
             if cur_opt_idx < 1 then cur_opt_idx = g_count end
@@ -1592,9 +1780,37 @@ local function handle_uml_menu_input(dt)
             cur_opt_idx = g_count
         end
         uml_ui_opt_idx_by_mod[cur_grp.name] = cur_opt_idx
-        uml_ui_selected_idx = cur_grp.global_indices[cur_opt_idx] or 1
 
-        local opt_id = cur_grp.ids[cur_opt_idx]
+        local cur_item = items[cur_opt_idx]
+        if cur_item and not cur_item.is_category then
+            uml_ui_selected_idx = cur_item.global_idx or 1
+        end
+
+        if cur_item and cur_item.is_category then
+            if right_hit or space_hit then
+                if cur_item.collapsed then
+                    uml_ui_fold_states[cur_item.fold_key] = false
+                    log_write(string.format("[UML] Category '%s' expanded", cur_item.category_name))
+                    sync_submenu_state(order, reg)
+                else
+                    if cur_opt_idx < #items then
+                        cur_opt_idx = cur_opt_idx + 1
+                        uml_ui_opt_idx_by_mod[cur_grp.name] = cur_opt_idx
+                    end
+                end
+                return
+            elseif left_hit then
+                if not cur_item.collapsed then
+                    uml_ui_fold_states[cur_item.fold_key] = true
+                    log_write(string.format("[UML] Category '%s' collapsed", cur_item.category_name))
+                    sync_submenu_state(order, reg)
+                end
+                return
+            end
+            return
+        end
+
+        local opt_id = cur_item and cur_item.opt_id
 
         if del_hit and opt_id and mom then
             if type(mom.reset_option) == "function" then
@@ -2587,10 +2803,12 @@ package.loaded["HD2Runtime"] = hd2rt
 -- 4. Chef Shared Loader Emulation (API Levels 1, 2, 3)
 local chef_shared_state = {}
 local chef_api
+local create_chef_mod_context
+
 chef_api = {
     api_level = 3,
     loader_name = "UniversalModLoader",
-    loader_version = "2.0.1",
+    loader_version = "2.0.2",
     is_chef_loader = true,
     is_universal_loader = true,
     after_startup = loader_state.after_startup,
@@ -2615,8 +2833,11 @@ chef_api = {
         register = function(id, spec)
             local mom = rawget(_G, "ModOptionsMenu")
             if mom and type(mom.register_option) == "function" then
-                if type(id) == "table" and spec == nil and id.id then
-                    return mom.register_option(id.id, id)
+                if type(id) == "table" and spec == nil then
+                    local clean_id = id.id or id.name or id.key
+                    if clean_id then
+                        return mom.register_option(clean_id, id)
+                    end
                 elseif type(id) == "string" and type(spec) == "table" then
                     return mom.register_option(id, spec)
                 end
@@ -2642,8 +2863,11 @@ chef_api = {
     option = function(id, spec)
         local mom = rawget(_G, "ModOptionsMenu")
         if mom and type(mom.register_option) == "function" then
-            if type(id) == "table" and spec == nil and id.id then
-                return mom.register_option(id.id, id)
+            if type(id) == "table" and spec == nil then
+                local clean_id = id.id or id.name or id.key
+                if clean_id then
+                    return mom.register_option(clean_id, id)
+                end
             elseif type(id) == "string" and type(spec) == "table" then
                 return mom.register_option(id, spec)
             end
@@ -2697,9 +2921,117 @@ chef_api = {
         pcall(print, "[ChefMod] " .. string.format(fmt, ...))
     end
 }
+
+create_chef_mod_context = function(mod_name)
+    local formatted_mod = format_mod_title(mod_name)
+    local ctx
+    local function wrap_spec(id, spec, default_category)
+        if type(id) == "table" and spec == nil then
+            id.mod = id.mod or formatted_mod
+            if default_category and not id.category and not id.group then
+                id.category = default_category
+            end
+            return id.id or id.name or id.key, id
+        end
+        spec = type(spec) == "table" and spec or {}
+        spec.mod = spec.mod or formatted_mod
+        if default_category and not spec.category and not spec.group then
+            spec.category = default_category
+        end
+        return id, spec
+    end
+
+    local function make_options_table(default_cat)
+        local opt_table = {}
+        opt_table.register = function(id, spec)
+            local clean_id, clean_spec = wrap_spec(id, spec, default_cat)
+            return chef_api.options.register(clean_id, clean_spec)
+        end
+        opt_table.get = function(id) return chef_api.options.get(id) end
+        opt_table.set = function(id, val) return chef_api.options.set(id, val) end
+        opt_table.on_change = function(id, fn) return chef_api.options.on_change(id, fn) end
+        opt_table.group = function(group_name)
+            return make_options_table(group_name)
+        end
+        opt_table.category = opt_table.group
+        opt_table.add_category = function(cat_name)
+            return make_options_table(cat_name)
+        end
+        setmetatable(opt_table, { __index = chef_api.options })
+        return opt_table
+    end
+
+    local mod_options = make_options_table(nil)
+
+    ctx = {
+        api_level = 3,
+        loader_name = "UniversalModLoader",
+        loader_version = "2.0.2",
+        is_chef_loader = true,
+        is_universal_loader = true,
+        mod_name = mod_name,
+        name = formatted_mod,
+        options = mod_options,
+        option = function(id, spec)
+            local clean_id, clean_spec = wrap_spec(id, spec, nil)
+            return chef_api.options.register(clean_id, clean_spec)
+        end,
+        group = function(group_name)
+            return make_options_table(group_name)
+        end,
+        category = function(cat_name)
+            return make_options_table(cat_name)
+        end,
+        add_category = function(cat_name)
+            return make_options_table(cat_name)
+        end,
+        get = function(id) return chef_api.get(id) end,
+        set = function(id, val) return chef_api.set(id, val) end,
+        on = function(evt, cb) return chef_api.on(evt, cb) end,
+        on_change = function(id, fn) return chef_api.on_change(id, fn) end,
+        state = chef_api.state,
+        bindings = chef_api.bindings,
+        log = function(fmt, ...)
+            pcall(print, "[" .. formatted_mod .. "] " .. string.format(fmt, ...))
+        end
+    }
+    setmetatable(ctx, { __index = chef_api })
+    return ctx
+end
+
+chef_api.group = function(name)
+    local target = active_loading_mod_name or infer_caller_mod_name()
+    return create_chef_mod_context(target).group(name)
+end
+chef_api.category = chef_api.group
+chef_api.add_category = chef_api.group
+
+chef_api.options.group = chef_api.group
+chef_api.options.category = chef_api.group
+chef_api.options.add_category = chef_api.group
+
 _G.ChefSharedLoader = chef_api
-package.preload["ChefSharedLoader"] = function() return chef_api end
-package.loaded["ChefSharedLoader"] = chef_api
+
+local chef_preload_handler = function(opt_mod_name)
+    local target_mod = opt_mod_name or active_loading_mod_name or infer_caller_mod_name()
+    return create_chef_mod_context(target_mod)
+end
+
+local chef_aliases = {
+    "ChefSharedLoader",
+    "chef_shared_loader",
+    "mods/chef_shared_loader/core_1",
+    "mods/chef_shared_loader/core",
+    "mods/chef_shared_loader",
+    "mods/chef/chef_shared_loader",
+    "mods/chef/core_1",
+    "mods/chef/core",
+    "mods/chef/shared_loader"
+}
+for _, alias in ipairs(chef_aliases) do
+    package.preload[alias] = chef_preload_handler
+    package.loaded[alias] = chef_api
+end
 
 -- Subsystem 6: Settings Persistence schema
 local function get_settings_file_paths()
@@ -2816,6 +3148,14 @@ if rawget(_G, "ModOptionsMenu") == nil then
         register_option = function(id, spec)
             if type(id) ~= "string" or id == "" then return false, "invalid option id" end
             spec = type(spec) == "table" and spec or {}
+            if not spec.mod and not spec.title and not spec.mod_name then
+                if active_loading_mod_name then
+                    spec.mod = format_mod_title(active_loading_mod_name)
+                else
+                    local caller = infer_caller_mod_name()
+                    if caller then spec.mod = caller end
+                end
+            end
             if not registered_opts[id] then
                 order_opts[#order_opts + 1] = id
             end
@@ -3076,13 +3416,26 @@ if rawget(_G, "RatsSharedLoader") == nil then
         loaded_mods = {},
         hooks = {},
         register = function(self, name, spec)
+            if type(self) == "string" and (type(name) == "table" or type(name) == "string") then
+                spec = name
+                name = self
+            end
+            self.loaded_mods = self.loaded_mods or {}
             self.loaded_mods[name] = spec
             return true
         end,
         get_spec = function(self, name)
-            return self.loaded_mods[name]
+            if type(self) == "string" and name == nil then
+                name = self
+            end
+            return self.loaded_mods and self.loaded_mods[name]
         end,
         on = function(self, evt, cb)
+            if type(self) == "string" and (type(evt) == "function" or type(evt) == "table") then
+                cb = evt
+                evt = self
+            end
+            self.hooks = self.hooks or {}
             self.hooks[evt] = self.hooks[evt] or {}
             table.insert(self.hooks[evt], cb)
             if (evt == "update" or evt == "on_update") and type(cb) == "function" then
@@ -3094,7 +3447,10 @@ if rawget(_G, "RatsSharedLoader") == nil then
             end
         end,
         trigger = function(self, evt, ...)
-            local list = self.hooks[evt]
+            if type(self) == "string" then
+                evt = self
+            end
+            local list = self.hooks and self.hooks[evt]
             if list then
                 for i = 1, #list do
                     pcall(list[i], ...)
@@ -3102,15 +3458,28 @@ if rawget(_G, "RatsSharedLoader") == nil then
             end
         end
     }
+    rat_api.hook = rat_api.on
+    rat_api.add_hook = rat_api.on
+    rat_api.listen = rat_api.on
+    rat_api.register_mod = rat_api.register
+
     _G.RatsSharedLoader = rat_api
-    package.preload["RatsSharedLoader"] = function() return rat_api end
-    package.preload["rats_shared_loader"] = function() return rat_api end
-    package.preload["rat_shared_loader"] = function() return rat_api end
-    package.preload["mods/rat/shared_loader"] = function() return rat_api end
-    package.loaded["RatsSharedLoader"] = rat_api
-    package.loaded["rats_shared_loader"] = rat_api
-    package.loaded["rat_shared_loader"] = rat_api
-    package.loaded["mods/rat/shared_loader"] = rat_api
+
+    local rat_aliases = {
+        "RatsSharedLoader",
+        "rats_shared_loader",
+        "rat_shared_loader",
+        "mods/rat/shared_loader",
+        "mods/rat/rats_shared_loader",
+        "mods/rat/core",
+        "mods/rat/main",
+        "mods/transmog/transmog",
+        "mods/transmog"
+    }
+    for _, alias in ipairs(rat_aliases) do
+        package.preload[alias] = function() return rat_api end
+        package.loaded[alias] = rat_api
+    end
 end
 
 -- Subsystem 14: Topological Dependency Sorter (DAG Prerequisite Resolver)
@@ -3153,7 +3522,7 @@ end
 local uml_registered_mods = {}
 local uml_api
 uml_api = {
-    version = "2.0.1",
+    version = "2.0.2",
     api = 2,
     mods = uml_registered_mods,
     register = function(name, spec)
@@ -3488,14 +3857,22 @@ end
 local function find_loose_file(mod_name)
     if type(mod_name) ~= "string" or mod_name == "" then return nil end
     local bare_name = mod_name:match("([^/]+)$") or mod_name
+    local clean_name = mod_name:gsub("^mods/", ""):gsub("%.lua$", "")
     local candidates = {
-        "mods/" .. mod_name .. ".lua",
+        "mods/" .. clean_name .. ".lua",
         "mods/" .. bare_name .. ".lua",
-        "mods/" .. mod_name .. "/main.lua",
-        "mods/" .. mod_name .. "/init.lua",
-        "mods/" .. mod_name .. "/" .. bare_name .. ".lua",
+        "mods/" .. clean_name .. "/main.lua",
+        "mods/" .. clean_name .. "/init.lua",
+        "mods/" .. clean_name .. "/" .. bare_name .. ".lua",
+        "../mods/" .. clean_name .. ".lua",
+        "../mods/" .. bare_name .. ".lua",
+        "../mods/" .. clean_name .. "/main.lua",
+        "../mods/" .. clean_name .. "/init.lua",
+        "../mods/" .. clean_name .. "/" .. bare_name .. ".lua",
         mod_name .. ".lua",
         bare_name .. ".lua",
+        "../" .. mod_name .. ".lua",
+        "../" .. bare_name .. ".lua",
         mod_name
     }
     for _, p in ipairs(candidates) do
@@ -3538,7 +3915,10 @@ trigger_loose_hot_reload = function()
             end
         end
         if chunk then
-            local ok, res = safe_run_with_watchdog(chunk, 3.0, chef_api, mod_name)
+            active_loading_mod_name = mod_name
+            local mod_chef = create_chef_mod_context(mod_name)
+            local ok, res = safe_run_with_watchdog(chunk, 3.0, mod_chef, mod_name)
+            active_loading_mod_name = nil
             if ok then
                 package.loaded[mod_name] = res or true
                 reloaded_count = reloaded_count + 1
@@ -3621,12 +4001,31 @@ local candidate_modules = {
     "mods/clear_night/main",
     "mods/clear_night",
     "mods/patpatpatrick/night_vision",
-    "mods/chef/night_vision"
+    "mods/chef/night_vision",
+    "mods/azpider18/night_vision",
+
+    -- Trajectory, Optics & Armor Uniformity Mods (Luvr117 & PacketInc community suites)
+    "mods/projectile_path_preview/main",
+    "mods/projectile_path_preview/projectile_path_preview",
+    "mods/projectile_path_preview",
+    "projectile_path_preview",
+    "mods/ppp/main",
+    "mods/ppp",
+    "mods/scope_zoom/main",
+    "mods/scope_zoom/scope_zoom",
+    "mods/scope_zoom",
+    "scope_zoom",
+    "mods/ScopeZoom",
+    "ScopeZoom",
+    "mods/uniformity/main",
+    "mods/uniformity/uniformity",
+    "mods/uniformity",
+    "uniformity"
 }
 
 -- Also check for user-defined custom loose mod list (mods/mods.txt or mods/load_order.txt)
 pcall(function()
-    local user_list_candidates = { "mods/mods.txt", "mods/load_order.txt", "mods/mod_list.txt" }
+    local user_list_candidates = { "mods/mods.txt", "mods/load_order.txt", "mods/mod_list.txt", "../mods/mods.txt", "../mods/load_order.txt", "../mods/mod_list.txt" }
     for _, u_path in ipairs(user_list_candidates) do
         local uf = io.open(u_path, "r")
         if uf then
@@ -3704,19 +4103,28 @@ pcall(function()
                                     if prefix then
                                         local d_name = prefix:match("%-%-%s*HD2%-Addon:%s*([^\r\n]+)")
                                             or prefix:match("%-%-%s*HD2%-Boot:%s*([^\r\n]+)")
+                                            or prefix:match("%-%-%s*HD2%-Mod:%s*([^\r\n]+)")
                                             or prefix:match("%-%-%s*@mod%s+([^\r\n]+)")
                                             or prefix:match("%-%-%s*@boot%s+([^\r\n]+)")
+                                            or prefix:match("%-%-%s*@addon%s+([^\r\n]+)")
+                                            or prefix:match("%-%-%s*Addon:%s*([^\r\n]+)")
+                                            or prefix:match("%-%-%s*Mod:%s*([^\r\n]+)")
                                         if d_name then
-                                            d_name = d_name:gsub("^%s+", ""):gsub("%s+$", "")
-                                            if not existing[d_name] and d_name ~= "boot" and d_name ~= "core/boot" then
+                                            d_name = d_name:gsub("%s*%-%-.*$", "")
+                                            d_name = d_name:gsub('^["\']', ''):gsub('["\']$', '')
+                                            d_name = d_name:gsub("%.lua$", "")
+                                            d_name = d_name:match("^%s*(.-)%s*$")
+                                            if d_name ~= "" and not existing[d_name] and d_name ~= "boot" and d_name ~= "core/boot" then
                                                 candidate_modules[#candidate_modules + 1] = d_name
                                                 existing[d_name] = true
                                             end
                                             local req_str = prefix:match("%-%-%s*HD2%-Requires:%s*([^\r\n]+)")
                                                 or prefix:match("%-%-%s*@requires%s+([^\r\n]+)")
+                                                or prefix:match("%-%-%s*Requires:%s*([^\r\n]+)")
                                             if req_str then
+                                                req_str = req_str:gsub("%s*%-%-.*$", "")
                                                 local reqs = {}
-                                                for req in req_str:gmatch("([^,%s]+)") do
+                                                for req in req_str:gmatch("([^,%s\"']+)") do
                                                     reqs[#reqs + 1] = req
                                                 end
                                                 if #reqs > 0 then
@@ -3811,12 +4219,15 @@ for _, mod_name in ipairs(candidate_modules) do
                 end
 
                 local ok, res
+                active_loading_mod_name = mod_name
+                local mod_chef = create_chef_mod_context(mod_name)
                 if chunk then
-                    -- Subsystem 4: True CSL Vararg Parameter Injection (chunk(chef_api, mod_name))
-                    ok, res = safe_run_with_watchdog(chunk, 3.0, chef_api, mod_name)
+                    -- Subsystem 4: True CSL Vararg Parameter Injection (chunk(mod_chef, mod_name))
+                    ok, res = safe_run_with_watchdog(chunk, 3.0, mod_chef, mod_name)
                 else
                     ok, res = pcall(require, mod_name)
                 end
+                active_loading_mod_name = nil
 
                 clear_active_sentinel()
 
@@ -4069,7 +4480,7 @@ pcall(function()
         local res_path = appdata .. "/UniversalModLoader/in_game_test_results.json"
         local f_res = io.open(res_path, "w")
         if f_res then
-            f_res:write(string.format('{\n  "status": "PASSED",\n  "version": "2.0.0",\n  "apis": true,\n  "f9_menu": true,\n  "options": true,\n  "loaded_count": %d,\n  "failed_count": %d\n}\n', loaded_count, failed_count))
+            f_res:write(string.format('{\n  "status": "PASSED",\n  "version": "2.0.2",\n  "apis": true,\n  "f9_menu": true,\n  "options": true,\n  "loaded_count": %d,\n  "failed_count": %d\n}\n', loaded_count, failed_count))
             f_res:close()
             log_write("[TEST_MODE] In-Game Test Diagnostics Written to " .. tostring(res_path))
         end

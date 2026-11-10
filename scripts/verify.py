@@ -40,7 +40,8 @@ with zipfile.ZipFile(ZIP_PATH, "r") as z:
     # Verify boot resource payload contains Lua header
     size, unk = struct.unpack_from('<II', payload, 0)
     lua_code = payload[8:8+size].decode('utf-8', errors='ignore')
-    assert "Universal Mod Loader v2.0.1" in lua_code, "Missing v2.0.1 version string in boot resource"
-    print(f"  [OK] Payload contains verified v2.0.1 bootloader ({size} bytes of Lua)")
+    expected_v = f"Universal Mod Loader v{m.get('version')}"
+    assert expected_v in lua_code, f"Missing {expected_v} version string in boot resource"
+    print(f"  [OK] Payload contains verified v{m.get('version')} bootloader ({size} bytes of Lua)")
 
-print("\nALL ARCHIVE INTEGRITY CHECKS PASSED FOR v2.0.1!")
+print(f"\nALL ARCHIVE INTEGRITY CHECKS PASSED FOR v{m.get('version')}!")
