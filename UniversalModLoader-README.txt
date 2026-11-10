@@ -1,6 +1,6 @@
 Supports Steam builds 25988413, 26088801, and 26251122+ (EAC EOS Overhaul).
 
-Helldivers 2 Universal Mod Loader - v2.0.2 (The Indestructible Universal Runtime)
+Helldivers 2 Universal Mod Loader - v2.0.3 (The Indestructible Universal Runtime)
 
 Unifies all Helldivers 2 modding standards into a single engine boot loader:
   1. CowboyBingus Mod Loader (API 1, Version 17, BingusRuntime v1, on_update, on_shutdown, after_startup)
@@ -23,7 +23,7 @@ Unifies all Helldivers 2 modding standards into a single engine boot loader:
  18. Safe pcall sandbox mod execution with quarantine logging so broken mods cannot crash the game
 
 INSTALLATION (Arsenal Mod Manager / HD2MM):
-1. Drag and drop 'Helldivers2-Universal-Mod-Loader-v2.0.2.zip' into Arsenal Mod Manager.
+1. Drag and drop 'Helldivers2-Universal-Mod-Loader-v2.0.3.zip' into Arsenal Mod Manager.
 2. Ensure Universal Mod Loader is placed in Position 1 (patch_0).
 3. Deploy and launch the game.
 

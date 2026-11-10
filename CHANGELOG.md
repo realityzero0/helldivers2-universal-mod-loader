@@ -1,5 +1,40 @@
 # Changelog — Helldivers 2 Universal Mod Loader
 
+## [2.0.3] - Universal Archive Lua Resource Enumeration & Community Suite Release
+### Community Feedback & Direct Issue Resolutions
+
+#### 1. Universal Archive Lua Resource Auto-Discovery & Full Community Suite Support
+> **Quote from @Panther117:**  
+> *"Just tried this universal version of yours, and it only apparently detected DriverHud, it didn't recognize Scope Zoom, Night Vision-Flashlight, Treare Radar, NarrowHud and Armor Transmog. Looking at log in Appdata it didn't give any errors booting them, it just seems like simply didn't notice them. Any suggestions?"*
+>
+> **Quote from @EndoKrine007:**  
+> *"Does this actually work?"*
+>
+> **Quote from @PacketInc:**  
+> *"When only using this not a single one of my lua mods work, Transmog doesn't load, mod loadout regulations, night vision etc"*
+>
+> * **Why it occurred:**  
+>   1. **Comment-Header Gated Patch Scanning:** In prior versions, archive patch scanning strictly relied on explicit regex matching for `-- HD2-Addon:` or `-- HD2-Mod:` header comments. DriverHud succeeded because its archive had `-- HD2-Addon: mods/driverhud/driver_hud`. However, community mods like Scope Zoom (justVinargg), Treasure Radar (Chef), NarrowHud (luka189), Night Vision - Flashlight (azpider18), and Armor Transmog (RatInPlat) often ship without comment headers, or use namespaced subdirectories (`mods/chef/...`, `mods/luka189/...`, `mods/azpider18/...`) that weren't in the bootloader's initial candidate list.  
+>   2. **Preload Shadowing on Transmog:** In `boot_loader.lua`, `rat_aliases` previously mapped `"mods/transmog"` and `"mods/transmog/transmog"` to the loader's own internal shim object. When the real Transmog mod loaded, `package.loaded["mods/transmog"]` already existed as a loader table, preventing the mod chunk from executing.  
+>   3. **Missing Chef Interop Callbacks:** Several Chef mods expected helper methods (`register_option`, `register`, `listen`, `hook`, `add_hook`, `after_startup`, `warn`, `error`, `info`, `shared`) directly on the injected `chef` context.  
+>
+> * **What was done to fix it in v2.0.3:**  
+>   1. **Universal Archive Lua Resource Enumeration:** The patch scanner now iterates through all mounted patches (`patch_0` through `patch_512`) and dynamically discovers **ANY** Lua script resource (`0xA14E8DFA2CD117E2`), whether header-commented, anonymous, or namespaced. It computes the 64-bit MurmurHash64 key, registers package preloads, and boots the mod chunk safely.  
+>   2. **Comprehensive Community Preimage & Alias Catalog:** Added MurmurHash64 preimages and canonical aliases for the entire community suite:  
+>      - **Treasure Radar:** `mods/chef/treasure_radar`, `mods/treasure_radar`, `mods/treasure_radar/main`, `treasure_radar`  
+>      - **NarrowHud:** `mods/luka189/narrowhud`, `mods/narrow_hud`, `mods/narrowhud`, `mods/NarrowHUD`, `narrowhud`  
+>      - **Night Vision - Flashlight:** `mods/azpider18/night_vision`, `mods/azpider18/night_vision_flashlight`, `mods/night_vision/night_vision`, `mods/night_vision`, `night_vision`  
+>      - **Scope Zoom:** `mods/justvinargg/scope_zoom`, `mods/scope_zoom`, `mods/ScopeZoom`, `ScopeZoom`  
+>      - **Armor Transmog:** `mods/rat/transmog`, `mods/armor_transmog`, `mods/transmog/main`, `transmog`, `armor_transmog`  
+>      - **Loadout Regulations:** `mods/mod_loadout_regulations`, `mods/loadout_regulations`, `mod_loadout_regulations`  
+>      - **Projectile Path Preview:** `mods/projectile_path_preview`, `projectile_path_preview`  
+>      - **Uniformity:** `mods/uniformity`, `uniformity`  
+>   3. **Preload Shadowing Elimination:** Removed `"mods/transmog"` from `rat_aliases` so it can never shadow the actual Armor Transmog module in `package.loaded`. Added `is_loader_obj` guard ensuring loader shims are never mistaken for loaded mods.  
+>   4. **Full Chef Context Interop:** Expanded `create_chef_mod_context` with `register_option`, `register`, `listen`, `hook`, `add_hook`, `after_startup`, `warn`, `error`, `info`, and `shared`.  
+>   5. **Dedicated In-Game F9 Sidebar Menus:** Every detected mod automatically gets its own titled sidebar item (e.g. `TREASURE RADAR`, `NARROW HUD`, `NIGHT VISION - FLASHLIGHT`, `SCOPE ZOOM`, `ARMOR TRANSMOG`, `LOADOUT REGULATIONS`) with multi-category fold support and zero options dumped into "GENERAL MODS".  
+>
+---
+
 ## [2.0.2] - Community UX & Hierarchical Menu Release
 ### Community Feedback & Direct Issue Resolutions
 

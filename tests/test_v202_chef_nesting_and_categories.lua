@@ -91,7 +91,7 @@ local function run_test()
     local uml = _G.UML
     local chef = _G.ChefSharedLoader
     assert(mom, "ModOptionsMenu must exist")
-    assert(uml and uml.version == "2.0.2", "UML global must be v2.0.2, got: " .. tostring(uml and uml.version))
+    assert(uml and (uml.version == "2.0.3" or uml.version == "2.0.2"), "UML global must be v2.0.3 or v2.0.2, got: " .. tostring(uml and uml.version))
     assert(chef and chef.is_chef_loader, "ChefSharedLoader interop must be active")
 
     -- 1. Test format_mod_title and Mod Attribution for Luvr117 reported mods

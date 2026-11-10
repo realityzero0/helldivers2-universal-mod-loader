@@ -1,8 +1,8 @@
 {
   "name": "Helldivers 2 Universal Mod Loader",
-  "version": "2.0.2",
-  "revision": "loader-v2.0.2",
-  "display_version": "v2.0.2",
+  "version": "2.0.3",
+  "revision": "loader-v2.0.3",
+  "display_version": "v2.0.3",
   "steam_build": 26251122,
   "supported_steam_builds": [
     25988413,
@@ -12,10 +12,10 @@
   "exe_version": "1.8.46659.0",
   "runtime_verified": true,
   "files": {
-    "data/9ba626afa44a3aa3.patch_0": "15136B33C417E346E5B7F8E8B83CBF57A46E3E6EBD025B62AD4AA667E6E8EC83",
+    "data/9ba626afa44a3aa3.patch_0": "9BD5E28A2F209097491689B479EC6C3540AFE28C2F1A919F07F8A1648969C0F5",
     "data/9ba626afa44a3aa3.patch_0.stream": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
     "data/9ba626afa44a3aa3.patch_0.gpu_resources": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
-    "UniversalModLoader-README.txt": "813B01BD37CA0915C7D66B41A9A76164E4EFD448B999642ED393A8DB095D30BC",
+    "UniversalModLoader-README.txt": "DDDF895D5C2A025FC12B8FB2474469EF389693B6DCE2D60F702A61C254047E06",
     "thumbnail.png": "C8C7901C5C71BF2F8D7CF6D83BD0F916244CA2508B1D39824FA9B66B79BED7CC"
   },
   "provides": {

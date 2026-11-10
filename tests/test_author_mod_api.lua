@@ -115,7 +115,7 @@ end
 
 local sr, kb, rects = boot_clean_environment()
 local UML = _G.UML
-assert(UML and (UML.version == "2.0.2" or UML.version == "2.0.1" or UML.version == "2.0.0"), "UML API global must be initialized")
+assert(UML and (UML.version == "2.0.3" or UML.version == "2.0.2" or UML.version == "2.0.1" or UML.version == "2.0.0"), "UML API global must be initialized")
 
 -- Test 1: Mod Registration & Metadata
 test("UML.register creates managed mod object with metadata", function()

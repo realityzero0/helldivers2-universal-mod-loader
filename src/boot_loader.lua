@@ -1,4 +1,4 @@
--- Universal Mod Loader v2.0.2 for Helldivers 2 (Steam Builds 25988413 / 26088801 / 26251122+ / Lua 5.1)
+-- Universal Mod Loader v2.0.3 for Helldivers 2 (Steam Builds 25988413 / 26088801 / 26251122+ / Lua 5.1)
 -- Replaces engine boot resource 0xF476DF93691895FA in bundle 9ba626afa44a3aa3
 -- Unifies All Helldivers 2 Modding Standards:
 --   1. Bingus Shared Loader (CowboyBingus / v17 / v20 / v21 / API 1 + BingusRuntime v1)
@@ -65,7 +65,7 @@ local function open_log()
         if f then
             log_handle = f
             active_log_path = path
-            f:write(string.format("\n--- Universal Mod Loader v2.0.2 Booted at %s ---\n", os.date and os.date("%Y-%m-%d %H:%M:%S") or "now"))
+            f:write(string.format("\n--- Universal Mod Loader v2.0.3 Booted at %s ---\n", os.date and os.date("%Y-%m-%d %H:%M:%S") or "now"))
             f:flush()
             return log_handle
         end
@@ -342,20 +342,20 @@ end
 set_active_uml_locale("auto")
 
 local UML_UI_STRINGS = {
-    ["en"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
-    ["en-GB"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
-    ["fr"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - SOUS-MENUS MODS", pane_mods = "[VOLET: LISTE MODS]", pane_opts = "[VOLET: OPTIONS]", mods = "MODS (%d)  [1-0 ACCES]", submenu = "SOUS-MENU: %s  |  ELEMENT %d/%d  |  PAGE %d/%d (%d/PG)", on = "< OUI >", off = "< NON >", desc_mod = "MOD SELECTIONNE: %s (%d OPTIONS) - APPUYEZ SUR DROITE, ESPACE OU 1-0 POUR MODIFIER LES OPTIONS. [-]/[=] POUR TAILLE UI." },
-    ["de"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - MOD-UNTERMENUS", pane_mods = "[BEREICH: MOD-LISTE]", pane_opts = "[BEREICH: OPTIONEN]", mods = "MODS (%d)  [1-0 WAHL]", submenu = "UNTERMENU: %s  |  EINTRAG %d/%d  |  SEITE %d/%d (%d/S.)", on = "< EIN >", off = "< AUS >", desc_mod = "AKTIVER MOD: %s (%d OPTIONEN) - RECHTS, LEERTASTE ODER 1-0 ZUM BEARBEITEN DRUCKEN. [-]/[=] FUR UI-SKALIERUNG." },
-    ["it"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - SOTTOMENU MOD", pane_mods = "[PANNELLO: MOD]", pane_opts = "[PANNELLO: OPZIONI]", mods = "MOD (%d)  [1-0 SALTA]", submenu = "SOTTOMENU: %s  |  VOCE %d/%d  |  PAG %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "MOD SELEZIONATA: %s (%d OPZIONI) - PREMI DESTRA, SPAZIO O 1-0 PER MODIFICARE LE OPZIONI. [-]/[=] SCALA UI." },
-    ["es"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  ELEMENTO %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PULSA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
-    ["es-419"]  = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  ELEMENTO %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PRESIONA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
-    ["pt-BR"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - SUBMENUS DE MODS", pane_mods = "[PAINEL: MODS]", pane_opts = "[PAINEL: OPCOES]", mods = "MODS (%d)  [1-0 ATALHO]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAG %d/%d (%d/PG)", on = "< LIG >", off = "< DES >", desc_mod = "MOD SELECIONADO: %s (%d OPCOES) - PRESSIONE DIREITA, ESPACO OU 1-0 PARA EDITAR OPCOES. [-]/[=] ESCALA UI." },
-    ["pl"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - PODMENU MODOW", pane_mods = "[PANEL: LISTA MODOW]", pane_opts = "[PANEL: OPCJE]", mods = "MODY (%d)  [1-0 SKOK]", submenu = "PODMENU: %s  |  POZYCJA %d/%d  |  STR %d/%d (%d/STR)", on = "< WL >", off = "< WYL >", desc_mod = "WYBRANY MOD: %s (%d OPCJI) - NACISNIJ PRAWO, SPACJE LUB 1-0 ABY EDYTOWAC OPCJE. [-]/[=] SKALA UI." },
-    ["ru"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - PODMENYU MODOV", pane_mods = "[PANEL: SPISOK MODOV]", pane_opts = "[PANEL: NASTROYKI]", mods = "MODY (%d)  [1-0 VYBOR]", submenu = "PODMENYU: %s  |  ELEMENT %d/%d  |  STR %d/%d (%d/STR)", on = "< VKL >", off = "< VYKL >", desc_mod = "VYBRAN MOD: %s (%d OPTSIY) - NAZHMITE VPRAVO, PROBEL ILI 1-0 DLYA NASTROYKI. [-]/[=] MASSHTAB UI." },
-    ["ja"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - MOD SUBMENUS (JA)", pane_mods = "[PANE: MOD ICHIRAN]", pane_opts = "[PANE: SETTEI]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  KOMOKU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SENTAKU MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
-    ["ko"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - MOD SUBMENUS (KO)", pane_mods = "[PANE: MOD MOKROK]", pane_opts = "[PANE: SEOLJEONG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  HANGMOK %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SEONTAEK MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
-    ["zh-Hans"] = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - MOD SUBMENUS (ZHS)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XIANGMU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
-    ["zh-Hant"] = { hdr = "UNIVERSAL MOD LOADER v2.0.2 - MOD SUBMENUS (ZHT)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XIANGMU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["en"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
+    ["en-GB"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
+    ["fr"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - SOUS-MENUS MODS", pane_mods = "[VOLET: LISTE MODS]", pane_opts = "[VOLET: OPTIONS]", mods = "MODS (%d)  [1-0 ACCES]", submenu = "SOUS-MENU: %s  |  ELEMENT %d/%d  |  PAGE %d/%d (%d/PG)", on = "< OUI >", off = "< NON >", desc_mod = "MOD SELECTIONNE: %s (%d OPTIONS) - APPUYEZ SUR DROITE, ESPACE OU 1-0 POUR MODIFIER LES OPTIONS. [-]/[=] POUR TAILLE UI." },
+    ["de"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - MOD-UNTERMENUS", pane_mods = "[BEREICH: MOD-LISTE]", pane_opts = "[BEREICH: OPTIONEN]", mods = "MODS (%d)  [1-0 WAHL]", submenu = "UNTERMENU: %s  |  EINTRAG %d/%d  |  SEITE %d/%d (%d/S.)", on = "< EIN >", off = "< AUS >", desc_mod = "AKTIVER MOD: %s (%d OPTIONEN) - RECHTS, LEERTASTE ODER 1-0 ZUM BEARBEITEN DRUCKEN. [-]/[=] FUR UI-SKALIERUNG." },
+    ["it"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - SOTTOMENU MOD", pane_mods = "[PANNELLO: MOD]", pane_opts = "[PANNELLO: OPZIONI]", mods = "MOD (%d)  [1-0 SALTA]", submenu = "SOTTOMENU: %s  |  VOCE %d/%d  |  PAG %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "MOD SELEZIONATA: %s (%d OPZIONI) - PREMI DESTRA, SPAZIO O 1-0 PER MODIFICARE LE OPZIONI. [-]/[=] SCALA UI." },
+    ["es"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  ELEMENTO %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PULSA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
+    ["es-419"]  = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  ELEMENTO %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PRESIONA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
+    ["pt-BR"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - SUBMENUS DE MODS", pane_mods = "[PAINEL: MODS]", pane_opts = "[PAINEL: OPCOES]", mods = "MODS (%d)  [1-0 ATALHO]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAG %d/%d (%d/PG)", on = "< LIG >", off = "< DES >", desc_mod = "MOD SELECIONADO: %s (%d OPCOES) - PRESSIONE DIREITA, ESPACO OU 1-0 PARA EDITAR OPCOES. [-]/[=] ESCALA UI." },
+    ["pl"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - PODMENU MODOW", pane_mods = "[PANEL: LISTA MODOW]", pane_opts = "[PANEL: OPCJE]", mods = "MODY (%d)  [1-0 SKOK]", submenu = "PODMENU: %s  |  POZYCJA %d/%d  |  STR %d/%d (%d/STR)", on = "< WL >", off = "< WYL >", desc_mod = "WYBRANY MOD: %s (%d OPCJI) - NACISNIJ PRAWO, SPACJE LUB 1-0 ABY EDYTOWAC OPCJE. [-]/[=] SKALA UI." },
+    ["ru"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - PODMENYU MODOV", pane_mods = "[PANEL: SPISOK MODOV]", pane_opts = "[PANEL: NASTROYKI]", mods = "MODY (%d)  [1-0 VYBOR]", submenu = "PODMENYU: %s  |  ELEMENT %d/%d  |  STR %d/%d (%d/STR)", on = "< VKL >", off = "< VYKL >", desc_mod = "VYBRAN MOD: %s (%d OPTSIY) - NAZHMITE VPRAVO, PROBEL ILI 1-0 DLYA NASTROYKI. [-]/[=] MASSHTAB UI." },
+    ["ja"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - MOD SUBMENUS (JA)", pane_mods = "[PANE: MOD ICHIRAN]", pane_opts = "[PANE: SETTEI]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  KOMOKU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SENTAKU MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["ko"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - MOD SUBMENUS (KO)", pane_mods = "[PANE: MOD MOKROK]", pane_opts = "[PANE: SEOLJEONG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  HANGMOK %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SEONTAEK MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["zh-Hans"] = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - MOD SUBMENUS (ZHS)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XIANGMU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["zh-Hant"] = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - MOD SUBMENUS (ZHT)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XIANGMU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
 }
 
 -- Unicode -> ASCII Transliteration Tables (Latin-1, Latin Extended-A, Cyrillic, Fullwidth, Punctuation)
@@ -890,6 +890,10 @@ local function format_mod_title(s)
     if low:find("scope_zoom", 1, true) or low:find("scopezoom", 1, true) or low == "sz" then return "SCOPE ZOOM" end
     if low:find("loadout_reg", 1, true) or low:find("loadoutreg", 1, true) then return "LOADOUT REGULATIONS" end
     if low:find("uniformity", 1, true) or low:find("match_color", 1, true) or low == "libra" then return "UNIFORMITY" end
+    if low:find("treasure_radar", 1, true) or low:find("treasureradar", 1, true) or low == "treasure" or low:find("treasure", 1, true) then return "TREASURE RADAR" end
+    if low:find("narrow_hud", 1, true) or low:find("narrowhud", 1, true) then return "NARROW HUD" end
+    if low:find("night_vision", 1, true) or low:find("nightvision", 1, true) or low:find("flashlight", 1, true) or low == "nvg" then return "NIGHT VISION - FLASHLIGHT" end
+    if low:find("armor_transmog", 1, true) or low:find("transmog", 1, true) or low:find("armortransmog", 1, true) then return "ARMOR TRANSMOG" end
     if low == "uml" or low == "uml_core" or low == "universal_mod_loader" then return "UML CORE" end
 
     s = s:gsub("([a-z])([A-Z])", "%1 %2"):gsub("[%-_]+", " "):gsub("%s+", " ")
@@ -2142,11 +2146,8 @@ local function murmur64_pair(str)
         if rem >= 3 then t_l = t_l + byte(str, pos + 2) * 65536 end
         if rem >= 2 then t_l = t_l + byte(str, pos + 1) * 256 end
         if rem >= 1 then t_l = t_l + byte(str, pos) end
-        t_l, t_h = mul64(t_l, t_h, m_l, m_h)
-        local s_l, s_h = rshift64(t_l, t_h, r)
-        t_l, t_h = xor64(t_l, t_h, s_l, s_h)
-        t_l, t_h = mul64(t_l, t_h, m_l, m_h)
         h_low, h_high = xor64(h_low, h_high, t_l, t_h)
+        h_low, h_high = mul64(h_low, h_high, m_l, m_h)
     end
     local s_l, s_h = rshift64(h_low, h_high, r)
     h_low, h_high = xor64(h_low, h_high, s_l, s_h)
@@ -2808,7 +2809,7 @@ local create_chef_mod_context
 chef_api = {
     api_level = 3,
     loader_name = "UniversalModLoader",
-    loader_version = "2.0.2",
+    loader_version = "2.0.3",
     is_chef_loader = true,
     is_universal_loader = true,
     after_startup = loader_state.after_startup,
@@ -2917,6 +2918,40 @@ chef_api = {
             return nil
         end
     },
+    own_log = function(name, ...)
+        local appdata = os.getenv("APPDATA") or "."
+        local tag = type(name) == "string" and name or "chef_mod"
+        local path = appdata .. "/Arrowhead/Helldivers2/" .. tag .. ".log"
+        local logger = function(fmt, ...)
+            local msg = (select('#', ...) > 0) and string.format(fmt, ...) or tostring(fmt)
+            pcall(function()
+                local f = io.open(path, "a")
+                if f then
+                    f:write(string.format("[%s] %s\n", os.date and os.date("%H:%M:%S") or "LOG", msg))
+                    f:flush()
+                    f:close()
+                end
+            end)
+            pcall(print, "[" .. tag .. "] " .. msg)
+        end
+        if select('#', ...) > 0 then
+            logger(...)
+            return logger
+        end
+        return logger
+    end,
+    call_kind = function(kind, fn, ...)
+        if type(kind) == "function" then
+            local ok, res = pcall(kind, fn, ...)
+            if not ok then pcall(print, "[ChefMod] call_kind error: " .. tostring(res)) end
+            return ok, res
+        elseif type(fn) == "function" then
+            local ok, res = pcall(fn, ...)
+            if not ok then pcall(print, "[ChefMod] call_kind (" .. tostring(kind) .. ") error: " .. tostring(res)) end
+            return ok, res
+        end
+        return false, "invalid function"
+    end,
     log = function(fmt, ...)
         pcall(print, "[ChefMod] " .. string.format(fmt, ...))
     end
@@ -2966,13 +3001,21 @@ create_chef_mod_context = function(mod_name)
     ctx = {
         api_level = 3,
         loader_name = "UniversalModLoader",
-        loader_version = "2.0.2",
+        loader_version = "2.0.3",
         is_chef_loader = true,
         is_universal_loader = true,
         mod_name = mod_name,
         name = formatted_mod,
         options = mod_options,
         option = function(id, spec)
+            local clean_id, clean_spec = wrap_spec(id, spec, nil)
+            return chef_api.options.register(clean_id, clean_spec)
+        end,
+        register_option = function(id, spec)
+            local clean_id, clean_spec = wrap_spec(id, spec, nil)
+            return chef_api.options.register(clean_id, clean_spec)
+        end,
+        register = function(id, spec)
             local clean_id, clean_spec = wrap_spec(id, spec, nil)
             return chef_api.options.register(clean_id, clean_spec)
         end,
@@ -2988,11 +3031,30 @@ create_chef_mod_context = function(mod_name)
         get = function(id) return chef_api.get(id) end,
         set = function(id, val) return chef_api.set(id, val) end,
         on = function(evt, cb) return chef_api.on(evt, cb) end,
+        listen = function(evt, cb) return chef_api.on(evt, cb) end,
+        hook = function(evt, cb) return chef_api.on(evt, cb) end,
+        add_hook = function(evt, cb) return chef_api.on(evt, cb) end,
+        after_startup = chef_api.after_startup,
         on_change = function(id, fn) return chef_api.on_change(id, fn) end,
         state = chef_api.state,
+        shared = chef_shared_state,
         bindings = chef_api.bindings,
+        call_kind = chef_api.call_kind,
+        own_log = function(name, ...)
+            local tag = name or formatted_mod:lower():gsub("%s+", "_")
+            return chef_api.own_log(tag, ...)
+        end,
         log = function(fmt, ...)
             pcall(print, "[" .. formatted_mod .. "] " .. string.format(fmt, ...))
+        end,
+        info = function(fmt, ...)
+            pcall(print, "[" .. formatted_mod .. "] " .. string.format(fmt, ...))
+        end,
+        warn = function(fmt, ...)
+            pcall(print, "[" .. formatted_mod .. "] [WARN] " .. string.format(fmt, ...))
+        end,
+        error = function(fmt, ...)
+            pcall(print, "[" .. formatted_mod .. "] [ERROR] " .. string.format(fmt, ...))
         end
     }
     setmetatable(ctx, { __index = chef_api })
@@ -3026,7 +3088,13 @@ local chef_aliases = {
     "mods/chef/chef_shared_loader",
     "mods/chef/core_1",
     "mods/chef/core",
-    "mods/chef/shared_loader"
+    "mods/chef/shared_loader",
+    "mods/chef/main",
+    "mods/chef/init",
+    "mods/chef/api",
+    "mods/chef/chef",
+    "mods/chef",
+    "chef"
 }
 for _, alias in ipairs(chef_aliases) do
     package.preload[alias] = chef_preload_handler
@@ -3413,6 +3481,8 @@ end
 if rawget(_G, "RatsSharedLoader") == nil then
     local rat_api = {
         version = "1.1.2",
+        api_level = 1,
+        is_rat_loader = true,
         loaded_mods = {},
         hooks = {},
         register = function(self, name, spec)
@@ -3473,8 +3543,8 @@ if rawget(_G, "RatsSharedLoader") == nil then
         "mods/rat/rats_shared_loader",
         "mods/rat/core",
         "mods/rat/main",
-        "mods/transmog/transmog",
-        "mods/transmog"
+        "mods/rat",
+        "rat"
     }
     for _, alias in ipairs(rat_aliases) do
         package.preload[alias] = function() return rat_api end
@@ -3522,7 +3592,7 @@ end
 local uml_registered_mods = {}
 local uml_api
 uml_api = {
-    version = "2.0.2",
+    version = "2.0.3",
     api = 2,
     mods = uml_registered_mods,
     register = function(name, spec)
@@ -3979,10 +4049,15 @@ local candidate_modules = {
 
     -- Community Appearance, Loadout & Visibility Mods
     "mods/rat/transmog",
+    "mods/armor_transmog",
+    "mods/ratinplat/armor_transmog",
+    "mods/armor_transmog/main",
+    "mods/armor_transmog/armor_transmog",
+    "mods/armor_transmog/transmog",
+    "armor_transmog",
+    "ArmorTransmog",
     "mods/transmog/main",
     "mods/transmog/transmog",
-    "mods/armor_transmog/main",
-    "mods/armor_transmog/transmog",
     "mods/transmog",
     "transmog",
     "mods/mod_loadout_regulations/main",
@@ -3993,16 +4068,46 @@ local candidate_modules = {
     "mods/loadout_regulations",
     "mod_loadout_regulations",
     "loadout_regulations",
+    "mods/azpider18/night_vision",
+    "mods/azpider18/night_vision_flashlight",
+    "mods/night_vision_flashlight",
     "mods/night_vision/night_vision",
+    "mods/night_vision/flashlight",
     "mods/night_vision/main",
     "mods/night_vision/nvg",
     "mods/night_vision",
     "night_vision",
+    "mods/flashlight/flashlight",
+    "mods/flashlight/main",
+    "mods/flashlight",
+    "flashlight",
     "mods/clear_night/main",
     "mods/clear_night",
     "mods/patpatpatrick/night_vision",
     "mods/chef/night_vision",
-    "mods/azpider18/night_vision",
+
+    -- Treasure Radar & NarrowHud (Chef / Panther117 community suite)
+    "mods/chef/treasure_radar",
+    "mods/treasure_radar/main",
+    "mods/treasure_radar/treasure_radar",
+    "mods/treasure_radar",
+    "mods/treasure_map",
+    "mods/chef/treasure_map",
+    "mods/TreasureRadar",
+    "treasure_radar",
+    "treasure_map",
+    "TreasureRadar",
+    "mods/luka189/narrowhud",
+    "mods/narrow_hud/main",
+    "mods/narrow_hud/narrow_hud",
+    "mods/narrow_hud",
+    "mods/chef/narrow_hud",
+    "mods/NarrowHUD",
+    "mods/narrowhud/main",
+    "mods/narrowhud",
+    "narrow_hud",
+    "narrowhud",
+    "NarrowHUD",
 
     -- Trajectory, Optics & Armor Uniformity Mods (Luvr117 & PacketInc community suites)
     "mods/projectile_path_preview/main",
@@ -4011,12 +4116,16 @@ local candidate_modules = {
     "projectile_path_preview",
     "mods/ppp/main",
     "mods/ppp",
+    "mods/justvinargg/scope_zoom",
     "mods/scope_zoom/main",
     "mods/scope_zoom/scope_zoom",
     "mods/scope_zoom",
     "scope_zoom",
+    "mods/ScopeZoom/main",
     "mods/ScopeZoom",
     "ScopeZoom",
+    "mods/scopezoom",
+    "scopezoom",
     "mods/uniformity/main",
     "mods/uniformity/uniformity",
     "mods/uniformity",
@@ -4041,8 +4150,16 @@ pcall(function()
     end
 end)
 
--- Also scan patch files if available to discover any declared addons not in candidate_modules,
+-- Also scan patch files if available to discover all Lua resources (declared or anonymous MurmurHash64),
 -- parse dependency declarations (Subsystem 14), and neutralize rogue guest boot resources (Subsystem 13)
+local patch_discovered_mods = {}
+local patch_chunks = {}
+local patch_key_0x = {}
+local patch_key_hex = {}
+local patch_resource_to_mod = {}
+local patch_mod_to_resource = {}
+local executed_patch_resources = {}
+
 pcall(function()
     local family = "9ba626afa44a3aa3"
     local lua_type = char(0xE2, 0x17, 0xD1, 0x2C, 0xFA, 0x8D, 0x4E, 0xA1)
@@ -4057,8 +4174,24 @@ pcall(function()
     local existing = {}
     for _, name in ipairs(candidate_modules) do existing[name] = true end
 
-    -- Check patches from patch_0 to patch_256
-    for p_num = 0, 256 do
+    -- Build MurmurHash64 key lookup for all candidate modules & common variants
+    local candidate_hashes = {}
+    for _, name in ipairs(candidate_modules) do
+        local k_bytes = murmur64_key(name)
+        candidate_hashes[k_bytes] = name
+        if name:find("^mods/") then
+            local bare = name:gsub("^mods/", "")
+            candidate_hashes[murmur64_key(bare)] = name
+        end
+        local stem = name:match("([^/]+)$")
+        if stem and stem ~= name then
+            candidate_hashes[murmur64_key(stem)] = name
+            candidate_hashes[murmur64_key("mods/" .. stem)] = name
+        end
+    end
+
+    -- Check patches from patch_0 to patch_512
+    for p_num = 0, 512 do
         local p_path = "data/" .. family .. ".patch_" .. p_num
         local f = open(p_path, "rb")
         if not f then
@@ -4076,7 +4209,12 @@ pcall(function()
                         if row and #row == 80 and row:sub(9, 16) == lua_type then
                             local off = u32(row, 16)
                             local len = u32(row, 56)
-                            local is_boot_resource = (row:sub(1, 8) == boot_hash)
+                            local res_key_bytes = row:sub(1, 8)
+                            local key_l = u32(row, 0)
+                            local key_h = u32(row, 4)
+                            local key_hex = string.format("%08x%08x", key_h, key_l)
+                            local key_0x = string.format("0x%08X%08X", key_h, key_l)
+                            local is_boot_resource = (res_key_bytes == boot_hash)
                             local is_rogue_boot = false
 
                             if is_boot_resource then
@@ -4094,34 +4232,38 @@ pcall(function()
                                 end
                             end
 
-                            if off > 0 and len >= 8 and not is_rogue_boot then
+                            if off > 0 and len >= 8 and not is_rogue_boot and not is_boot_resource then
                                 f:seek("set", off)
                                 local env = f:read(8)
                                 if env and #env == 8 and u32(env, 4) == 2 then
-                                    local body_len = math.min(u32(env, 0), 384)
-                                    local prefix = f:read(body_len)
-                                    if prefix then
-                                        local d_name = prefix:match("%-%-%s*HD2%-Addon:%s*([^\r\n]+)")
-                                            or prefix:match("%-%-%s*HD2%-Boot:%s*([^\r\n]+)")
-                                            or prefix:match("%-%-%s*HD2%-Mod:%s*([^\r\n]+)")
-                                            or prefix:match("%-%-%s*@mod%s+([^\r\n]+)")
-                                            or prefix:match("%-%-%s*@boot%s+([^\r\n]+)")
-                                            or prefix:match("%-%-%s*@addon%s+([^\r\n]+)")
-                                            or prefix:match("%-%-%s*Addon:%s*([^\r\n]+)")
-                                            or prefix:match("%-%-%s*Mod:%s*([^\r\n]+)")
-                                        if d_name then
-                                            d_name = d_name:gsub("%s*%-%-.*$", "")
-                                            d_name = d_name:gsub('^["\']', ''):gsub('["\']$', '')
-                                            d_name = d_name:gsub("%.lua$", "")
-                                            d_name = d_name:match("^%s*(.-)%s*$")
-                                            if d_name ~= "" and not existing[d_name] and d_name ~= "boot" and d_name ~= "core/boot" then
-                                                candidate_modules[#candidate_modules + 1] = d_name
-                                                existing[d_name] = true
+                                    local body_len = u32(env, 0)
+                                    if body_len > 0 and body_len <= len - 8 then
+                                        f:seek("set", off + 8)
+                                        local script_content = f:read(body_len)
+                                        if script_content and #script_content > 0 then
+                                            if script_content:sub(1, 3) == "\239\187\191" then
+                                                script_content = script_content:sub(4)
                                             end
+                                            local prefix = script_content:sub(1, 384)
+                                            local d_name = prefix:match("%-%-%s*HD2%-Addon:%s*([^\r\n]+)")
+                                                or prefix:match("%-%-%s*HD2%-Boot:%s*([^\r\n]+)")
+                                                or prefix:match("%-%-%s*HD2%-Mod:%s*([^\r\n]+)")
+                                                or prefix:match("%-%-%s*@mod%s+([^\r\n]+)")
+                                                or prefix:match("%-%-%s*@boot%s+([^\r\n]+)")
+                                                or prefix:match("%-%-%s*@addon%s+([^\r\n]+)")
+                                                or prefix:match("%-%-%s*Addon:%s*([^\r\n]+)")
+                                                or prefix:match("%-%-%s*Mod:%s*([^\r\n]+)")
+                                            if d_name then
+                                                d_name = d_name:gsub("%s*%-%-.*$", "")
+                                                d_name = d_name:gsub('^["\']', ''):gsub('["\']$', '')
+                                                d_name = d_name:gsub("%.lua$", "")
+                                                d_name = d_name:match("^%s*(.-)%s*$")
+                                            end
+
                                             local req_str = prefix:match("%-%-%s*HD2%-Requires:%s*([^\r\n]+)")
                                                 or prefix:match("%-%-%s*@requires%s+([^\r\n]+)")
                                                 or prefix:match("%-%-%s*Requires:%s*([^\r\n]+)")
-                                            if req_str then
+                                            if req_str and d_name then
                                                 req_str = req_str:gsub("%s*%-%-.*$", "")
                                                 local reqs = {}
                                                 for req in req_str:gmatch("([^,%s\"']+)") do
@@ -4129,6 +4271,79 @@ pcall(function()
                                                 end
                                                 if #reqs > 0 then
                                                     mod_dependencies[d_name] = reqs
+                                                end
+                                            end
+
+                                            -- Match MurmurHash64 key K against candidates or determine canonical name
+                                            local matched_cand = candidate_hashes[res_key_bytes]
+                                            local canon_name = d_name
+                                            if not canon_name or canon_name == "" then
+                                                canon_name = matched_cand or key_0x
+                                            end
+
+                                            if canon_name ~= "boot" and canon_name ~= "core/boot" then
+                                                local chunk, c_err = loadstring(script_content, "@" .. canon_name)
+                                                if chunk then
+                                                    local preload_fn = function(...)
+                                                        active_loading_mod_name = canon_name
+                                                        local mod_chef = create_chef_mod_context(canon_name)
+                                                        local ok, res = safe_run_with_watchdog(chunk, 3.0, mod_chef, canon_name)
+                                                        active_loading_mod_name = nil
+                                                        if ok then
+                                                            return res or true
+                                                        else
+                                                            error(tostring(res), 2)
+                                                        end
+                                                    end
+
+                                                    patch_chunks[canon_name] = chunk
+                                                    package.preload[canon_name] = preload_fn
+
+                                                    patch_discovered_mods[canon_name] = true
+                                                    patch_discovered_mods[key_0x] = true
+                                                    patch_discovered_mods[key_hex] = true
+                                                    patch_key_0x[canon_name] = key_0x
+                                                    patch_key_hex[canon_name] = key_hex
+                                                    patch_resource_to_mod[res_key_bytes] = canon_name
+                                                    patch_mod_to_resource[canon_name] = res_key_bytes
+                                                    patch_mod_to_resource[key_0x] = res_key_bytes
+                                                    patch_mod_to_resource[key_hex] = res_key_bytes
+
+                                                    if matched_cand and matched_cand ~= canon_name then
+                                                        patch_chunks[matched_cand] = chunk
+                                                        package.preload[matched_cand] = preload_fn
+                                                        patch_discovered_mods[matched_cand] = true
+                                                        patch_key_0x[matched_cand] = key_0x
+                                                        patch_key_hex[matched_cand] = key_hex
+                                                        patch_mod_to_resource[matched_cand] = res_key_bytes
+                                                    end
+
+                                                    if d_name and d_name ~= canon_name then
+                                                        patch_chunks[d_name] = chunk
+                                                        package.preload[d_name] = preload_fn
+                                                        patch_discovered_mods[d_name] = true
+                                                        patch_key_0x[d_name] = key_0x
+                                                        patch_key_hex[d_name] = key_hex
+                                                        patch_mod_to_resource[d_name] = res_key_bytes
+                                                    end
+
+                                                    package.preload[key_0x] = preload_fn
+                                                    package.preload[key_hex] = preload_fn
+                                                    patch_chunks[key_0x] = chunk
+                                                    patch_chunks[key_hex] = chunk
+
+                                                    if not existing[canon_name] then
+                                                        candidate_modules[#candidate_modules + 1] = canon_name
+                                                        existing[canon_name] = true
+                                                    end
+                                                    if matched_cand and not existing[matched_cand] then
+                                                        candidate_modules[#candidate_modules + 1] = matched_cand
+                                                        existing[matched_cand] = true
+                                                    end
+
+                                                    log_write(string.format("[UniversalArchive] Discovered patch Lua resource: %s (%s) in patch_%d", canon_name, key_0x, p_num))
+                                                else
+                                                    log_write(string.format("[UniversalArchive] Syntax error compiling patch resource %s (%s): %s", canon_name, key_0x, tostring(c_err)))
                                                 end
                                             end
                                         end
@@ -4167,6 +4382,18 @@ for _, mod_name in ipairs(candidate_modules) do
             if ok and can then
                 is_installed = true
             end
+            if not is_installed and patch_key_0x[mod_name] then
+                local ok2, can2 = pcall(app.can_get, "lua", patch_key_0x[mod_name])
+                if ok2 and can2 then is_installed = true end
+            end
+            if not is_installed and patch_key_hex[mod_name] then
+                local ok3, can3 = pcall(app.can_get, "lua", patch_key_hex[mod_name])
+                if ok3 and can3 then is_installed = true end
+            end
+        end
+
+        if not is_installed and (patch_discovered_mods[mod_name] or patch_chunks[mod_name] ~= nil) then
+            is_installed = true
         end
 
         if not is_installed then
@@ -4174,16 +4401,25 @@ for _, mod_name in ipairs(candidate_modules) do
             if loose_path then
                 is_installed = true
             elseif not app then
-                -- Outside game engine (mock/test environment): test via package lookup
+                -- Outside game engine (mock/test environment): test via package lookup or preload
                 is_installed = true
             end
         end
 
         if is_installed then
-            if package.loaded[mod_name] ~= nil then
+            local is_loader_obj = (package.loaded[mod_name] == rat_api or package.loaded[mod_name] == chef_api or package.loaded[mod_name] == hd2rt)
+            local mod_res_bytes = murmur64_key(mod_name)
+            local r_bytes = patch_mod_to_resource[mod_name]
+            if package.loaded[mod_name] ~= nil and not is_loader_obj then
                 loaded_modules[mod_name] = "loaded (cached)"
             elseif loose_path and executed_loose_paths[loose_path] ~= nil then
                 package.loaded[mod_name] = executed_loose_paths[loose_path]
+                loaded_modules[mod_name] = "loaded (alias)"
+            elseif mod_res_bytes and executed_patch_resources[mod_res_bytes] ~= nil then
+                package.loaded[mod_name] = executed_patch_resources[mod_res_bytes]
+                loaded_modules[mod_name] = "loaded (alias)"
+            elseif r_bytes and executed_patch_resources[r_bytes] ~= nil then
+                package.loaded[mod_name] = executed_patch_resources[r_bytes]
                 loaded_modules[mod_name] = "loaded (alias)"
             else
                 loaded_modules[mod_name] = "loading"
@@ -4206,6 +4442,14 @@ for _, mod_name in ipairs(candidate_modules) do
                             end
                         end
                     end
+                end
+
+                if not chunk and patch_chunks[mod_name] then
+                    chunk = patch_chunks[mod_name]
+                end
+
+                if not chunk and package.preload[mod_name] then
+                    chunk = package.preload[mod_name]
                 end
 
                 if not chunk then
@@ -4237,9 +4481,15 @@ for _, mod_name in ipairs(candidate_modules) do
                     if loose_path then
                         executed_loose_paths[loose_path] = ret_val
                     end
+                    if mod_res_bytes then
+                        executed_patch_resources[mod_res_bytes] = ret_val
+                    end
+                    if r_bytes then
+                        executed_patch_resources[r_bytes] = ret_val
+                    end
                     loaded_modules[mod_name] = "loaded"
                     loaded_count = loaded_count + 1
-                    log_write("Loaded mod: " .. mod_name .. (loose_path and (" (loose: " .. loose_path .. ")") or ""))
+                    log_write("Loaded mod: " .. mod_name .. (loose_path and (" (loose: " .. loose_path .. ")") or (patch_discovered_mods[mod_name] and " (archive patch)" or "")))
                 else
                     local err_msg = tostring(res):gsub("[\r\n]+", " ")
                     loaded_modules[mod_name] = "failed: " .. err_msg
@@ -4480,7 +4730,7 @@ pcall(function()
         local res_path = appdata .. "/UniversalModLoader/in_game_test_results.json"
         local f_res = io.open(res_path, "w")
         if f_res then
-            f_res:write(string.format('{\n  "status": "PASSED",\n  "version": "2.0.2",\n  "apis": true,\n  "f9_menu": true,\n  "options": true,\n  "loaded_count": %d,\n  "failed_count": %d\n}\n', loaded_count, failed_count))
+            f_res:write(string.format('{\n  "status": "PASSED",\n  "version": "2.0.3",\n  "apis": true,\n  "f9_menu": true,\n  "options": true,\n  "loaded_count": %d,\n  "failed_count": %d\n}\n', loaded_count, failed_count))
             f_res:close()
             log_write("[TEST_MODE] In-Game Test Diagnostics Written to " .. tostring(res_path))
         end
