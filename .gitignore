@@ -6,3 +6,6 @@ __pycache__/
 *.log
 dist/
 bin/
+tools/
+uml_mod_settings.json
+uml_active_sentinel.txt

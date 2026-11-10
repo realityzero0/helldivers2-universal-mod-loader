@@ -28,7 +28,7 @@
   * **Dynamic Viewport Scaling & Description Panel:** Dynamically scales font size, row heights, and items per page (`Auto`, `Compact`, `Medium`, `Large`) with live `[-]` and `[=]` hotkeys, plus a 3-line word-wrapped option description panel.
   * **Automatic 14-Locale Language Detection:** Automatically detects game language via in-game configs, live Steamworks API (`stingray.Steam.language()`), Steam appmanifest, or Windows OS locale, with UTF-8 diacritic & Cyrillic transliteration.
   * **100% Crash-Proof 5x7 Pixel Bitmap Font Renderer:** Renders crisp vector-free text using pure `Gui.rect` calls across all active Stingray worlds with zero dependency on unloaded font assets.
-  * **Persistent JSON Storage:** Automatically saves user options to `%LOCALAPPDATA%/CowboyBingus/Helldivers2/Logs/uml_mod_settings.json` while bi-directionally syncing with `ModOptionsMenu.values`.
+  * **Persistent JSON Storage:** Automatically saves user options to `%APPDATA%/Arrowhead/Helldivers2/uml_mod_settings.json` (or `%LOCALAPPDATA%/UniversalModLoader/uml_mod_settings.json`) while bi-directionally syncing with `ModOptionsMenu.values`.
 * **Zero PC Freezes (Hang Watchdog):**
   * Real-time `debug.sethook` 3.0s watchdog that intercepts runaway loops and aborts them cleanly without freezing the game window.
 * **Pure-Lua Fake DLL Bridge & FFI ABI Emulator:**
@@ -40,7 +40,7 @@
 * **Topological Dependency Sorter (DAG) & Rogue Guest Boot Shield:**
   * Resolves `-- HD2-Requires:` / `needs` prerequisites before dependents and neutralizes conflicting secondary `0xF476DF93691895FA` boot resources.
 * **Automatic Log Rotation & Live Hot-Reloading (`Ctrl+F5`):**
-  * Automatically rotates `BingusSharedLoader.log` to `.log.old` when exceeding 5 MB and reloads loose scripts from `<GameDir>/mods/` instantly.
+  * Automatically rotates `UniversalModLoader.log` to `.log.old` when exceeding 5 MB and reloads loose scripts from `<GameDir>/mods/` instantly.
 
 ---
 
@@ -67,11 +67,11 @@ If a mod breaks, fails to load, or you encounter unexpected behavior, grab your 
 
 * **Primary Path:**
   ```text
-  %LOCALAPPDATA%\CowboyBingus\Helldivers2\Logs\BingusSharedLoader.log
+  %APPDATA%\Arrowhead\Helldivers2\UniversalModLoader.log
   ```
-* **Clean-Install Fallback:**
+* **Local AppData Fallback:**
   ```text
-  %APPDATA%\Arrowhead\Helldivers2\BingusSharedLoader.log
+  %LOCALAPPDATA%\UniversalModLoader\UniversalModLoader.log
   ```
 *(Press `Win + R`, paste either path above into the box, and press `Enter` to view your log).*
 

@@ -10,27 +10,26 @@ Whenever Universal Mod Loader initializes and boots your mods, it writes a detai
 
 * **Primary Log Location on Windows:**
   ```text
-  %LOCALAPPDATA%\CowboyBingus\Helldivers2\Logs\BingusSharedLoader.log
+  %APPDATA%\Arrowhead\Helldivers2\UniversalModLoader.log
   ```
   *(Press `Win + R`, paste the path above, and press `Enter` to open it in Notepad).*
 
-* **Clean-Install Fallback Location:**
-  If CowboyBingus was never installed on your PC, the log is located in your Helldivers 2 data folder:
+* **Local AppData Fallback Location:**
   ```text
-  %APPDATA%\Arrowhead\Helldivers2\BingusSharedLoader.log
+  %LOCALAPPDATA%\UniversalModLoader\UniversalModLoader.log
   ```
 
 * **Settings File Location:**
   ```text
-  %LOCALAPPDATA%\CowboyBingus\Helldivers2\Logs\uml_mod_settings.json
+  %APPDATA%\Arrowhead\Helldivers2\uml_mod_settings.json
   ```
-  *(Or `%APPDATA%\Arrowhead\Helldivers2\uml_mod_settings.json` on clean installations).*
+  *(Or `%LOCALAPPDATA%\UniversalModLoader\uml_mod_settings.json`).*
 
 ---
 
 ## 2. Understanding Your Log File
 
-When you inspect `BingusSharedLoader.log`, look for lines starting with `[UniversalLoader]`:
+When you inspect `UniversalModLoader.log`, look for lines starting with `[UniversalLoader]`:
 
 | Log Entry | Meaning |
 | :--- | :--- |
@@ -49,7 +48,7 @@ To ensure your report can be investigated and resolved immediately without guess
    * **For Bugs / Loader Glitches:** Use the [Bug Report Form](https://github.com/realityzero0/helldivers2-universal-mod-loader/issues/new?template=bug_report.yml).
    * **For Mod Compatibility Submissions:** Use the [Mod Compatibility Form](https://github.com/realityzero0/helldivers2-universal-mod-loader/issues/new?template=compatibility_report.yml).
    * **For Author Status / Monthly Check-Ins:** Use the [Mod Stewardship Form](https://github.com/realityzero0/helldivers2-universal-mod-loader/issues/new?template=mod_stewardship.yml).
-3. **Always Include Your Log:** A report without `BingusSharedLoader.log` cannot be diagnosed!
+3. **Always Include Your Log:** A report without `UniversalModLoader.log` cannot be diagnosed!
 
 ---
 

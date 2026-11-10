@@ -138,7 +138,7 @@ def main():
         print("=" * 60)
     else:
         print("  [WARN] Timed out waiting for in-game telemetry report (120s).")
-        print("  Check %LOCALAPPDATA%/CowboyBingus/Helldivers2/Logs/BingusSharedLoader.log for details.")
+        print("  Check %APPDATA%/Arrowhead/Helldivers2/UniversalModLoader.log for details.")
         print("=" * 60)
 
 if __name__ == "__main__":

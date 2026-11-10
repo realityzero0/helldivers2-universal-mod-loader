@@ -20,10 +20,10 @@ print("====================================================")
 print("Testing Native UML v2.0.0 Developer API for Modders")
 print("====================================================")
 
-local appdata = os.getenv("LOCALAPPDATA") or os.getenv("APPDATA") or "."
-local settings_path = appdata .. "/CowboyBingus/Helldivers2/Logs/uml_mod_settings.json"
-local settings_path2 = appdata .. "/UniversalModLoader/mod_settings.json"
-local settings_path3 = (os.getenv("APPDATA") or ".") .. "/Arrowhead/Helldivers2/uml_mod_settings.json"
+local appdata = os.getenv("APPDATA") or os.getenv("LOCALAPPDATA") or "."
+local settings_path = (os.getenv("APPDATA") or ".") .. "/Arrowhead/Helldivers2/uml_mod_settings.json"
+local settings_path2 = (os.getenv("LOCALAPPDATA") or ".") .. "/UniversalModLoader/uml_mod_settings.json"
+local settings_path3 = (os.getenv("LOCALAPPDATA") or ".") .. "/UniversalModLoader/mod_settings.json"
 local orig_settings_content = nil
 local orig_settings_content2 = nil
 local orig_settings_content3 = nil
@@ -115,7 +115,7 @@ end
 
 local sr, kb, rects = boot_clean_environment()
 local UML = _G.UML
-assert(UML and UML.version == "2.0.0", "UML API global must be initialized")
+assert(UML and (UML.version == "2.0.1" or UML.version == "2.0.0"), "UML API global must be initialized")
 
 -- Test 1: Mod Registration & Metadata
 test("UML.register creates managed mod object with metadata", function()

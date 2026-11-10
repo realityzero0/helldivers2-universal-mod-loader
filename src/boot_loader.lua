@@ -1,4 +1,4 @@
--- Universal Mod Loader v2.0.0 for Helldivers 2 (Steam Builds 25988413 / 26088801 / 26251122+ / Lua 5.1)
+-- Universal Mod Loader v2.0.1 for Helldivers 2 (Steam Builds 25988413 / 26088801 / 26251122+ / Lua 5.1)
 -- Replaces engine boot resource 0xF476DF93691895FA in bundle 9ba626afa44a3aa3
 -- Unifies All Helldivers 2 Modding Standards:
 --   1. Bingus Shared Loader (CowboyBingus / v17 / v20 / v21 / API 1 + BingusRuntime v1)
@@ -8,6 +8,14 @@
 --   5. Rat's Shared Loader (Armor Transmog 1.1.2)
 -- Pure Lua 5.1 compliant (Zero native FFI crashes, EAC-safe, Circuit-Breaker protected).
 -- License: Zero-Clause BSD (0BSD)
+
+-- Subsystem 0: Dynamic Package Search Paths (Loose Script Discovery)
+if package and type(package.path) == "string" then
+    local extra = ";./?.lua;./mods/?.lua;./mods/?/?.lua;./mods/?/init.lua;mods/?.lua;mods/?/?.lua;mods/?/init.lua;data/?.lua"
+    if not package.path:find("mods/?.lua", 1, true) then
+        package.path = package.path .. extra
+    end
+end
 
 -- ==============================================================================
 -- 1. ENGINE ENTRYPOINT ASSIGNMENT & SAFE CHAINING
@@ -32,10 +40,11 @@ local function get_log_candidate_paths()
     local localapp = os.getenv("LOCALAPPDATA") or "."
     local roam = os.getenv("APPDATA") or "."
     return {
-        localapp .. "/CowboyBingus/Helldivers2/Logs/BingusSharedLoader.log",
-        roam .. "/Arrowhead/Helldivers2/BingusSharedLoader.log",
-        localapp .. "/BingusSharedLoader.log",
-        "BingusSharedLoader.log"
+        roam .. "/Arrowhead/Helldivers2/UniversalModLoader.log",
+        localapp .. "/UniversalModLoader/Logs/UniversalModLoader.log",
+        localapp .. "/UniversalModLoader/UniversalModLoader.log",
+        localapp .. "/UniversalModLoader.log",
+        "UniversalModLoader.log"
     }
 end
 
@@ -56,7 +65,7 @@ local function open_log()
         if f then
             log_handle = f
             active_log_path = path
-            f:write(string.format("\n--- Universal Mod Loader v2.0.0 Booted at %s ---\n", os.date and os.date("%Y-%m-%d %H:%M:%S") or "now"))
+            f:write(string.format("\n--- Universal Mod Loader v2.0.1 Booted at %s ---\n", os.date and os.date("%Y-%m-%d %H:%M:%S") or "now"))
             f:flush()
             return log_handle
         end
@@ -333,20 +342,20 @@ end
 set_active_uml_locale("auto")
 
 local UML_UI_STRINGS = {
-    ["en"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.0 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  OPTION %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
-    ["en-GB"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.0 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  OPTION %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
-    ["fr"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.0 - SOUS-MENUS MODS", pane_mods = "[VOLET: LISTE MODS]", pane_opts = "[VOLET: OPTIONS]", mods = "MODS (%d)  [1-0 ACCES]", submenu = "SOUS-MENU: %s  |  OPTION %d/%d  |  PAGE %d/%d (%d/PG)", on = "< OUI >", off = "< NON >", desc_mod = "MOD SELECTIONNE: %s (%d OPTIONS) - APPUYEZ SUR DROITE, ESPACE OU 1-0 POUR MODIFIER LES OPTIONS. [-]/[=] POUR TAILLE UI." },
-    ["de"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.0 - MOD-UNTERMENUS", pane_mods = "[BEREICH: MOD-LISTE]", pane_opts = "[BEREICH: OPTIONEN]", mods = "MODS (%d)  [1-0 WAHL]", submenu = "UNTERMENU: %s  |  OPTION %d/%d  |  SEITE %d/%d (%d/S.)", on = "< EIN >", off = "< AUS >", desc_mod = "AKTIVER MOD: %s (%d OPTIONEN) - RECHTS, LEERTASTE ODER 1-0 ZUM BEARBEITEN DRUCKEN. [-]/[=] FUR UI-SKALIERUNG." },
-    ["it"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.0 - SOTTOMENU MOD", pane_mods = "[PANNELLO: MOD]", pane_opts = "[PANNELLO: OPZIONI]", mods = "MOD (%d)  [1-0 SALTA]", submenu = "SOTTOMENU: %s  |  OPZIONE %d/%d  |  PAG %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "MOD SELEZIONATA: %s (%d OPZIONI) - PREMI DESTRA, SPAZIO O 1-0 PER MODIFICARE LE OPZIONI. [-]/[=] SCALA UI." },
-    ["es"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.0 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  OPCION %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PULSA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
-    ["es-419"]  = { hdr = "UNIVERSAL MOD LOADER v2.0.0 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  OPCION %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PRESIONA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
-    ["pt-BR"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.0 - SUBMENUS DE MODS", pane_mods = "[PAINEL: MODS]", pane_opts = "[PAINEL: OPCOES]", mods = "MODS (%d)  [1-0 ATALHO]", submenu = "SUBMENU: %s  |  OPCAO %d/%d  |  PAG %d/%d (%d/PG)", on = "< LIG >", off = "< DES >", desc_mod = "MOD SELECIONADO: %s (%d OPCOES) - PRESSIONE DIREITA, ESPACO OU 1-0 PARA EDITAR OPCOES. [-]/[=] ESCALA UI." },
-    ["pl"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.0 - PODMENU MODOW", pane_mods = "[PANEL: LISTA MODOW]", pane_opts = "[PANEL: OPCJE]", mods = "MODY (%d)  [1-0 SKOK]", submenu = "PODMENU: %s  |  OPCJA %d/%d  |  STR %d/%d (%d/STR)", on = "< WL >", off = "< WYL >", desc_mod = "WYBRANY MOD: %s (%d OPCJI) - NACISNIJ PRAWO, SPACJE LUB 1-0 ABY EDYTOWAC OPCJE. [-]/[=] SKALA UI." },
-    ["ru"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.0 - PODMENYU MODOV", pane_mods = "[PANEL: SPISOK MODOV]", pane_opts = "[PANEL: NASTROYKI]", mods = "MODY (%d)  [1-0 VYBOR]", submenu = "PODMENYU: %s  |  OPTSIYA %d/%d  |  STR %d/%d (%d/STR)", on = "< VKL >", off = "< VYKL >", desc_mod = "VYBRAN MOD: %s (%d OPTSIY) - NAZHMITE VPRAVO, PROBEL ILI 1-0 DLYA NASTROYKI. [-]/[=] MASSHTAB UI." },
-    ["ja"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.0 - MOD SUBMENUS (JA)", pane_mods = "[PANE: MOD ICHIRAN]", pane_opts = "[PANE: SETTEI]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  SETTEI %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SENTAKU MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
-    ["ko"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.0 - MOD SUBMENUS (KO)", pane_mods = "[PANE: MOD MOKROK]", pane_opts = "[PANE: SEOLJEONG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  OPTION %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SEONTAEK MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
-    ["zh-Hans"] = { hdr = "UNIVERSAL MOD LOADER v2.0.0 - MOD SUBMENUS (ZHS)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XUANXIANG %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
-    ["zh-Hant"] = { hdr = "UNIVERSAL MOD LOADER v2.0.0 - MOD SUBMENUS (ZHT)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XUANXIANG %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["en"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  OPTION %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
+    ["en-GB"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  OPTION %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
+    ["fr"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - SOUS-MENUS MODS", pane_mods = "[VOLET: LISTE MODS]", pane_opts = "[VOLET: OPTIONS]", mods = "MODS (%d)  [1-0 ACCES]", submenu = "SOUS-MENU: %s  |  OPTION %d/%d  |  PAGE %d/%d (%d/PG)", on = "< OUI >", off = "< NON >", desc_mod = "MOD SELECTIONNE: %s (%d OPTIONS) - APPUYEZ SUR DROITE, ESPACE OU 1-0 POUR MODIFIER LES OPTIONS. [-]/[=] POUR TAILLE UI." },
+    ["de"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - MOD-UNTERMENUS", pane_mods = "[BEREICH: MOD-LISTE]", pane_opts = "[BEREICH: OPTIONEN]", mods = "MODS (%d)  [1-0 WAHL]", submenu = "UNTERMENU: %s  |  OPTION %d/%d  |  SEITE %d/%d (%d/S.)", on = "< EIN >", off = "< AUS >", desc_mod = "AKTIVER MOD: %s (%d OPTIONEN) - RECHTS, LEERTASTE ODER 1-0 ZUM BEARBEITEN DRUCKEN. [-]/[=] FUR UI-SKALIERUNG." },
+    ["it"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - SOTTOMENU MOD", pane_mods = "[PANNELLO: MOD]", pane_opts = "[PANNELLO: OPZIONI]", mods = "MOD (%d)  [1-0 SALTA]", submenu = "SOTTOMENU: %s  |  OPZIONE %d/%d  |  PAG %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "MOD SELEZIONATA: %s (%d OPZIONI) - PREMI DESTRA, SPAZIO O 1-0 PER MODIFICARE LE OPZIONI. [-]/[=] SCALA UI." },
+    ["es"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  OPCION %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PULSA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
+    ["es-419"]  = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  OPCION %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PRESIONA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
+    ["pt-BR"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - SUBMENUS DE MODS", pane_mods = "[PAINEL: MODS]", pane_opts = "[PAINEL: OPCOES]", mods = "MODS (%d)  [1-0 ATALHO]", submenu = "SUBMENU: %s  |  OPCAO %d/%d  |  PAG %d/%d (%d/PG)", on = "< LIG >", off = "< DES >", desc_mod = "MOD SELECIONADO: %s (%d OPCOES) - PRESSIONE DIREITA, ESPACO OU 1-0 PARA EDITAR OPCOES. [-]/[=] ESCALA UI." },
+    ["pl"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - PODMENU MODOW", pane_mods = "[PANEL: LISTA MODOW]", pane_opts = "[PANEL: OPCJE]", mods = "MODY (%d)  [1-0 SKOK]", submenu = "PODMENU: %s  |  OPCJA %d/%d  |  STR %d/%d (%d/STR)", on = "< WL >", off = "< WYL >", desc_mod = "WYBRANY MOD: %s (%d OPCJI) - NACISNIJ PRAWO, SPACJE LUB 1-0 ABY EDYTOWAC OPCJE. [-]/[=] SKALA UI." },
+    ["ru"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - PODMENYU MODOV", pane_mods = "[PANEL: SPISOK MODOV]", pane_opts = "[PANEL: NASTROYKI]", mods = "MODY (%d)  [1-0 VYBOR]", submenu = "PODMENYU: %s  |  OPTSIYA %d/%d  |  STR %d/%d (%d/STR)", on = "< VKL >", off = "< VYKL >", desc_mod = "VYBRAN MOD: %s (%d OPTSIY) - NAZHMITE VPRAVO, PROBEL ILI 1-0 DLYA NASTROYKI. [-]/[=] MASSHTAB UI." },
+    ["ja"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - MOD SUBMENUS (JA)", pane_mods = "[PANE: MOD ICHIRAN]", pane_opts = "[PANE: SETTEI]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  SETTEI %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SENTAKU MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["ko"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - MOD SUBMENUS (KO)", pane_mods = "[PANE: MOD MOKROK]", pane_opts = "[PANE: SEOLJEONG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  OPTION %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SEONTAEK MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["zh-Hans"] = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - MOD SUBMENUS (ZHS)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XUANXIANG %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["zh-Hant"] = { hdr = "UNIVERSAL MOD LOADER v2.0.1 - MOD SUBMENUS (ZHT)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XUANXIANG %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
 }
 
 -- Unicode -> ASCII Transliteration Tables (Latin-1, Latin Extended-A, Cyrillic, Fullwidth, Punctuation)
@@ -2462,8 +2471,10 @@ local loader_state = {
         local roam = os.getenv and os.getenv("APPDATA")
         if filename then
             local candidates = {
-                (localapp or ".") .. "/CowboyBingus/Helldivers2/Logs/" .. filename,
                 (roam or ".") .. "/Arrowhead/Helldivers2/" .. filename,
+                (localapp or ".") .. "/UniversalModLoader/Logs/" .. filename,
+                (localapp or ".") .. "/UniversalModLoader/" .. filename,
+                (localapp or ".") .. "/CowboyBingus/Helldivers2/Logs/" .. filename,
                 (localapp or ".") .. "/" .. filename,
                 filename
             }
@@ -2565,11 +2576,13 @@ local hd2rt = {
 }
 _G.hd2rt = hd2rt
 _G.hd2runtime = hd2rt
+_G.HD2Runtime = hd2rt
 package.preload["hd2rt"] = function() return hd2rt end
 package.preload["hd2runtime"] = function() return hd2rt end
+package.preload["HD2Runtime"] = function() return hd2rt end
 package.loaded["hd2rt"] = hd2rt
 package.loaded["hd2runtime"] = hd2rt
-
+package.loaded["HD2Runtime"] = hd2rt
 
 -- 4. Chef Shared Loader Emulation (API Levels 1, 2, 3)
 local chef_shared_state = {}
@@ -2577,7 +2590,7 @@ local chef_api
 chef_api = {
     api_level = 3,
     loader_name = "UniversalModLoader",
-    loader_version = "2.0.0",
+    loader_version = "2.0.1",
     is_chef_loader = true,
     is_universal_loader = true,
     after_startup = loader_state.after_startup,
@@ -2693,9 +2706,10 @@ local function get_settings_file_paths()
     local localapp = os.getenv("LOCALAPPDATA") or "."
     local roam = os.getenv("APPDATA") or "."
     return {
-        localapp .. "/CowboyBingus/Helldivers2/Logs/uml_mod_settings.json",
         roam .. "/Arrowhead/Helldivers2/uml_mod_settings.json",
-        localapp .. "/UniversalModLoader/mod_settings.json"
+        localapp .. "/UniversalModLoader/uml_mod_settings.json",
+        localapp .. "/UniversalModLoader/mod_settings.json",
+        "uml_mod_settings.json"
     }
 end
 
@@ -2882,7 +2896,7 @@ if rawget(_G, "ModOptionsMenu") == nil then
     mom_stub.on_change("uml_language", function(v)
         set_active_uml_locale(v)
     end)
-    mom_stub.register_option("uml_logging", { label = "Verbose Engine Logging", type = "toggle", default = true, mod = "UML", description = "Write detailed diagnostic telemetry to BingusSharedLoader.log." })
+    mom_stub.register_option("uml_logging", { label = "Verbose Engine Logging", type = "toggle", default = true, mod = "UML", description = "Write detailed diagnostic telemetry to UniversalModLoader.log." })
     mom_stub.register_option("uml_circuit_breaker", { label = "Crash Circuit Breaker", type = "toggle", default = true, mod = "UML", description = "Automatically isolate any mod update hook that throws 10 consecutive errors." })
     mom_stub.register_option("uml_compat_chef", { label = "Chef Shared Loader Interop", type = "toggle", default = true, mod = "UML", description = "Provide Chef Shared Loader API v1-v3 compatibility bridge." })
     mom_stub.register_option("uml_compat_bingus", { label = "Bingus & HD2RT Interop", type = "toggle", default = true, mod = "UML", description = "Provide CowboyBingusModLoader, BingusRuntime v1, and HD2Runtime compatibility." })
@@ -3071,6 +3085,13 @@ if rawget(_G, "RatsSharedLoader") == nil then
         on = function(self, evt, cb)
             self.hooks[evt] = self.hooks[evt] or {}
             table.insert(self.hooks[evt], cb)
+            if (evt == "update" or evt == "on_update") and type(cb) == "function" then
+                local id = "rats_update_" .. tostring(#update_order + 1)
+                update_order[#update_order + 1] = id
+                update_hooks[id] = cb
+            elseif (evt == "init" or evt == "startup" or evt == "after_startup") and type(cb) == "function" then
+                after_startup_queue[#after_startup_queue + 1] = cb
+            end
         end,
         trigger = function(self, evt, ...)
             local list = self.hooks[evt]
@@ -3083,7 +3104,13 @@ if rawget(_G, "RatsSharedLoader") == nil then
     }
     _G.RatsSharedLoader = rat_api
     package.preload["RatsSharedLoader"] = function() return rat_api end
+    package.preload["rats_shared_loader"] = function() return rat_api end
+    package.preload["rat_shared_loader"] = function() return rat_api end
+    package.preload["mods/rat/shared_loader"] = function() return rat_api end
     package.loaded["RatsSharedLoader"] = rat_api
+    package.loaded["rats_shared_loader"] = rat_api
+    package.loaded["rat_shared_loader"] = rat_api
+    package.loaded["mods/rat/shared_loader"] = rat_api
 end
 
 -- Subsystem 14: Topological Dependency Sorter (DAG Prerequisite Resolver)
@@ -3126,7 +3153,7 @@ end
 local uml_registered_mods = {}
 local uml_api
 uml_api = {
-    version = "2.0.0",
+    version = "2.0.1",
     api = 2,
     mods = uml_registered_mods,
     register = function(name, spec)
@@ -3363,6 +3390,9 @@ uml_api = {
     transliterate = function(str, fallback)
         return clean_display_text(str, fallback or "")
     end,
+    sanitize_text = function(str, fallback)
+        return clean_display_text(str, fallback or "")
+    end,
     sort_dependencies = topological_sort_modules,
     is_chat_open = function() return uml_chat_open end,
     is_window_focused = is_window_focused
@@ -3411,8 +3441,9 @@ local function get_sentinel_candidate_paths()
     local localapp = os.getenv("LOCALAPPDATA") or "."
     local roam = os.getenv("APPDATA") or "."
     return {
-        localapp .. "/CowboyBingus/Helldivers2/Logs/uml_active_sentinel.txt",
-        roam .. "/Arrowhead/Helldivers2/uml_active_sentinel.txt"
+        roam .. "/Arrowhead/Helldivers2/uml_active_sentinel.txt",
+        localapp .. "/UniversalModLoader/uml_active_sentinel.txt",
+        "uml_active_sentinel.txt"
     }
 end
 
@@ -3453,7 +3484,30 @@ local function clear_active_sentinel()
     end
 end
 
--- Subsystem 8: Live Hot-Reloading Function
+-- Subsystem 8: Live Hot-Reloading & Loose Script Resolution
+local function find_loose_file(mod_name)
+    if type(mod_name) ~= "string" or mod_name == "" then return nil end
+    local bare_name = mod_name:match("([^/]+)$") or mod_name
+    local candidates = {
+        "mods/" .. mod_name .. ".lua",
+        "mods/" .. bare_name .. ".lua",
+        "mods/" .. mod_name .. "/main.lua",
+        "mods/" .. mod_name .. "/init.lua",
+        "mods/" .. mod_name .. "/" .. bare_name .. ".lua",
+        mod_name .. ".lua",
+        bare_name .. ".lua",
+        mod_name
+    }
+    for _, p in ipairs(candidates) do
+        local f = io.open(p, "rb")
+        if f then
+            f:close()
+            return p
+        end
+    end
+    return nil
+end
+
 local loose_mod_names = {}
 trigger_loose_hot_reload = function()
     log_write("[HotReload] Initiating live reload of loose scripts...")
@@ -3461,9 +3515,27 @@ trigger_loose_hot_reload = function()
     for _, mod_name in ipairs(loose_mod_names) do
         package.loaded[mod_name] = nil
         local chunk = nil
-        for _, loader in ipairs(package.loaders or {}) do
-            chunk = loader(mod_name)
-            if type(chunk) == "function" then break end
+        local loose_path = find_loose_file(mod_name)
+        if loose_path then
+            local f = io.open(loose_path, "rb")
+            if f then
+                local content = f:read("*a")
+                f:close()
+                if content then
+                    if content:sub(1, 3) == "\239\187\191" then content = content:sub(4) end
+                    local l_fn = loadstring(content, "@" .. loose_path)
+                    if l_fn then chunk = l_fn end
+                end
+            end
+        end
+        if not chunk then
+            for _, loader in ipairs(package.loaders or {}) do
+                local ok, fn = pcall(loader, mod_name)
+                if ok and type(fn) == "function" then
+                    chunk = fn
+                    break
+                end
+            end
         end
         if chunk then
             local ok, res = safe_run_with_watchdog(chunk, 3.0, chef_api, mod_name)
@@ -3523,8 +3595,52 @@ local candidate_modules = {
     "mods/reticle_ammo/hud",
     "mods/patpatpatrick/helmet_headlamp",
     "mods/driverhud/driver_hud",
-    "mods/codex/gun_calibration"
+    "mods/codex/gun_calibration",
+
+    -- Community Appearance, Loadout & Visibility Mods
+    "mods/rat/transmog",
+    "mods/transmog/main",
+    "mods/transmog/transmog",
+    "mods/armor_transmog/main",
+    "mods/armor_transmog/transmog",
+    "mods/transmog",
+    "transmog",
+    "mods/mod_loadout_regulations/main",
+    "mods/mod_loadout_regulations/loadout_regulations",
+    "mods/mod_loadout_regulations",
+    "mods/loadout_regulations/main",
+    "mods/loadout_regulations/loadout_regulations",
+    "mods/loadout_regulations",
+    "mod_loadout_regulations",
+    "loadout_regulations",
+    "mods/night_vision/night_vision",
+    "mods/night_vision/main",
+    "mods/night_vision/nvg",
+    "mods/night_vision",
+    "night_vision",
+    "mods/clear_night/main",
+    "mods/clear_night",
+    "mods/patpatpatrick/night_vision",
+    "mods/chef/night_vision"
 }
+
+-- Also check for user-defined custom loose mod list (mods/mods.txt or mods/load_order.txt)
+pcall(function()
+    local user_list_candidates = { "mods/mods.txt", "mods/load_order.txt", "mods/mod_list.txt" }
+    for _, u_path in ipairs(user_list_candidates) do
+        local uf = io.open(u_path, "r")
+        if uf then
+            for line in uf:lines() do
+                line = line:gsub("^%s+", ""):gsub("%s+$", "")
+                if line ~= "" and not line:match("^%-%-") and not line:match("^#") then
+                    candidate_modules[#candidate_modules + 1] = line
+                end
+            end
+            uf:close()
+            break
+        end
+    end
+end)
 
 -- Also scan patch files if available to discover any declared addons not in candidate_modules,
 -- parse dependency declarations (Subsystem 14), and neutralize rogue guest boot resources (Subsystem 13)
@@ -3550,44 +3666,62 @@ pcall(function()
             f = open("../data/" .. family .. ".patch_" .. p_num, "rb")
         end
         if f then
-            local header = f:read(72)
-            if header and #header >= 72 and u32(header, 0) == 0xf0000011 then
-                local types, count = u32(header, 4), u32(header, 8)
-                local table_start = 72 + 32 * types
-                for index = 0, count - 1 do
-                    f:seek("set", table_start + index * 80)
-                    local row = f:read(80)
-                    if row and #row == 80 and row:sub(9, 16) == lua_type then
-                        local is_rogue_boot = (row:sub(1, 8) == boot_hash)
-                        if is_rogue_boot and p_num ~= 0 and p_num ~= 111 then
-                            log_write(string.format("[GuestBootShield] Neutralized secondary boot resource (0xF476DF93691895FA) in patch_%d", p_num))
-                        end
-                        local off = u32(row, 16)
-                        local len = u32(row, 56)
-                        if off > 0 and len >= 8 and not is_rogue_boot then
-                            f:seek("set", off)
-                            local env = f:read(8)
-                            if env and #env == 8 and u32(env, 4) == 2 then
-                                local body_len = math.min(u32(env, 0), 384)
-                                local prefix = f:read(body_len)
-                                if prefix then
-                                    local d_name = prefix:match("^%-%- HD2%-Addon:%s*([^\r\n]+)")
-                                        or prefix:match("^%-%- @mod%s+([^\r\n]+)")
-                                    if d_name then
-                                        d_name = d_name:gsub("^%s+", ""):gsub("%s+$", "")
-                                        if not existing[d_name] and not d_name:find("boot", 1, true) then
-                                            candidate_modules[#candidate_modules + 1] = d_name
-                                            existing[d_name] = true
+            pcall(function()
+                local header = f:read(72)
+                if header and #header >= 72 and u32(header, 0) == 0xf0000011 then
+                    local types, count = u32(header, 4), u32(header, 8)
+                    local table_start = 72 + 32 * types
+                    for index = 0, count - 1 do
+                        f:seek("set", table_start + index * 80)
+                        local row = f:read(80)
+                        if row and #row == 80 and row:sub(9, 16) == lua_type then
+                            local off = u32(row, 16)
+                            local len = u32(row, 56)
+                            local is_boot_resource = (row:sub(1, 8) == boot_hash)
+                            local is_rogue_boot = false
+
+                            if is_boot_resource then
+                                if off > 0 and len >= 8 then
+                                    f:seek("set", off)
+                                    local env = f:read(8)
+                                    if env and #env == 8 and u32(env, 4) == 2 then
+                                        local body_len = math.min(u32(env, 0), 256)
+                                        local prefix = f:read(body_len)
+                                        if prefix and not prefix:find("Universal Mod Loader", 1, true) then
+                                            is_rogue_boot = true
+                                            log_write(string.format("[GuestBootShield] Neutralized secondary rogue boot resource (0xF476DF93691895FA) in patch_%d", p_num))
                                         end
-                                        local req_str = prefix:match("%-%- HD2%-Requires:%s*([^\r\n]+)")
-                                            or prefix:match("%-%- @requires%s+([^\r\n]+)")
-                                        if req_str then
-                                            local reqs = {}
-                                            for req in req_str:gmatch("([^,%s]+)") do
-                                                reqs[#reqs + 1] = req
+                                    end
+                                end
+                            end
+
+                            if off > 0 and len >= 8 and not is_rogue_boot then
+                                f:seek("set", off)
+                                local env = f:read(8)
+                                if env and #env == 8 and u32(env, 4) == 2 then
+                                    local body_len = math.min(u32(env, 0), 384)
+                                    local prefix = f:read(body_len)
+                                    if prefix then
+                                        local d_name = prefix:match("%-%-%s*HD2%-Addon:%s*([^\r\n]+)")
+                                            or prefix:match("%-%-%s*HD2%-Boot:%s*([^\r\n]+)")
+                                            or prefix:match("%-%-%s*@mod%s+([^\r\n]+)")
+                                            or prefix:match("%-%-%s*@boot%s+([^\r\n]+)")
+                                        if d_name then
+                                            d_name = d_name:gsub("^%s+", ""):gsub("%s+$", "")
+                                            if not existing[d_name] and d_name ~= "boot" and d_name ~= "core/boot" then
+                                                candidate_modules[#candidate_modules + 1] = d_name
+                                                existing[d_name] = true
                                             end
-                                            if #reqs > 0 then
-                                                mod_dependencies[d_name] = reqs
+                                            local req_str = prefix:match("%-%-%s*HD2%-Requires:%s*([^\r\n]+)")
+                                                or prefix:match("%-%-%s*@requires%s+([^\r\n]+)")
+                                            if req_str then
+                                                local reqs = {}
+                                                for req in req_str:gmatch("([^,%s]+)") do
+                                                    reqs[#reqs + 1] = req
+                                                end
+                                                if #reqs > 0 then
+                                                    mod_dependencies[d_name] = reqs
+                                                end
                                             end
                                         end
                                     end
@@ -3596,7 +3730,7 @@ pcall(function()
                         end
                     end
                 end
-            end
+            end)
             f:close()
         end
     end
@@ -3605,11 +3739,12 @@ end)
 -- Subsystem 14: Apply Topological Dependency Sort prior to execution
 candidate_modules = topological_sort_modules(candidate_modules, mod_dependencies)
 
--- Safe Execution Loop with True CSL Vararg Injection & Hang Watchdog
+-- Safe Execution Loop with True CSL Vararg Injection, Loose Mod Loading & Hang Watchdog
 local app = stingray and stingray.Application
 local loaded_count = 0
 local failed_count = 0
 local not_installed_count = 0
+local executed_loose_paths = {}
 
 for _, mod_name in ipairs(candidate_modules) do
     if quarantined_mods[mod_name] then
@@ -3617,50 +3752,89 @@ for _, mod_name in ipairs(candidate_modules) do
         loaded_modules[mod_name] = "quarantined"
     else
         local is_installed = false
+        local loose_path = nil
+
         if app and type(app.can_get) == "function" then
             local ok, can = pcall(app.can_get, "lua", mod_name)
             if ok and can then
                 is_installed = true
             end
-        else
-            -- Outside game engine (mock/test environment): test via package lookup
-            is_installed = true
+        end
+
+        if not is_installed then
+            loose_path = find_loose_file(mod_name)
+            if loose_path then
+                is_installed = true
+            elseif not app then
+                -- Outside game engine (mock/test environment): test via package lookup
+                is_installed = true
+            end
         end
 
         if is_installed then
-            loaded_modules[mod_name] = "loading"
-            set_active_sentinel(mod_name)
+            if package.loaded[mod_name] ~= nil then
+                loaded_modules[mod_name] = "loaded (cached)"
+            elseif loose_path and executed_loose_paths[loose_path] ~= nil then
+                package.loaded[mod_name] = executed_loose_paths[loose_path]
+                loaded_modules[mod_name] = "loaded (alias)"
+            else
+                loaded_modules[mod_name] = "loading"
+                set_active_sentinel(mod_name)
 
-            -- Find compiled chunk
-            local chunk = nil
-            for _, loader in ipairs(package.loaders or {}) do
-                local ok, fn = pcall(loader, mod_name)
-                if ok and type(fn) == "function" then
-                    chunk = fn
-                    break
+                local chunk = nil
+                if loose_path then
+                    loose_mod_names[#loose_mod_names + 1] = mod_name
+                    local f = io.open(loose_path, "rb")
+                    if f then
+                        local content = f:read("*a")
+                        f:close()
+                        if content then
+                            if content:sub(1, 3) == "\239\187\191" then content = content:sub(4) end
+                            local l_fn, l_err = loadstring(content, "@" .. loose_path)
+                            if l_fn then
+                                chunk = l_fn
+                            else
+                                log_write(string.format("[LooseMod] Syntax error compiling '%s': %s", loose_path, tostring(l_err)))
+                            end
+                        end
+                    end
                 end
-            end
 
-            local ok, res
-            if chunk then
-                -- Subsystem 4: True CSL Vararg Parameter Injection (chunk(chef_api, mod_name))
-                ok, res = safe_run_with_watchdog(chunk, 3.0, chef_api, mod_name)
-            else
-                ok, res = pcall(require, mod_name)
-            end
+                if not chunk then
+                    for _, loader in ipairs(package.loaders or {}) do
+                        local ok, fn = pcall(loader, mod_name)
+                        if ok and type(fn) == "function" then
+                            chunk = fn
+                            break
+                        end
+                    end
+                end
 
-            clear_active_sentinel()
+                local ok, res
+                if chunk then
+                    -- Subsystem 4: True CSL Vararg Parameter Injection (chunk(chef_api, mod_name))
+                    ok, res = safe_run_with_watchdog(chunk, 3.0, chef_api, mod_name)
+                else
+                    ok, res = pcall(require, mod_name)
+                end
 
-            if ok then
-                package.loaded[mod_name] = res or true
-                loaded_modules[mod_name] = "loaded"
-                loaded_count = loaded_count + 1
-                log_write("Loaded mod: " .. mod_name)
-            else
-                local err_msg = tostring(res):gsub("[\r\n]+", " ")
-                loaded_modules[mod_name] = "failed: " .. err_msg
-                failed_count = failed_count + 1
-                log_write("Failed loading " .. mod_name .. ": " .. err_msg)
+                clear_active_sentinel()
+
+                if ok then
+                    local ret_val = res or true
+                    package.loaded[mod_name] = ret_val
+                    if loose_path then
+                        executed_loose_paths[loose_path] = ret_val
+                    end
+                    loaded_modules[mod_name] = "loaded"
+                    loaded_count = loaded_count + 1
+                    log_write("Loaded mod: " .. mod_name .. (loose_path and (" (loose: " .. loose_path .. ")") or ""))
+                else
+                    local err_msg = tostring(res):gsub("[\r\n]+", " ")
+                    loaded_modules[mod_name] = "failed: " .. err_msg
+                    failed_count = failed_count + 1
+                    log_write("Failed loading " .. mod_name .. ": " .. err_msg)
+                end
             end
         else
             loaded_modules[mod_name] = "not installed"

@@ -20,8 +20,8 @@ Do not install secondary loader patch files. UML handles all of them natively.
 
 ### 3. Where are my settings saved?
 Settings are persisted in JSON format across a resilient path cascade:
-1. `%LOCALAPPDATA%/CowboyBingus/Helldivers2/Logs/uml_mod_settings.json`
-2. `%APPDATA%/Arrowhead/Helldivers2/uml_mod_settings.json`
+1. `%APPDATA%/Arrowhead/Helldivers2/uml_mod_settings.json`
+2. `%LOCALAPPDATA%/UniversalModLoader/uml_mod_settings.json`
 3. `%LOCALAPPDATA%/UniversalModLoader/mod_settings.json`
 
 Existing settings from older `ModOptionsMenu.values` files are automatically imported on boot. If a settings file ever suffers corruption from an improper system shutdown, UML automatically creates a `.bak` backup and restores default values safely.

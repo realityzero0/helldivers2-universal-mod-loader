@@ -1,5 +1,32 @@
 # Changelog — Helldivers 2 Universal Mod Loader
 
+## [2.0.1] - Maintenance & Ecosystem Compatibility Release
+### Community Feedback & Direct Issue Resolutions
+
+#### 1. Loose Script Discovery & Community Addons (Transmog, Loadout Regulations, Night Vision)
+> **Quote from @PacketInc:**  
+> *"When only using this not a single one of my lua mods work, Transmog doesn't load, mod loadout regulations, night vision etc"*
+>
+> * **Why it occurred:**  
+>   1. **Loose Script Resolution Failure:** In the game engine, `Application.can_get("lua", mod_name)` strictly checks compiled Stingray `.patch_X` archive bundles. If a user installed community mods as loose scripts in `<GameDir>/mods/*.lua` (the standard deployment for Armor Transmog, MoD Loadout Regulations, and Night Vision), `Application.can_get` returned `false`. UML marked them as "not installed" and skipped them.  
+>   2. **Header Declaration Discarding:** Legacy mods compiled with `-- HD2-Boot:` or having `"boot"` in their path were omitted during dynamic archive parsing.  
+>   3. **Rat's Shared Loader Event Dispatch:** `RatsSharedLoader:on("update", cb)` and `RatsSharedLoader:on("init", cb)` were not directly wired to the master update loop and `after_startup` callback queues.  
+> * **What was done to fix it in v2.0.1:**  
+>   1. **Active Filesystem Script Discovery:** Implemented multi-tier loose file discovery probing `mods/<name>.lua`, `<name>.lua`, and package search paths. Discovered loose scripts are compiled with UTF-8 BOM sanitization and executed with watchdog protection and vararg injection.  
+>   2. **Live Hot-Reloading Registration:** Discovered loose mods are automatically tracked in `loose_mod_names`, enabling live in-game script reloading via **Ctrl+F5**.  
+>   3. **Ecosystem Mod Coverage:** Added explicit candidate module definitions for Armor Transmog, MoD Loadout Regulations, and Night Vision, and enabled optional user-defined mod lists via `mods/mods.txt`.  
+>   4. **RatsSharedLoader & HD2Runtime Interop:** Added full event bridging for `update`, `on_update`, and `init` events, plus `_G.HD2Runtime` package preloads.
+
+---
+
+#### 2. Complete Standalone Namespace Decoupling
+* **Universal Logging & Settings:** Fully decoupled default diagnostic logging and settings persistence to `UniversalModLoader.log`, `uml_mod_settings.json`, and `uml_active_sentinel.txt` across `%APPDATA%/Arrowhead/Helldivers2/` and `%LOCALAPPDATA%/UniversalModLoader/`.
+* **Zero Residual Defaults:** Purged legacy BingusSharedLoader path defaults from engine logging, F9 descriptions, and sentinel paths. Legacy identifiers are strictly retained solely as in-memory compatibility shims for third-party mods expecting them.
+* **Dynamic Guest Boot Shield:** Hardened the secondary boot resource shield to inspect resource headers dynamically for `"Universal Mod Loader"` rather than relying on hardcoded patch index checks (`patch_0` / `patch_111`).
+* **Resource Safety:** Hardened archive scanner file handle cleanup with wrapped `pcall` protections guaranteeing `f:close()` on malformed headers.
+
+---
+
 ## [2.0.0] - Generational Update: The Indestructible Universal Runtime
 ### Community Feedback & Direct Issue Resolutions
 

@@ -168,7 +168,7 @@ Fires once after all mods and game engine subsystems have initialized.
 
 #### `mod:on_update(callback)`
 Fires every engine frame with delta time `dt`.
-* **Automated Circuit Breaker:** If your update code encounters 10 consecutive syntax or runtime errors, UML isolates and pauses your hook while logging diagnostics to `BingusSharedLoader.log`, preventing the entire game process from crashing.
+* **Automated Circuit Breaker:** If your update code encounters 10 consecutive syntax or runtime errors, UML isolates and pauses your hook while logging diagnostics to `UniversalModLoader.log`, preventing the entire game process from crashing.
 
 #### `mod:on_shutdown(callback)`
 Fires during engine shutdown or live reload cleanup.

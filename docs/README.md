@@ -25,6 +25,6 @@
 ---
 
 ## Diagnostic Logs & Settings Locations
-* **Persistent JSON Settings**: `%LOCALAPPDATA%\CowboyBingus\Helldivers2\Logs\uml_mod_settings.json`
-* **Legacy Settings Sync**: `%LOCALAPPDATA%\CowboyBingus\Helldivers2\Logs\ModOptionsMenu.values`
-* **Diagnostic Logs**: `%LOCALAPPDATA%\CowboyBingus\Helldivers2\Logs\BingusSharedLoader.log`
+* **Persistent JSON Settings**: `%APPDATA%\Arrowhead\Helldivers2\uml_mod_settings.json` (or `%LOCALAPPDATA%\UniversalModLoader\uml_mod_settings.json`)
+* **Legacy Settings Sync**: `%APPDATA%\Arrowhead\Helldivers2\uml_mod_settings.json`
+* **Diagnostic Logs**: `%APPDATA%\Arrowhead\Helldivers2\UniversalModLoader.log` (or `%LOCALAPPDATA%\UniversalModLoader\UniversalModLoader.log`)

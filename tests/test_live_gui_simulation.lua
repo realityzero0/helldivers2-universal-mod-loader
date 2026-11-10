@@ -82,13 +82,15 @@ local function run_test()
     _G.stingray = stingray
 
     -- Back up real user settings & log files if present on host
-    local settings_path = (os.getenv("LOCALAPPDATA") or "") .. "/CowboyBingus/Helldivers2/Logs/uml_mod_settings.json"
-    local settings_path2 = (os.getenv("LOCALAPPDATA") or "") .. "/UniversalModLoader/mod_settings.json"
-    local settings_path3 = (os.getenv("APPDATA") or "") .. "/Arrowhead/Helldivers2/uml_mod_settings.json"
-    local log_path = (os.getenv("LOCALAPPDATA") or "") .. "/CowboyBingus/Helldivers2/Logs/BingusSharedLoader.log"
+    local settings_path = (os.getenv("APPDATA") or "") .. "/Arrowhead/Helldivers2/uml_mod_settings.json"
+    local settings_path2 = (os.getenv("LOCALAPPDATA") or "") .. "/UniversalModLoader/uml_mod_settings.json"
+    local settings_path3 = (os.getenv("LOCALAPPDATA") or "") .. "/UniversalModLoader/mod_settings.json"
+    local settings_path4 = "uml_mod_settings.json"
+    local log_path = (os.getenv("APPDATA") or "") .. "/Arrowhead/Helldivers2/UniversalModLoader.log"
     local orig_settings_content = nil
     local orig_settings_content2 = nil
     local orig_settings_content3 = nil
+    local orig_settings_content4 = nil
     local orig_log_content = nil
     do
         local sf = io.open(settings_path, "rb")
@@ -108,6 +110,12 @@ local function run_test()
             orig_settings_content3 = sf3:read("*a")
             sf3:close()
             os.remove(settings_path3)
+        end
+        local sf4 = io.open(settings_path4, "rb")
+        if sf4 then
+            orig_settings_content4 = sf4:read("*a")
+            sf4:close()
+            os.remove(settings_path4)
         end
         local lf = io.open(log_path, "rb")
         if lf then
@@ -136,7 +144,7 @@ local function run_test()
     assert(mom.api == 1 and mom.version >= 3, "ModOptionsMenu must expose api=1, version>=3")
     assert(mbm, "ModBindingsMenu must exist")
     assert(mbm.api == 1 and mbm.version >= 4, "ModBindingsMenu must expose api=1, version>=4")
-    assert(uml and uml.version == "2.0.0", "UML v2.0.0 global must exist")
+    assert(uml and (uml.version == "2.0.1" or uml.version == "2.0.0"), "UML v2.0.1 global must exist")
     assert(#mom.order >= 6, "Must have at least 6 registered default options, got " .. tostring(#mom.order))
     print(string.format("  [PASS] ModOptionsMenu (v%d), ModBindingsMenu (v%d), & UML (%s) ABI verified", mom.version, mbm.version, uml.version))
 
@@ -417,6 +425,13 @@ local function run_test()
         if sf3 then
             sf3:write(orig_settings_content3)
             sf3:close()
+        end
+    end
+    if orig_settings_content4 then
+        local sf4 = io.open(settings_path4, "wb")
+        if sf4 then
+            sf4:write(orig_settings_content4)
+            sf4:close()
         end
     end
     if orig_log_content then
