@@ -3,19 +3,20 @@
   "version": "2.0.3",
   "revision": "loader-v2.0.3",
   "display_version": "v2.0.3",
-  "steam_build": 26251122,
+  "steam_build": 26568081,
   "supported_steam_builds": [
     25988413,
     26088801,
-    26251122
+    26251122,
+    26568081
   ],
-  "exe_version": "1.8.46659.0",
+  "exe_version": "1.8.47139.0",
   "runtime_verified": true,
   "files": {
     "data/9ba626afa44a3aa3.patch_0": "65CCFB567ABB5DAA67FF1652DC7BCBC6CC4048E7FA31C74C8C07D23C0602D2A8",
     "data/9ba626afa44a3aa3.patch_0.stream": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
     "data/9ba626afa44a3aa3.patch_0.gpu_resources": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
-    "UniversalModLoader-README.txt": "DDDF895D5C2A025FC12B8FB2474469EF389693B6DCE2D60F702A61C254047E06",
+    "UniversalModLoader-README.txt": "BD8BD8C271BB8E656A102FD7E277D62B3638551807F33D68DE7A3CB33F4CA86B",
     "thumbnail.png": "C8C7901C5C71BF2F8D7CF6D83BD0F916244CA2508B1D39824FA9B66B79BED7CC"
   },
   "provides": {

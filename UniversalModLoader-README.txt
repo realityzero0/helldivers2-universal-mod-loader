@@ -1,4 +1,4 @@
-Supports Steam builds 25988413, 26088801, and 26251122+ (EAC EOS Overhaul).
+Supports Steam builds 25988413, 26088801, 26251122, and 26568081+ (EAC EOS Overhaul).
 
 Helldivers 2 Universal Mod Loader - v2.0.3 (The Indestructible Universal Runtime)
 
