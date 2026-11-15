@@ -123,7 +123,7 @@ end
 
 local sr, kb, rects = boot_clean_environment()
 local UML = _G.UML
-assert(UML and (UML.version == "2.0.3" or UML.version == "2.0.2" or UML.version == "2.0.1" or UML.version == "2.0.0"), "UML API global must be initialized")
+assert(UML and (UML.version == "2.0.4" or UML.version == "2.0.3" or UML.version == "2.0.2" or UML.version == "2.0.1" or UML.version == "2.0.0"), "UML API global must be initialized")
 
 -- Test 1: Mod Registration & Metadata
 test("UML.register creates managed mod object with metadata", function()
@@ -313,6 +313,374 @@ test("UML.sort_dependencies resolves mod dependencies into correct boot order", 
     }
     local sorted = UML.sort_dependencies(list, deps)
     assert(sorted[1] == "Mod_A" and sorted[2] == "Mod_B" and sorted[3] == "Mod_C", "DAG sorting failed")
+end)
+
+-- Test 8: 3-arg bind_key(action_id, key, cb), mod:on_change, and table register_translations
+test("3-arg mod:bind_key, mod:on_change, and table UML.register_translations work seamlessly", function()
+    local m = UML.register("UnifiedPillarMod", { version = "2.0.4", author = "Tester" })
+
+    local changed_val = nil
+    m:option("alpha", { label = "Alpha", type = "slider", default = 0.5, min = 0.1, max = 1.0, step = 0.1 })
+    local ok_chg = m:on_change("alpha", function(v)
+        changed_val = v
+    end)
+    assert(ok_chg == true, "mod:on_change must return true")
+    m:set("alpha", 0.8)
+    assert(math.abs((changed_val or 0) - 0.8) < 0.001, "mod:on_change callback must fire on mod:set")
+
+    local hk_hits = 0
+    local ok_bk, bind_id = m:bind_key("pulse_action", "f1", function()
+        hk_hits = hk_hits + 1
+    end)
+    assert(ok_bk == true and bind_id == "UnifiedPillarMod.pulse_action", "3-arg bind_key must register explicit action id")
+    kb[112] = true
+    _G.update(0.016)
+    kb[112] = false
+    _G.update(0.016)
+    assert(hk_hits == 1, "3-arg bind_key callback must fire on rising edge")
+
+    local tr_fn = UML.register_translations({
+        id = "UnifiedPillarMod",
+        strings = {
+            en = { title = "UNIFIED TITLE" },
+            fr = { title = "TITRE UNIFIE" }
+        }
+    })
+    assert(type(tr_fn) == "function", "Table-form UML.register_translations must return translator function")
+    UML.set_language("fr")
+    assert(m:translate("title") == "TITRE UNIFIE", "Table-form translation pack must resolve French string")
+    UML.set_language("en")
+end)
+
+-- Test 9: Button / Action Option Type & mod:trigger
+test("type = 'button' option triggers on_click and on_change via mod:trigger", function()
+    local m = UML.mods["UnifiedPillarMod"]
+    local clicks = 0
+    local change_fired = false
+    m:option("reset_action", {
+        label = "Reset Action",
+        type = "button",
+        button_text = "RESET NOW",
+        on_click = function(id)
+            clicks = clicks + 1
+        end,
+        on_change = function()
+            change_fired = true
+        end
+    })
+    assert(m:trigger("reset_action") == true, "mod:trigger must return true for registered button")
+    assert(clicks == 1 and change_fired == true, "Button option must invoke both on_click and on_change")
+end)
+
+-- Test 10: Structured Table Persistence via mod:set / mod:get (save_data / load_data)
+test("mod:set and mod:get persist nested tables to disk without cluttering F9 menu", function()
+    local m = UML.mods["UnifiedPillarMod"]
+    local payload = {
+        active_slot = 2,
+        slots = {
+            { name = "Helldiver Gold", armor = "B-01", cape = "Foesmasher" },
+            { name = "Stealth Scout", armor = "SC-30", cape = "Trailblazer" }
+        }
+    }
+    assert(m:save_data("loadout_presets", payload) == true, "mod:save_data must succeed")
+    local loaded = m:load_data("loadout_presets")
+    assert(type(loaded) == "table" and loaded.active_slot == 2 and #loaded.slots == 2, "In-memory table retrieval must match")
+    assert(m:get("nonexistent_key", "fallback_val") == "fallback_val", "mod:get must return default_val when unset")
+
+    -- Verify disk JSON round-trip contains serialized nested object/array
+    local f = io.open(settings_path, "rb")
+    assert(f ~= nil, "Settings file must exist on disk")
+    local raw_json = f:read("*a")
+    f:close()
+    assert(raw_json:find('"UnifiedPillarMod.loadout_presets"', 1, true) ~= nil, "Nested table key must be serialized to JSON")
+    assert(raw_json:find('"Helldiver Gold"', 1, true) ~= nil, "Nested array/object contents must be serialized to JSON")
+end)
+
+-- Test 11: Throttled on_update, Timers (after/every/cancel), and Managed Function Detours (hook/unhook)
+test("Timers and managed function detours chain and isolate errors cleanly", function()
+    local m = UML.mods["UnifiedPillarMod"]
+
+    local throttle_Count = 0
+    m:on_update(function(elapsed)
+        throttle_Count = throttle_Count + 1
+    end, 0.05)
+
+    local after_fired = 0
+    m:after(0.03, function()
+        after_fired = after_fired + 1
+    end)
+
+    local every_fired = 0
+    local tid = m:every(0.02, function()
+        every_fired = every_fired + 1
+    end)
+
+    for _ = 1, 4 do _G.update(0.016) end -- total 0.064s
+    assert(throttle_Count == 1, "Throttled on_update(fn, 0.05) must fire once in 0.064s, got " .. tostring(throttle_Count))
+    assert(after_fired == 1, "mod:after(0.03) must fire exactly once, got " .. tostring(after_fired))
+    assert(every_fired == 3, "mod:every(0.02) must fire 3 times in 0.064s, got " .. tostring(every_fired))
+
+    assert(m:cancel_timer(tid) == true, "mod:cancel_timer must cancel active repeating timer")
+    _G.update(0.05)
+    assert(every_fired == 3, "Cancelled timer must not fire again")
+
+    -- Function Detour Chaining & Error Fallback
+    local target = {
+        compute = function(x) return x * 2 end
+    }
+    m:hook(target, "compute", function(orig, x)
+        return orig(x + 1)
+    end)
+    m:hook(target, "compute", function(orig, x)
+        return orig(x) + 10
+    end)
+    assert(target.compute(5) == 22, "Chained hooks must compute ((5 + 1) * 2) + 10 = 22, got " .. tostring(target.compute(5)))
+
+    -- Faulty hook fallback: if a hook throws, original chain still executes without crashing
+    local bad_fn = function(orig, x)
+        error("Simulated hook failure")
+    end
+    m:hook(target, "compute", bad_fn)
+    assert(target.compute(5) == 22, "Faulty hook must fall back to remaining chain cleanly")
+
+    m:unhook(target, "compute")
+    assert(target.compute(5) == 10, "mod:unhook must restore original function (5 * 2 = 10)")
+end)
+
+-- Test 12: Unified UI & HUD Drawing API (UML.ui / mod.ui)
+test("mod.ui screen_size, scale, color, rect, and text render safely", function()
+    local m = UML.mods["UnifiedPillarMod"]
+    local w, h = m.ui.screen_size()
+    local px = m.ui.scale()
+    assert(w == 1920 and h == 1080 and px == 2, "mod.ui.screen_size and scale must match 1080p mock")
+    local before_rects = #rects
+    local col = m.ui.color(255, 255, 215, 55)
+    assert(m.ui.rect(20, 20, 120, 30, col, 900) == true, "mod.ui.rect must draw on active world GUI")
+    assert(m.ui.text("HUD TEST", 26, 26, px, col, 910) == true, "mod.ui.text must draw pixel text on active world GUI")
+    assert(#rects > before_rects + 5, "mod.ui.rect and mod.ui.text must emit GUI rectangles")
+end)
+
+-- Test 13: Foundational Audio API (UML.audio / mod:play_sound)
+test("UML.audio and mod:play_sound safely wrap Stingray WwiseWorld", function()
+    local m = UML.mods["UnifiedPillarMod"]
+    local active_sounds = {}
+    local rtpc_params = {}
+    local mock_ww = { id = "wwise_main" }
+    _G.stingray.Wwise = {
+        wwise_world = function(w) return mock_ww end
+    }
+    _G.stingray.WwiseWorld = {
+        trigger_event = function(ww, evt, unit)
+            local pid = 500 + #active_sounds + 1
+            active_sounds[pid] = { evt = evt, unit = unit, playing = true }
+            return pid, 1
+        end,
+        stop_event = function(ww, pid)
+            if active_sounds[pid] then active_sounds[pid].playing = false end
+        end,
+        is_playing = function(ww, pid)
+            return active_sounds[pid] and active_sounds[pid].playing == true or false
+        end,
+        set_global_parameter = function(ww, name, val)
+            rtpc_params[name] = val
+        end
+    }
+
+    local pid = m:play_sound("play_ui_button_click")
+    assert(pid == 501, "mod:play_sound must trigger Wwise event and return playing_id")
+    assert(UML.audio.is_playing(pid) == true, "UML.audio.is_playing must return true while active")
+    assert(UML.audio.set_parameter("menu_volume", 0.85) == true, "UML.audio.set_parameter must set Wwise RTPC")
+    assert(rtpc_params["menu_volume"] == 0.85, "RTPC parameter value must match")
+    assert(m:stop_sound(pid) == true, "mod:stop_sound must stop active Wwise event")
+    assert(UML.audio.is_playing(pid) == false, "UML.audio.is_playing must return false after stop")
+end)
+
+-- Test 14: Foundational Engine API (UML.engine) & 7-Domain Architecture Verification
+test("UML.engine and all 7 foundational domain APIs (config, input, ui, hooks, locales, audio, engine) work cohesively", function()
+    local m = UML.mods["UnifiedPillarMod"]
+    assert(type(UML.config) == "table" and type(m.config) == "table" and m.config ~= UML.config, "UML.config and scoped m.config must exist")
+    assert(type(UML.input) == "table" and type(m.input) == "table" and m.input ~= UML.input, "UML.input and scoped m.input must exist")
+    assert(type(UML.ui) == "table" and type(m.ui) == "table" and m.ui ~= UML.ui, "UML.ui and scoped m.ui must exist")
+    assert(type(UML.hooks) == "table" and type(m.hooks) == "table" and m.hooks ~= UML.hooks, "UML.hooks and scoped m.hooks must exist")
+    assert(type(UML.locales) == "table" and #UML.locales == 14 and UML.i18n == UML.locales, "UML.locales/i18n domain must preserve 14-locale array and methods")
+    assert(type(m.locales) == "table" and #m.locales == 14 and m.i18n == m.locales and m.locales ~= UML.locales, "m.locales/i18n scoped domain must preserve 14-locale array")
+    assert(type(UML.audio) == "table" and m.audio == UML.audio, "UML.audio domain must exist")
+    assert(type(UML.engine) == "table" and m.engine == UML.engine, "UML.engine domain must exist")
+
+    -- Test UML.locales domain methods directly
+    local lang_tag = UML.locales.get()
+    assert(lang_tag == "en", "UML.locales.get() must return active language tag")
+    assert(UML.locales.sanitize("CAFÉ") == "CAFE", "UML.locales.sanitize must transliterate diacritics")
+
+    -- Mock Stingray Unit, Camera, and PhysicsWorld for UML.engine
+    local mock_unit = { alive = true, pos = { x = 10, y = 20, z = 30 } }
+    _G.stingray.Unit = {
+        alive = function(u) return type(u) == "table" and u.alive == true end,
+        world_position = function(u, node) return u.pos end
+    }
+    _G.stingray.Camera = {
+        world_to_screen = function(cam, wpos) return { x = 960, y = 540, z = 15 } end
+    }
+    _G.stingray.World.physics_world = function(w) return { id = "phys_main" } end
+    _G.stingray.PhysicsWorld = {
+        raycast = function(pw, from_pos, dir, dist, mode, k, filter)
+            return true, { x = 10, y = 25, z = 30 }, 5.0, { x = 0, y = -1, z = 0 }, "hit_actor"
+        end
+    }
+
+    assert(UML.engine.main_world() ~= nil, "UML.engine.main_world() must return active world")
+    assert(UML.engine.unit_alive(mock_unit) == true, "UML.engine.unit_alive must detect live unit")
+    local upos = UML.engine.unit_position(mock_unit)
+    assert(upos and upos.y == 20, "UML.engine.unit_position must return world position")
+    local sx, sy, sz = UML.engine.world_to_screen("cam", upos)
+    assert(sx == 960 and sy == 540 and sz == 15, "UML.engine.world_to_screen must unpack 2D screen coordinates")
+    local hit, hit_pos, hit_dist = UML.engine.raycast({ x = 10, y = 20, z = 30 }, { x = 0, y = 1, z = 0 }, 50)
+    assert(hit == true and hit_dist == 5.0 and hit_pos.y == 25, "UML.engine.raycast must return hit result")
+
+    -- Frame-safe Vector3Box
+    local boxed = UML.engine.box_vec3(1.5, 2.5, 3.5)
+    local unboxed = boxed:unbox()
+    assert(unboxed.x == 1.5 and unboxed.y == 2.5 and unboxed.z == 3.5, "UML.engine.box_vec3 must safely persist and unbox Vector3")
+end)
+
+-- Test 15: Per-mod Scoped Domain Isolation & Zero Key Collisions
+test("Scoped mod domains prevent cross-mod collisions and support dot + colon syntax", function()
+    local m1 = UML.register("ScopedAlpha", { version = "1.0.0" })
+    local m2 = UML.register("ScopedBeta", { version = "1.0.0" })
+
+    assert(m1.config.register("enabled", { type = "boolean", default = true, label = "Alpha Enabled" }), "Alpha register")
+    assert(m2.config.register("enabled", { type = "boolean", default = false, label = "Beta Enabled" }), "Beta register")
+    assert(m1.config.get("enabled") == true and m2.config.get("enabled") == false, "Separate namespaces for 'enabled'")
+
+    m1.config:set("enabled", false)
+    assert(m1:get("enabled") == false and m1.config:get("enabled") == false, "m1 config:set syncs with m1:get")
+    assert(m2.config:get("enabled") == false, "m2 unaffected by m1")
+
+    -- Scoped config.reset() must only reset its own mod's options
+    m2.config:set("enabled", true)
+    m1.config:reset()
+    assert(m1.config:get("enabled") == true, "m1.config:reset() restores m1 default")
+    assert(m2.config:get("enabled") == true, "m1.config:reset() must NOT clobber m2 config")
+
+    -- Scoped input bind & consume_press short ID resolution
+    local fired_alpha = 0
+    local fired_beta = 0
+    assert(m1.input.bind("action", "h", function() fired_alpha = fired_alpha + 1 end), "Alpha bind")
+    assert(m2.input:bind("action", "f1", function() fired_beta = fired_beta + 1 end), "Beta bind colon")
+
+    kb[72] = true -- h
+    _G.update(0.02)
+    assert(fired_alpha == 1 and fired_beta == 0, "Scoped bind_id resolves independently")
+    kb[72] = nil
+    _G.update(0.02)
+
+    -- Scoped locales pack & colon syntax
+    assert(m1.locales.register({ en = { title = "Alpha Pack" } }), "m1.locales.register")
+    assert(m2.locales:register({ en = { title = "Beta Pack" } }), "m2.locales:register colon")
+    assert(m1.locales.translate("title") == "Alpha Pack", "m1.locales.translate isolated")
+    assert(m2.locales:translate("title") == "Beta Pack", "m2.locales:translate isolated")
+
+    -- Scoped ui.open focuses owning mod tab and supports colon syntax
+    m1.ui:open()
+    local st = m1.ui:get_state()
+    assert(st.open == true and (st.mod_name == "SCOPED ALPHA" or st.mod_name == "SCOPEDALPHA" or st.mod_name == "ScopedAlpha"), "m1.ui:open focuses ScopedAlpha, got: " .. tostring(st.mod_name))
+    m1.ui:close()
+end)
+
+-- Test 16: Global 7-Domain Colon-Syntax Parity
+test("Global UML domains support both dot and colon invocation cleanly", function()
+    local v1 = UML.engine.vec3(1, 2, 3)
+    local v2 = UML.engine:vec3(4, 5, 6)
+    assert(v1.x == 1 and v1.z == 3 and v2.x == 4 and v2.z == 6, "UML.engine:vec3 colon parity")
+    assert(UML.locales:get() == UML.locales.get(), "UML.locales:get() colon parity")
+    assert(UML.locales:sanitize("CAFÉ") == "CAFE", "UML.locales:sanitize() colon parity")
+    local st = UML.ui:get_state()
+    assert(type(st) == "table" and st.open == false, "UML.ui:get_state() colon parity")
+    UML.config.register("GlobalColon.val", { type = "number", default = 7, min = 0, max = 10 })
+    assert(UML.config:get("GlobalColon.val") == 7, "UML.config:get() colon parity")
+    assert(UML.config:set("GlobalColon.val", 9) == true and UML.config:get("GlobalColon.val") == 9, "UML.config:set() colon parity")
+end)
+
+-- Test 17: Unbounded Hook Return Values (>4 returns) & Nil Holes
+test("mod.hooks.hook preserves 5+ return values and nil holes", function()
+    local m = UML.register("HookReturnsMod", { version = "1.0.0" })
+    local target = {
+        multi = function(self, a)
+            return a, nil, "three", false, 5, 6
+        end
+    }
+    m.hooks:hook(target, "multi", function(orig, self, a)
+        return orig(self, a * 2)
+    end)
+    local r1, r2, r3, r4, r5, r6 = target:multi(10)
+    assert(r1 == 20 and r2 == nil and r3 == "three" and r4 == false and r5 == 5 and r6 == 6,
+        "Hook chain must preserve >4 return values and nil holes")
+end)
+
+-- Test 18: Dead :timer_ Pruning & VK_MAP Letter/Modifier Fallback
+test("Completed/cancelled timers are pruned from update_order and VK_MAP handles letters + shift", function()
+    local m = UML.register("TimerAndVKMod", { version = "1.0.0" })
+    local fired = false
+    local cancelled_fired = false
+    m:after(0.01, function() fired = true end)
+    local tid2 = m:after(0.01, function() cancelled_fired = true end)
+    assert(m:cancel_timer(tid2) == true, "cancel_timer must return true")
+
+    _G.update(0.05)
+    assert(fired == true and cancelled_fired == false, "Timer execution check")
+
+    local found_dead_timer = false
+    local order = uml_internal and uml_internal.update_order
+    if type(order) == "table" then
+        for i = 1, #order do
+            if type(order[i]) == "string" and order[i]:find(":timer_", 1, true) then
+                found_dead_timer = true
+            end
+        end
+    end
+    assert(not found_dead_timer, "Dead :timer_ entries must be pruned from update_order")
+
+    -- Fallback VK_MAP when Keyboard.button_id returns nil for letter/modifier
+    local orig_btn_id = _G.stingray.Keyboard.button_id
+    _G.stingray.Keyboard.button_id = function(name)
+        return orig_btn_id(name) -- returns nil for 'k' and 'shift'
+    end
+    local k_hits = 0
+    local shift_hits = 0
+    assert(m:bind_key("k", function() k_hits = k_hits + 1 end), "Fallback VK_MAP must support letter keys")
+    assert(m:bind_key("shift", function() shift_hits = shift_hits + 1 end), "Fallback VK_MAP must support shift")
+    kb[75] = true  -- VK_K = 75
+    kb[16] = true  -- VK_SHIFT = 16
+    _G.update(0.02)
+    assert(k_hits == 1 and shift_hits == 1, "Fallback VK_MAP keys must trigger callbacks")
+    kb[75] = nil
+    kb[16] = nil
+    _G.update(0.02)
+    _G.stingray.Keyboard.button_id = orig_btn_id
+end)
+
+-- Test 19: Engine immediate_raycast & Vector3Box.unbox Support
+test("UML.engine.raycast supports Stingray immediate_raycast (pos-first return) and unbox_vec3", function()
+    _G.stingray.PhysicsWorld = {
+        immediate_raycast = function(pw, from_pos, dir, dist, mode, k, filter)
+            if dir.y > 0 then
+                return { x = 1, y = 2, z = 3 }, 4.5, { x = 0, y = -1, z = 0 }, "wall_actor"
+            end
+            return nil
+        end
+    }
+    local hit, pos, dist, normal, actor = UML.engine.raycast({ x = 0, y = 0, z = 0 }, { x = 0, y = 1, z = 0 }, 20)
+    assert(hit == true and pos.y == 2 and dist == 4.5 and normal.y == -1 and actor == "wall_actor",
+        "immediate_raycast pos-first hit must map to (true, pos, dist, normal, actor)")
+    local miss = UML.engine.raycast({ x = 0, y = 0, z = 0 }, { x = 0, y = -1, z = 0 }, 20)
+    assert(miss == false, "immediate_raycast nil must map to false")
+
+    _G.stingray.Vector3Box = {
+        unbox = function(b) return UML.engine.vec3(b._x, b._y, b._z) end
+    }
+    local fake_box = { _x = 7, _y = 8, _z = 9 }
+    local uv = UML.engine.unbox_vec3(fake_box)
+    assert(uv.x == 7 and uv.y == 8 and uv.z == 9, "unbox_vec3 must invoke Vector3Box.unbox")
 end)
 
 print("----------------------------------------------------")

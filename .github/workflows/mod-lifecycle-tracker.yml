@@ -106,7 +106,7 @@ jobs:
                     '',
                     '- **Still working great?** Leave a quick comment below with your current game build to reset the 90-day timer!',
                     '- **Is this mod feature-complete / static?** Let us know so we can apply the **🔵 `static-complete`** badge (static mods never expire).',
-                    '- **Broken after a recent Arrowhead patch?** Paste your `BingusSharedLoader.log` excerpt so modders can see what broke.'
+                    '- **Broken after a recent Arrowhead patch?** Paste your `UniversalModLoader.log` excerpt so modders can see what broke.'
                   ].join('\n')
                 });
               }

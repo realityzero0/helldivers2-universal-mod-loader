@@ -1,4 +1,4 @@
-# Helldivers 2 Universal Mod Loader (v2.0.0)
+# Helldivers 2 Universal Mod Loader (v2.0.4)
 
 [![Nexus Mods](https://img.shields.io/badge/Nexus_Mods-Mod_18527-orange?logo=nexusmods)](https://www.nexusmods.com/helldivers2/mods/18527)
 [![License: 0BSD](https://img.shields.io/badge/License-0BSD-blue.svg)](LICENSE)
@@ -14,7 +14,7 @@
 
 ---
 
-## 🌟 Key Features in v2.0.0
+## 🌟 Key Features in v2.0.4
 
 * **True Multi-Standard Unification:**
   * **CowboyBingus Mod Loader** (API 1, Version 17, BingusRuntime v1, `on_update`, `on_shutdown`, `after_startup`)
@@ -22,13 +22,13 @@
   * **Boot Mod Loader** (VeganSquid API 1)
   * **HD2 Lua Runtime** (`hd2rt` / 0.1.0)
   * **Rat's Shared Loader** (Armor Transmog 1.1.2 ABI & hooks)
-  * **Native `UML` v2.0.0 Developer API** (`UML.register`, `:option`, `:bind_key`, `:on_update`, `:notify`, Event Bus)
-* **Crash-Proof 2-Pane Per-Mod Submenu Settings UI (`F9`):**
-  * **Left Mod Sidebar + Right Options Submenu:** Organizes options cleanly per mod (`1`–`9` direct mod quick-jump, `[`/`]` mod cycling, `Right`/`Backspace`/`Tab` pane focus, Mouse Wheel scrolling).
+  * **Native `UML` v2.0.4 Developer API** — 7 Foundational Domain APIs (`UML.config`, `UML.input`, `UML.ui`, `UML.hooks`, `UML.locales` / `UML.i18n`, `UML.audio`, `UML.engine`), Libra Menu/Keybind API (`allow_in_menu`, `consume_press`, `register_compact_menu`), Action Buttons, Nested JSON Persistence, Managed Detour Hooks, and 2D/3D Engine Helpers
+* **Crash-Proof 2-Pane Per-Mod Submenu Settings UI (`F9`) & Compact Mode:**
+  * **Left Mod Sidebar + Right Options Submenu:** Organizes options cleanly per mod (`1`–`9` direct mod quick-jump, `[`/`]` mod cycling, `Right`/`Backspace`/`Tab` pane focus, Mouse Wheel scrolling), plus single-mod **Compact Mini-Overlay** support (`mod:register_compact_menu`).
   * **Dynamic Viewport Scaling & Description Panel:** Dynamically scales font size, row heights, and items per page (`Auto`, `Compact`, `Medium`, `Large`) with live `[-]` and `[=]` hotkeys, plus a 3-line word-wrapped option description panel.
   * **Automatic 14-Locale Language Detection:** Automatically detects game language via in-game configs, live Steamworks API (`stingray.Steam.language()`), Steam appmanifest, or Windows OS locale, with UTF-8 diacritic & Cyrillic transliteration.
   * **100% Crash-Proof 5x7 Pixel Bitmap Font Renderer:** Renders crisp vector-free text using pure `Gui.rect` calls across all active Stingray worlds with zero dependency on unloaded font assets.
-  * **Persistent JSON Storage:** Automatically saves user options to `%APPDATA%/Arrowhead/Helldivers2/uml_mod_settings.json` (or `%LOCALAPPDATA%/UniversalModLoader/uml_mod_settings.json`) while bi-directionally syncing with `ModOptionsMenu.values`.
+  * **Persistent JSON Storage:** Automatically saves user options, nested mod state, and rebindable keybindings to `%APPDATA%/Arrowhead/Helldivers2/uml_mod_settings.json` (or `%LOCALAPPDATA%/UniversalModLoader/uml_mod_settings.json`) while bi-directionally syncing with `ModOptionsMenu.values`.
 * **Zero PC Freezes (Hang Watchdog):**
   * Real-time `debug.sethook` 3.0s watchdog that intercepts runaway loops and aborts them cleanly without freezing the game window.
 * **Pure-Lua Fake DLL Bridge & FFI ABI Emulator:**
@@ -46,9 +46,9 @@
 
 ## 🚀 Installation
 
-### Using Arsenal Mod Manager / HD2MM (Recommended)
-1. Download `Helldivers2-Universal-Mod-Loader-v2.0.0.zip`.
-2. Drag and drop the archive directly into your mod manager.
+### Using HD2 Arsenal Mod Manager (Recommended)
+1. Download `Helldivers2-Universal-Mod-Loader-v2.0.4.zip`.
+2. Drag and drop the archive directly into Arsenal Mod Manager.
 3. Place **Universal Mod Loader in Position 1** (`patch_0`).
 4. Deploy and launch Helldivers 2. Press **F9** in-game to access settings!
 

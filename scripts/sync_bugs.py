@@ -39,7 +39,7 @@ def fetch_nexus_bugs(api_key):
 
 def get_existing_github_bugs():
     try:
-        cmd = ["gh", "issue", "list", "--repo", REPO, "--json", "number,title", "--limit", "100"]
+        cmd = ["gh", "issue", "list", "--repo", REPO, "--state", "all", "--json", "number,title", "--limit", "100"]
         res = subprocess.run(cmd, capture_output=True, text=True, check=True)
         issues = json.loads(res.stdout)
         existing_ids = set()

@@ -243,6 +243,14 @@ local function run_all_fuzz_tests()
     os.execute("if not exist data mkdir data")
     local test_family = "9ba626afa44a3aa3"
     local bad_patch_0 = patch_dir .. "/" .. test_family .. ".patch_0"
+    local orig_patch_0 = nil
+    do
+        local f = io.open(bad_patch_0, "rb")
+        if f then
+            orig_patch_0 = f:read("*a")
+            f:close()
+        end
+    end
 
     -- 2.1 Truncated 12-byte header
     do
@@ -688,6 +696,14 @@ local function run_all_fuzz_tests()
     for i, f in ipairs(findings) do
         print(string.format("\n[%d] [%s - %s] %s\n    Description: %s\n    Reproduction: %s",
             i, f.severity, f.category, f.title, f.desc, f.repro))
+    end
+
+    if orig_patch_0 then
+        local rf = io.open(bad_patch_0, "wb")
+        if rf then
+            rf:write(orig_patch_0)
+            rf:close()
+        end
     end
 
     return findings

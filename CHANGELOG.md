@@ -1,5 +1,29 @@
 # Changelog — Helldivers 2 Universal Mod Loader
 
+## [2.0.4] - 7 Foundational Domain APIs, Libra Menu & Keybind API & Standalone Thumbnail
+
+### Highlights & Developer Platform Additions
+
+1. **7 Foundational Domain APIs (`UML.*` & Scoped `mod.*`)**
+   Refactored and expanded the UML v2 API into 7 clean domain namespaces available both globally on `UML` / `UniversalModLoader` and scoped to every `mod = UML.register(...)` handle, while retaining 100% backward compatibility with all top-level methods and legacy loaders:
+   * **`UML.config`** — Structured options, clickable **Action Buttons** (`type = "button"` / `"action"` rendered as `[ EXECUTE ]` in F9/Compact), and recursive JSON object/array persistence (`save_data` / `load_data` with `hidden = true` / `type = "data"`).
+   * **`UML.input`** — User-rebindable `F9` keybindings and raw keybind listeners, menu-allowed hotkeys (`allow_in_menu = true`), rising-edge latched polling (`is_down`, `is_pressed`, `consume_press`), and chat/focus/menu guards (`is_blocked`, `is_chat_open`, `is_window_focused`).
+   * **`UML.ui`** *(aliases: `UML.menu`, `UML.hud`)* — Menu state & control (`is_open`, `is_fullscreen`, `is_compact`, `is_capturing`, `open`, `close`, `toggle`, `select_mod`, `set_external_open`, `on_change`, `off_change`), single-mod compact shortcuts (`register_compact_menu`), toast notifications (`notify`), and 2D Stingray HUD drawing helpers (`screen_size`, `scale`, `color`, `rect`, `text`).
+   * **`UML.hooks`** — Lifecycle & throttled update loops (`on_init`, `on_update` with optional `interval_sec`, `on_shutdown`), non-blocking timers (`after`, `every`, `cancel_timer`), managed multi-mod function detour chains (`hook` / `unhook` with `pcall` fallback, 10-error circuit breaker, and `Ctrl+F5` hot-reload cleanup), and inter-mod event bus (`on`, `emit`).
+   * **`UML.locales`** *(alias: `UML.i18n`)* — Preserves `#UML.locales == 14` array compatibility alongside `list`, `get`, `set`, `auto_detect`, `register`, `translate`, and `sanitize` / `transliterate`.
+   * **`UML.audio`** *(+ `mod:play_sound`, `mod:stop_sound`)* — Crash-guarded Stingray `Wwise` / `WwiseWorld` playback (`world`, `play`, `stop`, `is_playing`, `set_parameter`).
+   * **`UML.engine`** — Safe Stingray 3D queries & frame-safe math (`main_world`, `worlds`, `unit_alive`, `unit_position`, `world_to_screen`, `raycast`, `vec3`, `box_vec3`, `unbox_vec3`, `log`, `error`, `get_error_log`, `sort_dependencies`).
+
+2. **Libra Collaboration: Menu State, Compact Mode & Uniformity 3.0 Interop**
+   * Added `UML.menu` / `ModOptionsMenu.menu` public visibility and navigation controls (`open`, `close`, `toggle`, `select_mod`, `set_external_open`, `on_change`) plus single-mod **Compact Mini-Overlay** (`Right`/`Left`/`Center` layouts via `mod:register_compact_menu` or `spec.compact_menu`).
+   * Added `allow_in_menu = true` and rising-edge latched `consume_press` / `is_pressed` polling so external menu toggles (such as Uniformity 3.0 `RShift`) coexist seamlessly with `F9` without key-repeat flicker or leaked keystrokes during key capture or multiplayer chat.
+   * Restored and verified full backward compatibility with Uniformity `connect_native()` closure-upvalue detection.
+
+3. **Standalone Optimized `thumbnail.png`**
+   * Replaced the legacy CowboyBingus thumbnail asset with a clean, custom `512x512` optimized `Universal Mod Loader` tile (`~48 KB`), keeping the full release archive at `~114 KB`.
+
+---
+
 ## [2.0.3] - Universal Archive Lua Resource Enumeration & Community Suite Release
 ### Community Feedback & Direct Issue Resolutions
 

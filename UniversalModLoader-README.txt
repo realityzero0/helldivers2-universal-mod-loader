@@ -1,6 +1,6 @@
 Supports Steam builds 25988413, 26088801, 26251122, and 26568081+ (EAC EOS Overhaul).
 
-Helldivers 2 Universal Mod Loader - v2.0.3 (The Indestructible Universal Runtime)
+Helldivers 2 Universal Mod Loader - v2.0.4 (The Indestructible Universal Runtime)
 
 Unifies all Helldivers 2 modding standards into a single engine boot loader:
   1. CowboyBingus Mod Loader (API 1, Version 17, BingusRuntime v1, on_update, on_shutdown, after_startup)
@@ -8,8 +8,8 @@ Unifies all Helldivers 2 modding standards into a single engine boot loader:
   3. Boot Mod Loader (VeganSquid API 1)
   4. HD2 Lua Runtime (hd2rt / 0.1.0)
   5. Rat's Shared Loader (Armor Transmog 1.1.2 ABI & hooks)
-  6. Native UML v2.0.0 Developer API (UML.register, :option, :bind_key, :on_update, :notify, :translate, Event Bus)
-  7. Crash-Proof 2-Pane Per-Mod Submenu UI (F9 to open, 1-9 quick-jump, [/] mod cycle, Mouse Wheel, auto-saved to uml_mod_settings.json)
+  6. Native UML v2.0.4 Developer API — 7 Foundational Domains (config, input, ui, hooks, locales/i18n, audio, engine) + legacy mod:* helpers
+  7. Crash-Proof 2-Pane Per-Mod Submenu UI & Single-Mod Compact Overlay (F9 to open, 1-9 quick-jump, [/] mod cycle, Mouse Wheel, action buttons, rebindable keys, auto-saved to uml_mod_settings.json)
   8. Dynamic UI Scaling ([-] / [=] live hotkeys, Auto/Compact/Medium/Large density) & 3-line word-wrapped description panel
   9. Automatic 14-Locale Language Detection (Helldivers 2 settings, live Steam API, appmanifest, Windows OS) with UTF-8 diacritic & Cyrillic transliteration
  10. Pure-Lua Fake DLL Bridge (interception of package.loadlib, zero native Win32 LoadLibrary calls)
@@ -22,8 +22,8 @@ Unifies all Helldivers 2 modding standards into a single engine boot loader:
  17. Live Hot-Reloading (Ctrl+F5 Dev Mode for loose mods)
  18. Safe pcall sandbox mod execution with quarantine logging so broken mods cannot crash the game
 
-INSTALLATION (Arsenal Mod Manager / HD2MM):
-1. Drag and drop 'Helldivers2-Universal-Mod-Loader-v2.0.3.zip' into Arsenal Mod Manager.
+INSTALLATION (HD2 Arsenal Mod Manager):
+1. Drag and drop 'Helldivers2-Universal-Mod-Loader-v2.0.4.zip' into Arsenal Mod Manager.
 2. Ensure Universal Mod Loader is placed in Position 1 (patch_0).
 3. Deploy and launch the game.
 

@@ -37,8 +37,9 @@ It is completely undetectable and safe.
 ### 5. Will Universal Mod Loader support or replace MDL3 (Mod Dynamic Loader 3)?
 **No.** Universal Mod Loader is intentionally built as a pure Lua 5.1 patch archive (100% EAC-safe, zero DLL injection, zero binary hooking). MDL3 is a native C++ proxy DLL that hooks into Windows process memory directly to enable low-level FFI memory scraping. UML will never inject external DLLs into your game. However, UML v2.0.0 can cleanly coexist alongside MDL3 if you run both, because UML operates at the Stingray patch level (`data/`), not the binary DLL level.
 
-### 6. Can I use this with Arsenal Mod Manager or HD2MM?
-**Yes.** Universal Mod Loader comes packaged with complete manifests (`manifest.json` and `UniversalModLoader-manifest.json`) formatted specifically for Arsenal Mod Manager and HD2MM. Simply drag and drop the release `.zip` into your manager and place UML at **Position 1 (`patch_0`)**.
+### 6. Can I use this with HD2 Arsenal Mod Manager or HD2MM?
+**HD2 Arsenal:** **Yes.** Universal Mod Loader comes packaged with an Arsenal v2 `manifest.json` (and `UniversalModLoader-manifest.json`). Simply drag and drop the release `.zip` into Arsenal Mod Manager and place UML at **Position 1 (`patch_0`)**.
+**HD2MM (Helldivers2ModManager):** **No.** HD2MM is End-of-Life (EOL as of September 2025) and does not support v2 manifests; please switch to HD2 Arsenal or install manually.
 
 ### 7. What if another mod requires `patch_0`?
 You can rename UML's `9ba626afa44a3aa3.patch_0` (and its companion `.stream` / `.gpu_resources` files) to any higher patch index (e.g. `patch_111`, `patch_200`). As long as UML's patch index is higher than or equal to other game patches, it will boot seamlessly and override default engine scripts.

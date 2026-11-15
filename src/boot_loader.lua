@@ -1,4 +1,4 @@
--- Universal Mod Loader v2.0.3 for Helldivers 2 (Steam Builds 25988413 / 26088801 / 26251122+ / Lua 5.1)
+-- Universal Mod Loader v2.0.4 for Helldivers 2 (Steam Builds 25988413 / 26088801 / 26251122+ / Lua 5.1)
 -- Replaces engine boot resource 0xF476DF93691895FA in bundle 9ba626afa44a3aa3
 -- Unifies All Helldivers 2 Modding Standards:
 --   1. Bingus Shared Loader (CowboyBingus / v17 / v20 / v21 / API 1 + BingusRuntime v1)
@@ -25,6 +25,16 @@ local prev_init = type(rawget(_G, "init")) == "function" and rawget(_G, "init") 
 local prev_shutdown = type(rawget(_G, "shutdown")) == "function" and rawget(_G, "shutdown") or noop
 local prev_update = type(rawget(_G, "update")) == "function" and rawget(_G, "update") or noop
 local prev_render = type(rawget(_G, "render")) == "function" and rawget(_G, "render") or noop
+if prev_init == rawget(_G, "__uml_inner_init") then
+    prev_init = rawget(_G, "__uml_original_init") or noop
+else
+    _G.__uml_original_init = prev_init
+end
+if prev_shutdown == rawget(_G, "__uml_inner_shutdown") then
+    prev_shutdown = rawget(_G, "__uml_original_shutdown") or noop
+else
+    _G.__uml_original_shutdown = prev_shutdown
+end
 if prev_update == rawget(_G, "__uml_master_update") or prev_update == rawget(_G, "__uml_inner_update") then
     prev_update = rawget(_G, "__uml_original_update") or noop
 else
@@ -41,6 +51,117 @@ local update_order = {}
 local update_hook_errors = {}
 local shutdown_hooks = {}
 local shutdown_order = {}
+local active_loading_mod_name = nil
+local uml_internal = {
+    update_order_set = {},
+    update_hook_owners = {},
+    shutdown_order_set = {},
+    shutdown_hook_owners = {},
+    mom_cb_owners = {},
+    rat_hook_owners = {},
+    chef_alias_set = {},
+    after_startup_owners = {},
+    external_menu_owners = {},
+    menu_listener_owners = {},
+    menu_listener_active = {},
+    function_hooks = {},
+    timer_seq = 0,
+    active_hook_owner = nil,
+    syncing_binding_mom = false,
+    capture_wait_buttons = nil,
+    dead_timer_pending = false,
+}
+
+function uml_internal.current_mod_owner(explicit)
+    return explicit or active_loading_mod_name or uml_internal.active_hook_owner
+end
+
+function uml_internal.register_update_hook(id, fn, owner_mod, interval_sec)
+    if type(id) ~= "string" or id == "" then return false end
+    if type(fn) ~= "function" and fn ~= nil then return false end
+    if fn ~= nil then
+        owner_mod = uml_internal.current_mod_owner(owner_mod)
+        local target_fn = fn
+        local iv = tonumber(interval_sec)
+        if iv and iv > 0 then
+            local acc = 0
+            target_fn = function(dt, ...)
+                local step = (type(dt) == "number" and dt > 0) and dt or 0.016
+                acc = acc + step
+                if acc >= iv then
+                    local elapsed = acc
+                    acc = acc % iv
+                    return fn(elapsed, ...)
+                end
+            end
+        end
+        if not uml_internal.update_order_set[id] then
+            uml_internal.update_order_set[id] = true
+            update_order[#update_order + 1] = id
+        end
+        update_hooks[id] = target_fn
+        update_hook_errors[id] = nil
+        if owner_mod then uml_internal.update_hook_owners[id] = owner_mod end
+    else
+        update_hooks[id] = nil
+        update_hook_errors[id] = nil
+        uml_internal.update_hook_owners[id] = nil
+        if id:find(":timer_", 1, true) then
+            uml_internal.dead_timer_pending = true
+        end
+    end
+    return true
+end
+
+function uml_internal.schedule_timer(delay_sec, fn, repeating, owner_mod)
+    local d = tonumber(delay_sec)
+    if not d or d < 0 or type(fn) ~= "function" then return nil end
+    owner_mod = uml_internal.current_mod_owner(owner_mod)
+    uml_internal.timer_seq = (uml_internal.timer_seq or 0) + 1
+    local prefix = owner_mod and (tostring(owner_mod) .. ":timer_") or "uml:timer_"
+    local timer_id = prefix .. tostring(uml_internal.timer_seq)
+    local acc = 0
+    uml_internal.register_update_hook(timer_id, function(dt)
+        local step = (type(dt) == "number" and dt > 0) and dt or 0.016
+        acc = acc + step
+        if acc >= d then
+            if repeating then
+                local elapsed = acc
+                acc = (d > 0) and (acc % d) or 0
+                fn(elapsed)
+            else
+                uml_internal.register_update_hook(timer_id, nil)
+                fn(acc)
+            end
+        end
+    end, owner_mod)
+    return timer_id
+end
+
+function uml_internal.cancel_timer(timer_id)
+    if type(timer_id) ~= "string" or timer_id == "" then return false end
+    if update_hooks[timer_id] == nil then return false end
+    uml_internal.register_update_hook(timer_id, nil)
+    return true
+end
+
+function uml_internal.register_shutdown_hook(id, fn, owner_mod)
+    if type(id) ~= "string" or id == "" then return false end
+    if type(fn) ~= "function" and fn ~= nil then return false end
+    if fn ~= nil then
+        owner_mod = uml_internal.current_mod_owner(owner_mod)
+        if not uml_internal.shutdown_order_set[id] then
+            uml_internal.shutdown_order_set[id] = true
+            shutdown_order[#shutdown_order + 1] = id
+        end
+        shutdown_hooks[id] = fn
+        if owner_mod then uml_internal.shutdown_hook_owners[id] = owner_mod end
+    else
+        shutdown_hooks[id] = nil
+        uml_internal.shutdown_hook_owners[id] = nil
+    end
+    return true
+end
 
 -- Logging Subsystem (frame 0 availability)
 local log_handle = nil
@@ -75,7 +196,7 @@ local function open_log()
         if f then
             log_handle = f
             active_log_path = path
-            f:write(string.format("\n--- Universal Mod Loader v2.0.3 Booted at %s ---\n", os.date and os.date("%Y-%m-%d %H:%M:%S") or "now"))
+            f:write(string.format("\n--- Universal Mod Loader v2.0.4 Booted at %s ---\n", os.date and os.date("%Y-%m-%d %H:%M:%S") or "now"))
             f:flush()
             return log_handle
         end
@@ -370,20 +491,20 @@ end
 set_active_uml_locale("auto")
 
 local UML_UI_STRINGS = {
-    ["en"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
-    ["en-GB"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
-    ["fr"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - SOUS-MENUS MODS", pane_mods = "[VOLET: LISTE MODS]", pane_opts = "[VOLET: OPTIONS]", mods = "MODS (%d)  [1-0 ACCES]", submenu = "SOUS-MENU: %s  |  ELEMENT %d/%d  |  PAGE %d/%d (%d/PG)", on = "< OUI >", off = "< NON >", desc_mod = "MOD SELECTIONNE: %s (%d OPTIONS) - APPUYEZ SUR DROITE, ESPACE OU 1-0 POUR MODIFIER LES OPTIONS. [-]/[=] POUR TAILLE UI." },
-    ["de"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - MOD-UNTERMENUS", pane_mods = "[BEREICH: MOD-LISTE]", pane_opts = "[BEREICH: OPTIONEN]", mods = "MODS (%d)  [1-0 WAHL]", submenu = "UNTERMENU: %s  |  EINTRAG %d/%d  |  SEITE %d/%d (%d/S.)", on = "< EIN >", off = "< AUS >", desc_mod = "AKTIVER MOD: %s (%d OPTIONEN) - RECHTS, LEERTASTE ODER 1-0 ZUM BEARBEITEN DRUCKEN. [-]/[=] FUR UI-SKALIERUNG." },
-    ["it"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - SOTTOMENU MOD", pane_mods = "[PANNELLO: MOD]", pane_opts = "[PANNELLO: OPZIONI]", mods = "MOD (%d)  [1-0 SALTA]", submenu = "SOTTOMENU: %s  |  VOCE %d/%d  |  PAG %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "MOD SELEZIONATA: %s (%d OPZIONI) - PREMI DESTRA, SPAZIO O 1-0 PER MODIFICARE LE OPZIONI. [-]/[=] SCALA UI." },
-    ["es"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  ELEMENTO %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PULSA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
-    ["es-419"]  = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  ELEMENTO %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PRESIONA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
-    ["pt-BR"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - SUBMENUS DE MODS", pane_mods = "[PAINEL: MODS]", pane_opts = "[PAINEL: OPCOES]", mods = "MODS (%d)  [1-0 ATALHO]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAG %d/%d (%d/PG)", on = "< LIG >", off = "< DES >", desc_mod = "MOD SELECIONADO: %s (%d OPCOES) - PRESSIONE DIREITA, ESPACO OU 1-0 PARA EDITAR OPCOES. [-]/[=] ESCALA UI." },
-    ["pl"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - PODMENU MODOW", pane_mods = "[PANEL: LISTA MODOW]", pane_opts = "[PANEL: OPCJE]", mods = "MODY (%d)  [1-0 SKOK]", submenu = "PODMENU: %s  |  POZYCJA %d/%d  |  STR %d/%d (%d/STR)", on = "< WL >", off = "< WYL >", desc_mod = "WYBRANY MOD: %s (%d OPCJI) - NACISNIJ PRAWO, SPACJE LUB 1-0 ABY EDYTOWAC OPCJE. [-]/[=] SKALA UI." },
-    ["ru"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - PODMENYU MODOV", pane_mods = "[PANEL: SPISOK MODOV]", pane_opts = "[PANEL: NASTROYKI]", mods = "MODY (%d)  [1-0 VYBOR]", submenu = "PODMENYU: %s  |  ELEMENT %d/%d  |  STR %d/%d (%d/STR)", on = "< VKL >", off = "< VYKL >", desc_mod = "VYBRAN MOD: %s (%d OPTSIY) - NAZHMITE VPRAVO, PROBEL ILI 1-0 DLYA NASTROYKI. [-]/[=] MASSHTAB UI." },
-    ["ja"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - MOD SUBMENUS (JA)", pane_mods = "[PANE: MOD ICHIRAN]", pane_opts = "[PANE: SETTEI]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  KOMOKU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SENTAKU MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
-    ["ko"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - MOD SUBMENUS (KO)", pane_mods = "[PANE: MOD MOKROK]", pane_opts = "[PANE: SEOLJEONG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  HANGMOK %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SEONTAEK MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
-    ["zh-Hans"] = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - MOD SUBMENUS (ZHS)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XIANGMU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
-    ["zh-Hant"] = { hdr = "UNIVERSAL MOD LOADER v2.0.3 - MOD SUBMENUS (ZHT)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XIANGMU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["en"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
+    ["en-GB"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
+    ["fr"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - SOUS-MENUS MODS", pane_mods = "[VOLET: LISTE MODS]", pane_opts = "[VOLET: OPTIONS]", mods = "MODS (%d)  [1-0 ACCES]", submenu = "SOUS-MENU: %s  |  ELEMENT %d/%d  |  PAGE %d/%d (%d/PG)", on = "< OUI >", off = "< NON >", desc_mod = "MOD SELECTIONNE: %s (%d OPTIONS) - APPUYEZ SUR DROITE, ESPACE OU 1-0 POUR MODIFIER LES OPTIONS. [-]/[=] POUR TAILLE UI." },
+    ["de"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - MOD-UNTERMENUS", pane_mods = "[BEREICH: MOD-LISTE]", pane_opts = "[BEREICH: OPTIONEN]", mods = "MODS (%d)  [1-0 WAHL]", submenu = "UNTERMENU: %s  |  EINTRAG %d/%d  |  SEITE %d/%d (%d/S.)", on = "< EIN >", off = "< AUS >", desc_mod = "AKTIVER MOD: %s (%d OPTIONEN) - RECHTS, LEERTASTE ODER 1-0 ZUM BEARBEITEN DRUCKEN. [-]/[=] FUR UI-SKALIERUNG." },
+    ["it"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - SOTTOMENU MOD", pane_mods = "[PANNELLO: MOD]", pane_opts = "[PANNELLO: OPZIONI]", mods = "MOD (%d)  [1-0 SALTA]", submenu = "SOTTOMENU: %s  |  VOCE %d/%d  |  PAG %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "MOD SELEZIONATA: %s (%d OPZIONI) - PREMI DESTRA, SPAZIO O 1-0 PER MODIFICARE LE OPZIONI. [-]/[=] SCALA UI." },
+    ["es"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  ELEMENTO %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PULSA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
+    ["es-419"]  = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  ELEMENTO %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PRESIONA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
+    ["pt-BR"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - SUBMENUS DE MODS", pane_mods = "[PAINEL: MODS]", pane_opts = "[PAINEL: OPCOES]", mods = "MODS (%d)  [1-0 ATALHO]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAG %d/%d (%d/PG)", on = "< LIG >", off = "< DES >", desc_mod = "MOD SELECIONADO: %s (%d OPCOES) - PRESSIONE DIREITA, ESPACO OU 1-0 PARA EDITAR OPCOES. [-]/[=] ESCALA UI." },
+    ["pl"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - PODMENU MODOW", pane_mods = "[PANEL: LISTA MODOW]", pane_opts = "[PANEL: OPCJE]", mods = "MODY (%d)  [1-0 SKOK]", submenu = "PODMENU: %s  |  POZYCJA %d/%d  |  STR %d/%d (%d/STR)", on = "< WL >", off = "< WYL >", desc_mod = "WYBRANY MOD: %s (%d OPCJI) - NACISNIJ PRAWO, SPACJE LUB 1-0 ABY EDYTOWAC OPCJE. [-]/[=] SKALA UI." },
+    ["ru"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - PODMENYU MODOV", pane_mods = "[PANEL: SPISOK MODOV]", pane_opts = "[PANEL: NASTROYKI]", mods = "MODY (%d)  [1-0 VYBOR]", submenu = "PODMENYU: %s  |  ELEMENT %d/%d  |  STR %d/%d (%d/STR)", on = "< VKL >", off = "< VYKL >", desc_mod = "VYBRAN MOD: %s (%d OPTSIY) - NAZHMITE VPRAVO, PROBEL ILI 1-0 DLYA NASTROYKI. [-]/[=] MASSHTAB UI." },
+    ["ja"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - MOD SUBMENUS (JA)", pane_mods = "[PANE: MOD ICHIRAN]", pane_opts = "[PANE: SETTEI]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  KOMOKU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SENTAKU MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["ko"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - MOD SUBMENUS (KO)", pane_mods = "[PANE: MOD MOKROK]", pane_opts = "[PANE: SEOLJEONG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  HANGMOK %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SEONTAEK MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["zh-Hans"] = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - MOD SUBMENUS (ZHS)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XIANGMU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["zh-Hant"] = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - MOD SUBMENUS (ZHT)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XIANGMU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
 }
 
 -- Unicode -> ASCII Transliteration Tables (Latin-1, Latin Extended-A, Cyrillic, Fullwidth, Punctuation)
@@ -609,7 +730,6 @@ local uml_ui_mod_idx = 1
 local uml_ui_opt_idx_by_mod = {}
 local uml_ui_selected_idx = 1
 local uml_ui_fold_states = {}
-local active_loading_mod_name = nil
 local uml_last_page_size = 24
 local uml_menu_open_logged = false
 local uml_key_capture_id = nil
@@ -619,6 +739,174 @@ local uml_chat_open = false
 local uml_notifications = {}
 local uml_key_bindings = {}
 local uml_key_prev_down = {}
+
+-- Menu state, compact mode & edge-latched keybinding state (stored on uml_internal
+-- to respect Lua 5.1's 200-local chunk limit while keeping closure-bridge upvalues intact)
+uml_internal.compact_open = false
+uml_internal.compact_layout = 1 -- 1 = Right, 2 = Left, 3 = Center
+uml_internal.compact_target_mod = nil
+uml_internal.external_menus = uml_internal.external_menus or {}
+uml_internal.external_menu_owners = uml_internal.external_menu_owners or {}
+uml_internal.menu_listeners = uml_internal.menu_listeners or {}
+uml_internal.menu_listener_owners = uml_internal.menu_listener_owners or {}
+uml_internal.menu_listener_active = uml_internal.menu_listener_active or {}
+uml_internal.key_blocked_latch = uml_internal.key_blocked_latch or {}
+uml_internal.poll_edge_state = uml_internal.poll_edge_state or {}
+uml_internal.compact_shortcuts = uml_internal.compact_shortcuts or {}
+uml_internal.capture_wait_buttons = uml_internal.capture_wait_buttons or {}
+
+function uml_internal.normalize_key_name(key)
+    if type(key) == "string" and key ~= "" then
+        return key:lower()
+    end
+    return "off"
+end
+
+function uml_internal.pack_call_res(ok, ...)
+    return ok, select('#', ...), { ... }
+end
+
+function uml_internal.call_with_owner(owner, fn, ...)
+    if owner == nil then
+        local ok, argc, argv = uml_internal.pack_call_res(pcall(fn, ...))
+        if ok then return true, unpack(argv, 1, argc) end
+        return false, argv[1]
+    end
+    local prev = uml_internal.active_hook_owner
+    uml_internal.active_hook_owner = owner
+    local ok, argc, argv = uml_internal.pack_call_res(pcall(fn, ...))
+    uml_internal.active_hook_owner = prev
+    if ok then
+        return true, unpack(argv, 1, argc)
+    end
+    return false, argv[1]
+end
+
+function uml_internal.hook_function(target_table, method_name, hook_fn, owner_mod)
+    if type(target_table) == "string" and type(method_name) == "function" then
+        owner_mod = hook_fn
+        hook_fn = method_name
+        method_name = target_table
+        target_table = _G
+    end
+    if type(target_table) ~= "table" or method_name == nil or type(hook_fn) ~= "function" then
+        return false
+    end
+    local resolved_owner = uml_internal.current_mod_owner(owner_mod)
+    local by_tbl = uml_internal.function_hooks[target_table]
+    if not by_tbl then
+        by_tbl = {}
+        uml_internal.function_hooks[target_table] = by_tbl
+    end
+    local slot = by_tbl[method_name]
+    if not slot or rawget(target_table, method_name) ~= slot.wrapper then
+        local current_fn = rawget(target_table, method_name)
+        if type(current_fn) ~= "function" then
+            current_fn = target_table[method_name]
+        end
+        if type(current_fn) ~= "function" then
+            current_fn = noop
+        end
+        slot = {
+            orig = current_fn,
+            entries = {}
+        }
+        local function dispatch_at(idx, ...)
+            while idx >= 1 do
+                local e = slot.entries[idx]
+                idx = idx - 1
+                if e and e.active then
+                    local next_idx = idx
+                    local function call_next(...)
+                        return dispatch_at(next_idx, ...)
+                    end
+                    local ok, argc, argv = uml_internal.pack_call_res(uml_internal.call_with_owner(e.owner, e.fn, call_next, ...))
+                    if ok then
+                        return unpack(argv, 1, argc)
+                    end
+                    e.errors = (e.errors or 0) + 1
+                    record_uml_error("hook:" .. tostring(method_name), argv[1])
+                    if e.errors >= 10 then
+                        e.active = false
+                    end
+                    return dispatch_at(next_idx, ...)
+                end
+            end
+            return slot.orig(...)
+        end
+        slot.wrapper = function(...)
+            return dispatch_at(#slot.entries, ...)
+        end
+        by_tbl[method_name] = slot
+        target_table[method_name] = slot.wrapper
+    end
+    for i = 1, #slot.entries do
+        if slot.entries[i].fn == hook_fn then
+            slot.entries[i].owner = resolved_owner
+            slot.entries[i].active = true
+            slot.entries[i].errors = 0
+            return true
+        end
+    end
+    slot.entries[#slot.entries + 1] = {
+        fn = hook_fn,
+        owner = resolved_owner,
+        active = true,
+        errors = 0
+    }
+    return true
+end
+
+function uml_internal.unhook_function(target_table, method_name, fn_or_owner)
+    if type(target_table) == "string" and (method_name == nil or type(method_name) == "function") then
+        fn_or_owner = method_name
+        method_name = target_table
+        target_table = _G
+    end
+    if type(target_table) ~= "table" or method_name == nil then return false end
+    local by_tbl = uml_internal.function_hooks[target_table]
+    local slot = by_tbl and by_tbl[method_name]
+    if not slot then return false end
+    local removed = false
+    for i = #slot.entries, 1, -1 do
+        local e = slot.entries[i]
+        if fn_or_owner == nil or e.fn == fn_or_owner or e.owner == fn_or_owner then
+            table.remove(slot.entries, i)
+            removed = true
+        end
+    end
+    if #slot.entries == 0 then
+        if rawget(target_table, method_name) == slot.wrapper then
+            target_table[method_name] = (slot.orig ~= noop) and slot.orig or nil
+        end
+        by_tbl[method_name] = nil
+    end
+    return removed
+end
+
+function uml_internal.get_bridge_menu_state()
+    local bridge = rawget(_G, "UniformityMenu") or rawget(_G, "UMLCompactMenu")
+    if type(bridge) == "table" and type(bridge.state) == "function" then
+        local ok, st = pcall(bridge.state)
+        if ok and type(st) == "table" then
+            return st, bridge
+        end
+    end
+    return nil, bridge
+end
+
+function uml_internal.has_external_menu_open()
+    for _, v in pairs(uml_internal.external_menus) do
+        if v == true then
+            return true
+        end
+    end
+    local bst = uml_internal.get_bridge_menu_state()
+    if bst and bst.compact == true then
+        return true
+    end
+    return false
+end
 
 -- Bulletproof 5x7 Pixel Font (Engine-Independent, Pure Gui.rect Primitives)
 local GLYPHS = {
@@ -736,19 +1024,26 @@ local function resolve_button_id(dev, name)
     -- Fallback to standard VK / Stingray key index mappings if Keyboard mock or engine has no button_id
     local VK_MAP = {
         ["f1"] = 112, ["f2"] = 113, ["f3"] = 114, ["f4"] = 115, ["f5"] = 116,
-        ["f6"] = 117, ["f7"] = 118, ["f8"] = 119, ["f9"] = 119, ["f10"] = 120,
-        ["f11"] = 121, ["f12"] = 122,
+        ["f6"] = 117, ["f7"] = 118, ["f8"] = 119, ["f9"] = 120, ["f10"] = 121,
+        ["f11"] = 122, ["f12"] = 123,
         ["enter"] = 13, ["return"] = 13, ["numpad enter"] = 13,
         ["escape"] = 27, ["esc"] = 27,
         ["space"] = 32, ["tab"] = 9, ["backspace"] = 8, ["delete"] = 46, ["del"] = 46,
         ["up"] = 38, ["down"] = 40, ["left"] = 37, ["right"] = 39,
         ["page up"] = 33, ["page down"] = 34, ["home"] = 36, ["end"] = 35,
         ["-"] = 189, ["minus"] = 189, ["numpad -"] = 189, ["numpad minus"] = 189,
-        ["="] = 187, ["equals"] = 187, ["numpad +"] = 187, ["numpad plus"] = 187,
-        ["["] = 219, ["]"] = 221,
+        ["="] = 187, ["equals"] = 187, ["equal"] = 187, ["numpad +"] = 187, ["numpad plus"] = 187,
+        ["["] = 219, ["left bracket"] = 219, ["]"] = 221, ["right bracket"] = 221,
         ["left ctrl"] = 17, ["right ctrl"] = 17, ["ctrl"] = 17,
+        ["left shift"] = 160, ["right shift"] = 161, ["shift"] = 16,
+        ["left alt"] = 164, ["right alt"] = 165, ["alt"] = 18,
         ["0"] = 48, ["1"] = 49, ["2"] = 50, ["3"] = 51, ["4"] = 52,
         ["5"] = 53, ["6"] = 54, ["7"] = 55, ["8"] = 56, ["9"] = 57,
+        ["a"] = 65, ["b"] = 66, ["c"] = 67, ["d"] = 68, ["e"] = 69, ["f"] = 70,
+        ["g"] = 71, ["h"] = 72, ["i"] = 73, ["j"] = 74, ["k"] = 75, ["l"] = 76,
+        ["m"] = 77, ["n"] = 78, ["o"] = 79, ["p"] = 80, ["q"] = 81, ["r"] = 82,
+        ["s"] = 83, ["t"] = 84, ["u"] = 85, ["v"] = 86, ["w"] = 87, ["x"] = 88,
+        ["y"] = 89, ["z"] = 90,
         ["numpad 0"] = 96, ["numpad 1"] = 97, ["numpad 2"] = 98, ["numpad 3"] = 99,
         ["numpad 4"] = 100, ["numpad 5"] = 101, ["numpad 6"] = 102, ["numpad 7"] = 103,
         ["numpad 8"] = 104, ["numpad 9"] = 105,
@@ -787,6 +1082,20 @@ local function key_pressed(name)
     return is_down and not was_down
 end
 
+function uml_internal.any_key_pressed(...)
+    local hit = false
+    for i = 1, select('#', ...) do
+        if key_pressed(select(i, ...)) then
+            hit = true
+        end
+    end
+    return hit
+end
+
+function uml_internal.sync_chat_guard_edges()
+    uml_internal.any_key_pressed("enter", "numpad enter", "return", "escape", "esc")
+end
+
 local function key_down(name)
     local sr = rawget(_G, "stingray")
     local kb = sr and (rawget(sr, "Keyboard") or rawget(_G, "Keyboard")) or rawget(_G, "Keyboard")
@@ -804,20 +1113,37 @@ end
 local function key_step_with_repeat(name, dt)
     if key_pressed(name) then
         key_repeat_timer[name] = 0.38
-        return true
+        return true, true
     end
     if key_down(name) then
         local step_dt = (type(dt) == "number" and dt > 0 and dt < 0.5) and dt or 0.016
         local rem = (key_repeat_timer[name] or 0.38) - step_dt
         if rem <= 0 then
             key_repeat_timer[name] = 0.08
-            return true
+            return true, false
         end
         key_repeat_timer[name] = rem
     else
         key_repeat_timer[name] = nil
     end
-    return false
+    return false, false
+end
+
+function uml_internal.record_capture_wait_buttons()
+    local wait = {}
+    uml_internal.capture_wait_buttons = wait
+    local sr = rawget(_G, "stingray")
+    local kb = sr and (rawget(sr, "Keyboard") or rawget(_G, "Keyboard")) or rawget(_G, "Keyboard")
+    if not kb then return end
+    local num_fn = rawget(kb, "num_buttons")
+    if type(num_fn) ~= "function" then return end
+    local ok, n = pcall(num_fn)
+    if not ok or type(n) ~= "number" then return end
+    for i = 0, n - 1 do
+        if query_device_button(kb, i, "button") or query_device_button(kb, i, "pressed") then
+            wait[i] = true
+        end
+    end
 end
 
 local function capture_any_key()
@@ -829,8 +1155,16 @@ local function capture_any_key()
     if type(num_fn) ~= "function" or type(name_fn) ~= "function" then return nil end
     local ok, n = pcall(num_fn)
     if not ok or type(n) ~= "number" then return nil end
+    local wait = uml_internal.capture_wait_buttons
+    if type(wait) == "table" then
+        for i in pairs(wait) do
+            if not (query_device_button(kb, i, "button") or query_device_button(kb, i, "pressed")) then
+                wait[i] = nil
+            end
+        end
+    end
     for i = 0, n - 1 do
-        if query_device_button(kb, i, "pressed") then
+        if not (wait and wait[i]) and query_device_button(kb, i, "pressed") then
             local okn, kname = pcall(name_fn, i)
             if okn and type(kname) == "string" and kname ~= "" then
                 return kname:lower()
@@ -915,13 +1249,16 @@ local function get_mouse_wheel_steps()
             local ok_ax, vec = pcall(axis_fn, wid)
             if ok_ax and vec ~= nil then
                 local vy = 0
-                if sr and sr.Vector3 and type(sr.Vector3.y) == "function" then
+                if sr and type(sr.Vector3) == "table" and type(sr.Vector3.y) == "function" then
                     local oky, yval = pcall(sr.Vector3.y, vec)
                     if oky and type(yval) == "number" then vy = yval end
-                elseif type(vec) == "table" and type(vec.y) == "number" then
-                    vy = vec.y
-                elseif type(vec) == "number" then
-                    vy = vec
+                end
+                if vy == 0 then
+                    if type(vec) == "table" and type(vec.y) == "number" then
+                        vy = vec.y
+                    elseif type(vec) == "number" then
+                        vy = vec
+                    end
                 end
                 if vy > 0.1 then return -1 end
                 if vy < -0.1 then return 1 end
@@ -975,6 +1312,12 @@ local function infer_caller_mod_name()
             and not info.source:find("tests[/\\]") then
             local src = info.source:gsub("^@", "")
             local base = src:match("([^/\\]+)%.lua$") or src:match("([^/\\]+)$")
+            if base == "main" or base == "init" or base == "core" or base == "core_1" then
+                local parent = src:match("([^/\\]+)[/\\][^/\\]+$")
+                if parent and parent ~= "" and parent ~= "mods" then
+                    base = parent
+                end
+            end
             if base and base ~= "" and base ~= "boot_loader" then
                 return format_mod_title(base)
             end
@@ -1039,31 +1382,33 @@ local function build_mod_groups(order, reg)
     for i = 1, #order do
         local opt_id = order[i]
         local spec = reg[opt_id] or {}
-        local gname = resolve_mod_group_name(opt_id, spec)
-        local cat_name = resolve_option_category(opt_id, spec)
-        local grp = by_name[gname]
-        if not grp then
-            grp = {
-                name = gname,
-                ids = {},
-                global_indices = {},
-                categories = {},
-                categories_by_name = {}
-            }
-            by_name[gname] = grp
-            groups[#groups + 1] = grp
-        end
-        grp.ids[#grp.ids + 1] = opt_id
-        grp.global_indices[#grp.global_indices + 1] = i
+        if spec.type ~= "data" and spec.hidden ~= true then
+            local gname = resolve_mod_group_name(opt_id, spec)
+            local cat_name = resolve_option_category(opt_id, spec)
+            local grp = by_name[gname]
+            if not grp then
+                grp = {
+                    name = gname,
+                    ids = {},
+                    global_indices = {},
+                    categories = {},
+                    categories_by_name = {}
+                }
+                by_name[gname] = grp
+                groups[#groups + 1] = grp
+            end
+            grp.ids[#grp.ids + 1] = opt_id
+            grp.global_indices[#grp.global_indices + 1] = i
 
-        local cat = grp.categories_by_name[cat_name]
-        if not cat then
-            cat = { name = cat_name, ids = {}, global_indices = {} }
-            grp.categories_by_name[cat_name] = cat
-            grp.categories[#grp.categories + 1] = cat
+            local cat = grp.categories_by_name[cat_name]
+            if not cat then
+                cat = { name = cat_name, ids = {}, global_indices = {} }
+                grp.categories_by_name[cat_name] = cat
+                grp.categories[#grp.categories + 1] = cat
+            end
+            cat.ids[#cat.ids + 1] = opt_id
+            cat.global_indices[#cat.global_indices + 1] = i
         end
-        cat.ids[#cat.ids + 1] = opt_id
-        cat.global_indices[#cat.global_indices + 1] = i
     end
     return groups
 end
@@ -1189,9 +1534,18 @@ local function draw_menu_on_gui(sr, g, W, H, order, reg, vals)
         small_px = auto_px
     end
 
-    local pw = math.floor(W * 0.88)
-    local ph = math.floor(H * 0.86)
-    local x0 = math.floor((W - pw) / 2)
+    local is_compact = (uml_internal.compact_open == true)
+    local pw = is_compact and math.max(420, math.floor(W * 0.35)) or math.floor(W * 0.88)
+    local ph = is_compact and math.max(380, math.floor(H * 0.58)) or math.floor(H * 0.86)
+    local c_layout = math.floor(tonumber(uml_internal.compact_layout) or 1)
+    local x0
+    if is_compact and c_layout == 1 then
+        x0 = math.max(16, W - pw - math.max(24, math.floor(W * 0.03)))
+    elseif is_compact and c_layout == 2 then
+        x0 = math.max(24, math.floor(W * 0.03))
+    else
+        x0 = math.floor((W - pw) / 2)
+    end
     local y_bottom = math.floor((H - ph) / 2)
     local y0 = y_bottom + ph
 
@@ -1241,33 +1595,47 @@ local function draw_menu_on_gui(sr, g, W, H, order, reg, vals)
     local header_y = y0 - header_h
     local footer_y = y_bottom + ctrl_h
     local desc_top_y = footer_y + desc_box_h
-    local sidebar_w = math.floor(pw * 0.25)
+    local sidebar_w = is_compact and (is_mods_focus and pw or 0) or math.floor(pw * 0.25)
     local x_div = x0 + sidebar_w
-    local rx0 = x_div + 4
-    local rpw = pw - sidebar_w - 4
+    local rx0 = is_compact and x0 or (x_div + 4)
+    local rpw = is_compact and pw or (pw - sidebar_w - 4)
 
     -- Left Sidebar & Bottom Description Panel Backgrounds
-    draw_rect(x0, desc_top_y, sidebar_w, header_y - desc_top_y, sidebar_bg, 951)
+    if sidebar_w > 0 then
+        draw_rect(x0, desc_top_y, sidebar_w, header_y - desc_top_y, sidebar_bg, 951)
+    end
     draw_rect(x0, footer_y, pw, desc_box_h, desc_bg, 951)
     -- Dividers
-    draw_rect(x_div, desc_top_y, 2, header_y - desc_top_y, gold, 954)
+    if not is_compact then
+        draw_rect(x_div, desc_top_y, 2, header_y - desc_top_y, gold, 954)
+    end
     draw_rect(x0, desc_top_y, pw, 2, divider_col, 954)
 
     -- Header Bar & Active Pane Focus Indicator
     draw_rect(x0, header_y, pw, header_h, navy, 952)
     draw_rect(x0, header_y - 2, pw, 2, divider_col, 953)
-    if is_mods_focus then
+    if is_compact then
+        draw_rect(x0, header_y - 3, pw, 4, is_mods_focus and bright_gold or green, 956)
+    elseif is_mods_focus then
         draw_rect(x0, header_y - 3, sidebar_w, 4, bright_gold, 956)
     else
         draw_rect(x_div + 2, header_y - 3, rpw + 2, 4, green, 956)
     end
 
     local hdr_text_y = header_y + math.floor((header_h - 7 * px) / 2)
-    draw_pixel_text_on_gui(sr, g, x0 + 16, hdr_text_y, ui_str.hdr, px, bright_gold, 970)
     local scale_names = { "AUTO", "COMPACT", "MEDIUM", "LARGE" }
-    local focus_badge = string.format("[%s] [SCALE: %s (-/=)]   %s", uml_active_locale.tag:upper(), scale_names[scale_mode] or "AUTO", is_mods_focus and ui_str.pane_mods or ui_str.pane_opts)
+    local focus_badge = is_compact
+        and string.format("[%s] %s", uml_active_locale.tag:upper(), is_mods_focus and ui_str.pane_mods or ui_str.pane_opts)
+        or  string.format("[%s] [SCALE: %s (-/=)]   %s", uml_active_locale.tag:upper(), scale_names[scale_mode] or "AUTO", is_mods_focus and ui_str.pane_mods or ui_str.pane_opts)
     local focus_col = is_mods_focus and cyan or green
     local badge_w = #focus_badge * 6 * small_px
+    local max_hdr_w = math.max(60, pw - badge_w - 40)
+    local hdr_txt = is_compact and "UML COMPACT" or ui_str.hdr
+    local max_hdr_chars = math.max(8, math.floor(max_hdr_w / (6 * px)))
+    if #hdr_txt > max_hdr_chars then
+        hdr_txt = hdr_txt:sub(1, max_hdr_chars)
+    end
+    draw_pixel_text_on_gui(sr, g, x0 + 16, hdr_text_y, hdr_txt, px, bright_gold, 970)
     local badge_y = header_y + math.floor((header_h - 7 * small_px) / 2)
     draw_pixel_text_on_gui(sr, g, x0 + pw - 16 - badge_w, badge_y, focus_badge, small_px, focus_col, 970)
 
@@ -1283,6 +1651,7 @@ local function draw_menu_on_gui(sr, g, W, H, order, reg, vals)
     -- =========================================================================
     -- LEFT PANE: MODS LIST SIDEBAR
     -- =========================================================================
+    if (not is_compact) or is_mods_focus then
     local mod_page_size = dynamic_page_size
     local mod_page = (num_groups > 0) and math.floor((uml_ui_mod_idx - 1) / mod_page_size) or 0
     local mod_start = mod_page * mod_page_size + 1
@@ -1330,6 +1699,7 @@ local function draw_menu_on_gui(sr, g, W, H, order, reg, vals)
             end
         end
     end
+    end
 
     -- =========================================================================
     -- RIGHT PANE: SELECTED MOD'S OPTIONS SUBMENU (WITH HIERARCHICAL FOLDS)
@@ -1337,6 +1707,7 @@ local function draw_menu_on_gui(sr, g, W, H, order, reg, vals)
     local sel_spec = nil
     local sel_id = nil
     local sel_item = nil
+    if (not is_compact) or (not is_mods_focus) then
     if not cur_grp or not items or #items == 0 then
         draw_pixel_text_on_gui(sr, g, rx0 + 16, row_start_y - line_h, "UNIVERSAL MOD LOADER IS ACTIVE.", px, bright_gold, 970)
         draw_pixel_text_on_gui(sr, g, rx0 + 16, row_start_y - 2 * line_h, "NO REGISTERED MOD OPTIONS FOUND.", px, gray, 970)
@@ -1353,12 +1724,20 @@ local function draw_menu_on_gui(sr, g, W, H, order, reg, vals)
         sel_spec = sel_item and sel_item.spec
 
         local grp_title = cur_grp.name
-        if #grp_title > 38 then grp_title = grp_title:sub(1, 35) .. "..." end
-        local right_hdr = string.format(ui_str.submenu, grp_title, cur_opt_idx, item_total, opt_page + 1, opt_total_pages, opt_page_size)
+        local right_hdr
+        if is_compact then
+            local suffix = string.format(" (%d/%d)", cur_opt_idx, item_total)
+            local max_t = math.max(8, math.floor((rpw - 28) / (6 * small_px)) - #suffix)
+            if #grp_title > max_t then grp_title = grp_title:sub(1, math.max(1, max_t - 2)) .. ".." end
+            right_hdr = grp_title .. suffix
+        else
+            if #grp_title > 38 then grp_title = grp_title:sub(1, 35) .. "..." end
+            right_hdr = string.format(ui_str.submenu, grp_title, cur_opt_idx, item_total, opt_page + 1, opt_total_pages, opt_page_size)
+        end
         draw_pixel_text_on_gui(sr, g, rx0 + 14, sub_y, right_hdr, small_px, (not is_mods_focus) and green or gray, 970)
 
         local pane_char_cap = math.floor((rpw - 36) / (6 * px))
-        local max_choice_chars = math.max(18, math.floor(pane_char_cap * 0.42))
+        local max_choice_chars = math.max(8, math.floor(pane_char_cap * 0.40))
 
         for idx = opt_start, opt_end do
             local item = items[idx]
@@ -1371,6 +1750,11 @@ local function draw_menu_on_gui(sr, g, W, H, order, reg, vals)
                 local count_msg = string.format("(%d) %s", item.child_count, item.collapsed and "[RIGHT] EXPAND" or "[LEFT] FOLD")
                 local count_w = #count_msg * 6 * small_px
                 local count_x = rx0 + rpw - 18 - count_w
+                local avail_cat_px = count_x - (rx0 + 16) - 12
+                local max_cat_chars = math.max(1, math.floor(avail_cat_px / (6 * px)) - 2)
+                if #cat_title > max_cat_chars then
+                    cat_title = (max_cat_chars >= 5) and (cat_title:sub(1, max_cat_chars - 3) .. "...") or cat_title:sub(1, max_cat_chars)
+                end
 
                 if is_selected then
                     if not is_mods_focus then
@@ -1409,6 +1793,11 @@ local function draw_menu_on_gui(sr, g, W, H, order, reg, vals)
                         val_str = "[" .. k_str .. "]"
                         val_col = (k_str ~= "NONE") and bright_gold or gray
                     end
+                elseif spec.type == "button" or spec.type == "action" then
+                    local btn_txt = clean_display_text(spec.button_text or spec.action_label or spec.text, "EXECUTE"):upper()
+                    if #btn_txt > max_choice_chars then btn_txt = btn_txt:sub(1, max_choice_chars - 3) .. "..." end
+                    val_str = "[ " .. btn_txt .. " ]"
+                    val_col = bright_gold
                 elseif spec.type == "choice" or (type(spec.choices) == "table" and #spec.choices > 0) then
                     local choices = (type(spec.choices) == "table" and #spec.choices > 0) and spec.choices or { "OFF", "ON" }
                     local c_idx = math.floor(tonumber(val) or tonumber(spec.default) or 1)
@@ -1435,9 +1824,9 @@ local function draw_menu_on_gui(sr, g, W, H, order, reg, vals)
                 local val_x = rx0 + rpw - 18 - val_w
                 local indent_px = (item.indent or 0) * (14 * px)
                 local avail_px = val_x - (rx0 + 16 + indent_px) - 16
-                local max_chars = math.max(14, math.floor(avail_px / (6 * px)) - 2)
+                local max_chars = math.max(1, math.floor(avail_px / (6 * px)) - 2)
                 if #raw_label > max_chars then
-                    raw_label = raw_label:sub(1, max_chars - 3) .. "..."
+                    raw_label = (max_chars >= 5) and (raw_label:sub(1, max_chars - 3) .. "...") or raw_label:sub(1, max_chars)
                 end
 
                 local label_x = rx0 + 16 + indent_px
@@ -1458,6 +1847,7 @@ local function draw_menu_on_gui(sr, g, W, H, order, reg, vals)
             end
         end
     end
+    end
 
     -- =========================================================================
     -- MULTI-LINE WORD-WRAPPED DESCRIPTION PANEL & FOOTER KEY HINTS
@@ -1477,7 +1867,7 @@ local function draw_menu_on_gui(sr, g, W, H, order, reg, vals)
         end
     end
     if desc_txt ~= "" then
-        local max_desc_chars = math.max(40, math.floor((pw - 32) / (6 * small_px)))
+        local max_desc_chars = math.max(32, math.floor((pw - 32) / (6 * small_px)))
         local wrapped_lines = wrap_text_lines(desc_txt, max_desc_chars, desc_max_lines)
         for l_idx = 1, #wrapped_lines do
             local line_y = desc_top_y - 6 - l_idx * desc_line_h
@@ -1486,9 +1876,20 @@ local function draw_menu_on_gui(sr, g, W, H, order, reg, vals)
     end
 
     draw_rect(x0, footer_y, pw, 2, divider_col, 954)
-    local footer_controls = is_mods_focus
-        and "[UP/DN/WHEEL] SELECT MOD   [RIGHT/SPACE/TAB] OPEN SUBMENU   [1-0] QUICK MOD   [-/=] UI SCALE   [F9/ESC] CLOSE"
-        or  "[UP/DN/WHEEL] SELECT   [LEFT/RIGHT] CHANGE/FOLD   [BACKSPACE/TAB] MOD LIST   [1-0] MOD   [-/=] SCALE   [DEL] RESET"
+    local footer_controls
+    if is_compact then
+        footer_controls = is_mods_focus
+            and "[U/D] MOD  [R/SPC] OPTS  [F9] FULL  [ESC] CLOSE"
+            or  "[U/D] OPT  [L/R] SET  [TAB] MODS  [F9] FULL  [ESC]"
+    else
+        footer_controls = is_mods_focus
+            and "[UP/DN/WHEEL] SELECT MOD   [RIGHT/SPACE/TAB] OPEN SUBMENU   [1-0] QUICK MOD   [-/=] UI SCALE   [F9/ESC] CLOSE"
+            or  "[UP/DN/WHEEL] SELECT   [LEFT/RIGHT] CHANGE/FOLD   [BACKSPACE/TAB] MOD LIST   [1-0] MOD   [-/=] SCALE   [DEL] RESET"
+    end
+    local max_footer_chars = math.max(16, math.floor((pw - 32) / (6 * small_px)))
+    if #footer_controls > max_footer_chars then
+        footer_controls = footer_controls:sub(1, max_footer_chars)
+    end
     local ctrl_text_y = y_bottom + math.max(4, math.floor((ctrl_h - 7 * small_px) / 2))
     draw_pixel_text_on_gui(sr, g, x0 + 16, ctrl_text_y, footer_controls, small_px, gray, 970)
 end
@@ -1506,7 +1907,7 @@ local function is_window_focused()
 end
 
 local function is_gameplay_input_allowed()
-    return (not uml_ui_open) and (not uml_chat_open) and is_window_focused()
+    return (not uml_ui_open) and (not uml_internal.has_external_menu_open()) and (not uml_chat_open) and (not uml_internal.is_capturing_key()) and is_window_focused()
 end
 
 local function push_uml_notification(msg, duration_seconds, mod_name)
@@ -1552,7 +1953,8 @@ local function draw_notifications_on_gui(sr, g, W, H, toasts)
     local slate = Color(235, 16, 22, 32)
     local bright_gold = Color(255, 255, 220, 65)
 
-    local box_h = 32
+    local box_h = math.max(32, 7 * px + 18)
+    local txt_pad_y = math.floor((box_h - 7 * px) / 2)
     local top_y = math.floor(H * 0.92)
     for i = 1, #toasts do
         local t = toasts[i]
@@ -1564,7 +1966,7 @@ local function draw_notifications_on_gui(sr, g, W, H, toasts)
         pcall(R, g, V3(bx - 2, by - 2, 960), V2(box_w + 4, box_h + 4), gold)
         pcall(R, g, V3(bx, by, 961), V2(box_w, box_h), slate)
         pcall(R, g, V3(bx, by, 962), V2(4, box_h), bright_gold)
-        draw_pixel_text_on_gui(sr, g, bx + 14, by + 9, txt, px, bright_gold, 975)
+        draw_pixel_text_on_gui(sr, g, bx + 14, by + txt_pad_y, txt, px, bright_gold, 975)
     end
 end
 
@@ -1626,31 +2028,819 @@ local trigger_loose_hot_reload = nil
 local frame_counter = 0
 local last_input_frame = -1
 
-local function dispatch_uml_bound_keys()
-    if #uml_key_bindings == 0 then return end
-    if not is_gameplay_input_allowed() then
-        for k in pairs(uml_key_prev_down) do uml_key_prev_down[k] = false end
+function uml_internal.parse_compact_layout(val)
+    if type(val) == "number" then
+        local n = math.floor(val)
+        if n >= 1 and n <= 4 then return n end
+    elseif type(val) == "string" then
+        local s = val:lower()
+        if s == "right" then return 1
+        elseif s == "left" then return 2
+        elseif s == "center" or s == "centre" then return 3
+        elseif s == "full" or s == "fullscreen" or s == "full_screen" then return 4
+        end
+    end
+    return nil
+end
+
+function uml_internal.is_menu_open()
+    return uml_ui_open or uml_internal.has_external_menu_open()
+end
+
+function uml_internal.is_fullscreen_menu_open()
+    return uml_ui_open and (uml_internal.compact_open ~= true)
+end
+
+function uml_internal.is_compact_menu_open()
+    if uml_ui_open and (uml_internal.compact_open == true) then
+        return true
+    end
+    local bst = uml_internal.get_bridge_menu_state()
+    return (bst and bst.compact == true) == true
+end
+
+function uml_internal.is_capturing_key()
+    if uml_key_capture_id ~= nil then return true end
+    local bst = uml_internal.get_bridge_menu_state()
+    return bst ~= nil and bst.capture ~= nil and bst.capture ~= false
+end
+
+function uml_internal.get_capture_id()
+    if uml_key_capture_id ~= nil then return uml_key_capture_id end
+    local bst = uml_internal.get_bridge_menu_state()
+    if bst and bst.capture ~= nil and bst.capture ~= false then
+        return bst.capture
+    end
+    return nil
+end
+
+function uml_internal.is_chat_open()
+    return uml_chat_open == true
+end
+
+function uml_internal.is_window_focused()
+    return is_window_focused()
+end
+
+function uml_internal.is_input_blocked(allow_in_menu)
+    if (not is_window_focused()) or uml_chat_open or uml_internal.is_capturing_key() then
+        return true
+    end
+    if not allow_in_menu and (uml_ui_open or uml_internal.has_external_menu_open()) then
+        return true
+    end
+    return false
+end
+
+function uml_internal.find_mod_group_index(target_mod)
+    local mom = rawget(_G, "ModOptionsMenu")
+    local order = (mom and mom.order) or {}
+    local reg = (mom and mom.registered) or {}
+    local groups = build_mod_groups(order, reg)
+    if #groups == 0 then return nil, groups end
+    if type(target_mod) == "number" then
+        local idx = math.floor(target_mod)
+        if idx >= 1 and idx <= #groups then
+            return idx, groups
+        end
+        return nil, groups
+    end
+    if type(target_mod) ~= "string" or target_mod == "" then
+        return nil, groups
+    end
+    local needle = target_mod:lower():gsub("[%-_]+", " "):gsub("%s+", " "):match("^%s*(.-)%s*$")
+    local needle_raw = target_mod:lower()
+    -- Pass 1: exact group display name match
+    for i = 1, #groups do
+        local gname = groups[i].name:lower()
+        if gname == needle or gname == needle_raw then
+            return i, groups
+        end
+    end
+    -- Pass 2: exact mod tag or option id prefix match inside group
+    for i = 1, #groups do
+        local ids = groups[i].ids or {}
+        for j = 1, #ids do
+            local oid = tostring(ids[j]):lower()
+            local spec = reg[ids[j]]
+            local smod = spec and type(spec.mod) == "string" and spec.mod:lower() or nil
+            if smod == needle_raw or smod == needle or oid:sub(1, #needle_raw + 1) == (needle_raw .. ".") then
+                return i, groups
+            end
+        end
+    end
+    -- Pass 3: prefix match on group display name
+    for i = 1, #groups do
+        local gname = groups[i].name:lower()
+        if gname:sub(1, #needle) == needle then
+            return i, groups
+        end
+    end
+    return nil, groups
+end
+
+function uml_internal.get_menu_state()
+    local mom = rawget(_G, "ModOptionsMenu")
+    local order = (mom and mom.order) or {}
+    local reg = (mom and mom.registered) or {}
+    local groups, cur_grp, cur_opt_idx, items = sync_submenu_state(order, reg)
+    local cur_item = items and items[cur_opt_idx] or nil
+    local bst = uml_internal.get_bridge_menu_state()
+    local b_compact = (bst and bst.compact == true) == true
+    local ext_open = uml_internal.has_external_menu_open()
+    local scale_val = (mom and type(mom.get) == "function" and tonumber(mom.get("uml_ui_scale"))) or 1
+    local active_mod_idx = (#groups > 0) and uml_ui_mod_idx or nil
+    local active_mod_name = cur_grp and cur_grp.name or nil
+    local active_focus = uml_ui_focus
+    local active_opt_idx = (#items > 0) and cur_opt_idx or nil
+    local active_opt_id = cur_item and cur_item.opt_id or nil
+    if not uml_ui_open and b_compact then
+        if type(bst.focus) == "string" then active_focus = bst.focus end
+        local b_idx = tonumber(bst.group_index)
+        if b_idx ~= nil then
+            if groups[b_idx] then
+                active_mod_idx = b_idx
+                active_mod_name = groups[b_idx].name
+                local b_items = build_group_visible_items(groups[b_idx], reg)
+                if #b_items > 0 then
+                    local oi = tonumber(bst.option_index) or uml_ui_opt_idx_by_mod[active_mod_name] or 1
+                    if oi < 1 then oi = 1 end
+                    if oi > #b_items then oi = #b_items end
+                    active_opt_idx = oi
+                    active_opt_id = (type(bst.option_id) == "string" and bst.option_id) or (b_items[oi] and b_items[oi].opt_id or nil)
+                else
+                    active_opt_idx = nil
+                    active_opt_id = nil
+                end
+            else
+                active_mod_idx = nil
+                active_mod_name = nil
+                active_opt_idx = nil
+                active_opt_id = nil
+            end
+        elseif bst.option_index ~= nil or bst.option_id ~= nil then
+            active_opt_idx = tonumber(bst.option_index)
+            active_opt_id = (type(bst.option_id) == "string" and bst.option_id) or nil
+        end
+    end
+    local cap_id = uml_internal.get_capture_id()
+    local is_compact = (uml_ui_open and uml_internal.compact_open == true) or b_compact
+    local b_layout = b_compact and mom and type(mom.get) == "function" and uml_internal.parse_compact_layout(mom.get("uniformity.menu_layout")) or nil
+    return {
+        ready = true,
+        open = uml_ui_open or ext_open,
+        native_open = uml_ui_open,
+        fullscreen = uml_ui_open and (uml_internal.compact_open ~= true),
+        compact = is_compact,
+        external_open = ext_open,
+        layout = is_compact and (b_layout or uml_internal.compact_layout or 1) or 4,
+        scale = math.floor(scale_val),
+        focus = active_focus,
+        group_count = #groups,
+        group_index = active_mod_idx,
+        mod_index = active_mod_idx,
+        mod_name = active_mod_name,
+        option_index = active_opt_idx,
+        option_id = active_opt_id,
+        capture = (cap_id ~= nil),
+        capture_id = cap_id,
+        chat_open = (uml_chat_open == true),
+        window_focused = is_window_focused(),
+        gameplay_input_allowed = is_gameplay_input_allowed()
+    }
+end
+
+function uml_internal.notify_menu_listeners()
+    local list = uml_internal.menu_listeners
+    if #list == 0 then return end
+    local state = uml_internal.get_menu_state()
+    local active = uml_internal.menu_listener_active
+    local snapshot = {}
+    for i = 1, #list do
+        snapshot[i] = list[i]
+    end
+    for i = 1, #snapshot do
+        local fn = snapshot[i]
+        if active[fn] then
+            local ok_cb, err_cb = uml_internal.call_with_owner(uml_internal.menu_listener_owners[fn], fn, state)
+            if not ok_cb then
+                record_uml_error("menu_listener", err_cb)
+            end
+        end
+    end
+end
+
+function uml_internal.off_menu_change(cb)
+    if type(cb) ~= "function" then return false end
+    local list = uml_internal.menu_listeners
+    uml_internal.menu_listener_active[cb] = nil
+    uml_internal.menu_listener_owners[cb] = nil
+    for i = #list, 1, -1 do
+        if list[i] == cb then
+            table.remove(list, i)
+            return true
+        end
+    end
+    return false
+end
+
+function uml_internal.on_menu_change(cb)
+    if type(cb) ~= "function" then return false end
+    local list = uml_internal.menu_listeners
+    local exists = false
+    for i = 1, #list do
+        if list[i] == cb then
+            exists = true
+            break
+        end
+    end
+    if not exists then
+        list[#list + 1] = cb
+    end
+    uml_internal.menu_listener_active[cb] = true
+    local owner = uml_internal.current_mod_owner()
+    if owner then
+        uml_internal.menu_listener_owners[cb] = owner
+    end
+    return function()
+        return uml_internal.off_menu_change(cb)
+    end
+end
+
+function uml_internal.select_mod(target_mod, focus_options, skip_notify)
+    if not uml_ui_open then
+        local bst, bridge = uml_internal.get_bridge_menu_state()
+        if bst and bst.compact == true then
+            if type(bridge) == "table" and type(bridge.select_mod) == "function" then
+                local ok, r1, r2, r3 = pcall(bridge.select_mod, target_mod, focus_options)
+                if ok and r1 ~= nil then
+                    return r1, r2, r3
+                end
+            end
+            return false, nil, nil
+        end
+    end
+    local idx, groups = uml_internal.find_mod_group_index(target_mod)
+    if not idx then return false, nil, nil end
+    uml_ui_mod_idx = idx
+    local mom = rawget(_G, "ModOptionsMenu")
+    local order = (mom and mom.order) or {}
+    local reg = (mom and mom.registered) or {}
+    local _, cur_grp, _, items = sync_submenu_state(order, reg)
+    if focus_options ~= false and #items > 0 then
+        uml_ui_focus = "options"
+    end
+    if uml_ui_open and not skip_notify then
+        uml_internal.notify_menu_listeners()
+    end
+    return true, idx, cur_grp and cur_grp.name or (groups[idx] and groups[idx].name)
+end
+
+function uml_internal.open_menu(target_mod, opts)
+    if type(target_mod) == "table" and opts == nil then
+        opts = target_mod
+        target_mod = opts.mod or opts.mod_name or opts.target
+    end
+    opts = type(opts) == "table" and opts or {}
+    local bst, bridge = uml_internal.get_bridge_menu_state()
+    if bst and bst.compact == true then
+        if type(bridge) == "table" and type(bridge.close) == "function" then
+            pcall(bridge.close)
+            bst = uml_internal.get_bridge_menu_state()
+        end
+        if bst and bst.compact == true then
+            return false
+        end
+    end
+    local req_layout = uml_internal.parse_compact_layout(opts.layout)
+    local want_compact = (opts.compact == true)
+    if req_layout == 4 then
+        want_compact = false
+    elseif req_layout and req_layout >= 1 and req_layout <= 3 then
+        uml_internal.compact_layout = req_layout
+        if opts.compact == nil then
+            want_compact = true
+        end
+    end
+
+    uml_ui_open = true
+    uml_internal.compact_open = want_compact
+    uml_chat_open = false
+    uml_key_capture_id = nil
+    uml_internal.capture_wait_buttons = {}
+    uml_menu_open_logged = false
+
+    local mom = rawget(_G, "ModOptionsMenu")
+    local order = (mom and mom.order) or {}
+    local reg = (mom and mom.registered) or {}
+    local groups, _, _, items = sync_submenu_state(order, reg)
+    if target_mod ~= nil then
+        local found = uml_internal.select_mod(target_mod, opts.focus ~= "mods", true)
+        if found then
+            uml_internal.compact_target_mod = target_mod
+        else
+            uml_internal.compact_target_mod = nil
+            if opts.focus ~= "mods" and opts.focus ~= "options" then
+                uml_ui_focus = (#groups == 0) and "mods" or (want_compact and "options" or "mods")
+            end
+        end
+        if opts.focus == "mods" or opts.focus == "options" then
+            uml_ui_focus = opts.focus
+        end
+    else
+        uml_internal.compact_target_mod = nil
+        if opts.focus == "mods" or opts.focus == "options" then
+            uml_ui_focus = opts.focus
+        elseif #groups == 0 then
+            uml_ui_focus = "mods"
+        elseif want_compact then
+            uml_ui_focus = "options"
+        end
+    end
+    uml_internal.notify_menu_listeners()
+    return true
+end
+
+function uml_internal.close_menu()
+    local was_open = uml_ui_open or uml_internal.compact_open
+    uml_ui_open = false
+    uml_internal.compact_open = false
+    uml_key_capture_id = nil
+    uml_internal.capture_wait_buttons = {}
+    uml_menu_open_logged = false
+    uml_internal.sync_chat_guard_edges()
+    if was_open then
+        uml_internal.notify_menu_listeners()
+    end
+    return true
+end
+
+function uml_internal.toggle_menu(target_mod, opts)
+    if type(target_mod) == "table" and opts == nil then
+        opts = target_mod
+        target_mod = opts.mod or opts.mod_name or opts.target
+    end
+    opts = type(opts) == "table" and opts or {}
+    local req_layout = uml_internal.parse_compact_layout(opts.layout)
+    local want_compact = (opts.compact == true) or (req_layout ~= nil and req_layout >= 1 and req_layout <= 3 and opts.compact ~= false)
+    if req_layout == 4 then want_compact = false end
+
+    if uml_ui_open then
+        local cur_compact = (uml_internal.compact_open == true)
+        local target_idx = target_mod ~= nil and uml_internal.find_mod_group_index(target_mod) or nil
+        local same_target = (target_mod == nil) or (target_idx ~= nil and target_idx == uml_ui_mod_idx)
+        local same_layout = (not cur_compact) or (req_layout == nil) or (req_layout == uml_internal.compact_layout)
+        if cur_compact == want_compact and same_target and same_layout then
+            uml_internal.close_menu()
+            return false
+        end
+    end
+    return uml_internal.open_menu(target_mod, opts)
+end
+
+function uml_internal.set_external_menu_open(owner_id, is_open)
+    local key = tostring(owner_id or "default")
+    if is_open == true then
+        uml_internal.external_menus[key] = true
+        local owner = uml_internal.current_mod_owner()
+        if owner then
+            uml_internal.external_menu_owners[key] = owner
+        end
+        uml_chat_open = false
+        if uml_ui_open then
+            uml_ui_open = false
+            uml_internal.compact_open = false
+            uml_key_capture_id = nil
+            uml_internal.capture_wait_buttons = {}
+            uml_menu_open_logged = false
+            uml_internal.sync_chat_guard_edges()
+        end
+    else
+        uml_internal.external_menus[key] = nil
+        uml_internal.external_menu_owners[key] = nil
+        uml_internal.sync_chat_guard_edges()
+    end
+    uml_internal.notify_menu_listeners()
+    return true
+end
+
+function uml_internal.reset_edge_state_for_key(st, new_key_name)
+    if type(st) ~= "table" then return end
+    local norm_k = uml_internal.normalize_key_name(new_key_name)
+    st.key_name = norm_k
+    if norm_k == "off" then
+        st.prev_down = false
+        st.blocked_latch = false
+        st.pending_edge = false
+        st.last_sample_frame = -1
+        st.edge_frame = -1
         return
     end
+    if key_down(norm_k) then
+        st.blocked_latch = true
+        st.prev_down = true
+        st.last_sample_frame = frame_counter
+    else
+        st.blocked_latch = false
+        st.prev_down = false
+        st.last_sample_frame = -1
+    end
+    st.pending_edge = false
+    st.edge_frame = -1
+end
+
+function uml_internal.sync_binding_key_change(id, new_key)
+    if id == nil then return end
+    local sid = tostring(id)
+    local norm_k = uml_internal.normalize_key_name(new_key)
+    local mbm = rawget(_G, "ModBindingsMenu")
+    local rec = (mbm and type(mbm.bindings) == "table") and mbm.bindings[id] or nil
+    local mbm_k = "mbm:" .. sid
+    local mbm_st = uml_internal.poll_edge_state[mbm_k]
+    if not mbm_st and norm_k ~= "off" and rec then
+        mbm_st = {
+            key_name = norm_k,
+            allow_in_menu = (rec.allow_in_menu == true),
+            prev_down = false,
+            blocked_latch = false,
+            pending_edge = false,
+            last_sample_frame = -1,
+            edge_frame = -1,
+            consumed_frame = -1,
+            owner_mod = rec.owner_mod
+        }
+        uml_internal.poll_edge_state[mbm_k] = mbm_st
+    end
+    if mbm_st then
+        uml_internal.reset_edge_state_for_key(mbm_st, norm_k)
+    end
+    local compact_k = "compact:" .. sid
+    local compact_st = uml_internal.poll_edge_state[compact_k]
+    for i = 1, #uml_internal.compact_shortcuts do
+        local cs = uml_internal.compact_shortcuts[i]
+        if cs.bind_id == id then
+            cs.key = norm_k
+            if not compact_st and norm_k ~= "off" then
+                compact_st = {
+                    key_name = norm_k,
+                    allow_in_menu = true,
+                    prev_down = false,
+                    blocked_latch = false,
+                    pending_edge = false,
+                    last_sample_frame = -1,
+                    edge_frame = -1,
+                    consumed_frame = -1,
+                    owner_mod = cs.owner_mod or cs.mod_name
+                }
+                uml_internal.poll_edge_state[compact_k] = compact_st
+            end
+        end
+    end
+    if compact_st then
+        uml_internal.reset_edge_state_for_key(compact_st, norm_k)
+    end
+    local held = (norm_k ~= "off") and key_down(norm_k) or false
+    local had_kb = false
+    for i = 1, #uml_key_bindings do
+        if uml_key_bindings[i].id == id then
+            uml_key_bindings[i].key = norm_k
+            uml_key_bindings[i]._last_key = norm_k
+            had_kb = true
+        end
+    end
+    if had_kb or uml_key_prev_down[id] ~= nil or uml_internal.key_blocked_latch[id] ~= nil then
+        uml_internal.key_blocked_latch[id] = held
+        uml_key_prev_down[id] = held
+    end
+end
+
+function uml_internal.poll_edge_key(latch_key, key_name, allow_in_menu, consume, owner_mod)
+    local k = tostring(latch_key)
+    local norm_k = uml_internal.normalize_key_name(key_name)
+    local resolved_owner = owner_mod or uml_internal.current_mod_owner()
+    local st = uml_internal.poll_edge_state[k]
+    if not st then
+        st = {
+            key_name = norm_k,
+            allow_in_menu = (allow_in_menu == true),
+            prev_down = false,
+            blocked_latch = false,
+            pending_edge = false,
+            last_sample_frame = -1,
+            edge_frame = -1,
+            consumed_frame = -1,
+            owner_mod = resolved_owner
+        }
+        uml_internal.poll_edge_state[k] = st
+    else
+        if resolved_owner and not st.owner_mod then
+            st.owner_mod = resolved_owner
+        end
+        if st.key_name ~= norm_k then
+            uml_internal.reset_edge_state_for_key(st, norm_k)
+        end
+        st.allow_in_menu = (allow_in_menu == true)
+    end
+
+    if norm_k == "off" then
+        return false
+    end
+
+    local is_dn = key_down(norm_k)
+    if uml_internal.is_input_blocked(st.allow_in_menu) then
+        st.blocked_latch = is_dn
+        st.prev_down = is_dn
+        st.pending_edge = false
+        st.last_sample_frame = frame_counter
+        return false
+    end
+
+    if st.blocked_latch then
+        if not is_dn then
+            st.blocked_latch = false
+            st.prev_down = false
+        else
+            st.prev_down = true
+        end
+        st.pending_edge = false
+        st.last_sample_frame = frame_counter
+        return false
+    end
+
+    if frame_counter == 0 or st.last_sample_frame ~= frame_counter then
+        local rising = (is_dn and not st.prev_down)
+        st.prev_down = is_dn
+        st.last_sample_frame = frame_counter
+        if rising then
+            st.pending_edge = true
+            st.edge_frame = frame_counter
+        elseif not is_dn or st.edge_frame ~= frame_counter then
+            st.pending_edge = false
+        end
+    end
+
+    if consume then
+        if st.pending_edge then
+            st.pending_edge = false
+            st.consumed_frame = frame_counter
+            return true
+        end
+        return false
+    end
+    return st.pending_edge == true
+end
+
+function uml_internal.sync_poll_latches()
+    for _, st in pairs(uml_internal.poll_edge_state) do
+        local dn = (type(st.key_name) == "string" and st.key_name ~= "" and st.key_name ~= "off") and key_down(st.key_name) or false
+        if uml_internal.is_input_blocked(st.allow_in_menu) then
+            st.blocked_latch = dn
+            st.prev_down = dn
+            st.pending_edge = false
+            st.last_sample_frame = frame_counter
+        elseif st.blocked_latch and not dn then
+            st.blocked_latch = false
+            st.prev_down = false
+            st.pending_edge = false
+            st.last_sample_frame = -1
+        end
+    end
+end
+
+function uml_internal.register_compact_shortcut(mod_name, spec, explicit_owner)
+    if type(mod_name) == "table" and spec == nil then
+        spec = mod_name
+        mod_name = spec.mod or spec.mod_name
+    end
+    spec = type(spec) == "table" and spec or {}
+    local target = spec.mod or spec.mod_name or mod_name
+    local owner = uml_internal.current_mod_owner(explicit_owner or spec.owner_mod)
+    local default_key = (type(spec.key) == "string" and spec.key ~= "") and spec.key:lower() or "f10"
+    local bind_id = (type(spec.id) == "string" and spec.id ~= "") and spec.id or (tostring(target or "uml") .. ".compact_menu_key")
+    local label = spec.label or (tostring(target or "Mod") .. " Compact Menu")
+    local mbm = rawget(_G, "ModBindingsMenu")
+    if mbm and type(mbm.register_binding) == "function" then
+        pcall(mbm.register_binding, bind_id, label, default_key, {
+            default = default_key,
+            category = tostring(target or mod_name or "General"),
+            allow_in_menu = true,
+            owner_mod = owner
+        })
+    end
+    local entry = {
+        bind_id = bind_id,
+        key = default_key,
+        mod_name = target,
+        owner_mod = owner,
+        layout = uml_internal.parse_compact_layout(spec.layout) or 1,
+        layout_option_id = spec.layout_option_id
+    }
+    for i = 1, #uml_internal.compact_shortcuts do
+        if uml_internal.compact_shortcuts[i].bind_id == bind_id then
+            uml_internal.compact_shortcuts[i] = entry
+            return bind_id
+        end
+    end
+    uml_internal.compact_shortcuts[#uml_internal.compact_shortcuts + 1] = entry
+    return bind_id
+end
+
+function uml_internal.poll_compact_shortcuts()
+    local list = uml_internal.compact_shortcuts
+    if #list == 0 then return false end
+    local mbm = rawget(_G, "ModBindingsMenu")
+    local mom = rawget(_G, "ModOptionsMenu")
+    for i = 1, #list do
+        local entry = list[i]
+        local active_key = (mbm and type(mbm.get_binding) == "function" and mbm.get_binding(entry.bind_id)) or entry.key
+        local sc_owner = entry.owner_mod or entry.mod_name
+        if type(active_key) == "string" and active_key ~= "" and active_key ~= "off" then
+            if uml_internal.poll_edge_key("compact:" .. entry.bind_id, active_key, true, true, sc_owner) then
+                local layout = entry.layout or 1
+                if entry.layout_option_id and mom and type(mom.get) == "function" then
+                    layout = uml_internal.parse_compact_layout(mom.get(entry.layout_option_id)) or layout
+                end
+                uml_internal.toggle_menu(entry.mod_name, {
+                    compact = (layout ~= 4),
+                    layout = layout,
+                    focus = "options"
+                })
+                return true
+            end
+        else
+            local ek = "compact:" .. tostring(entry.bind_id)
+            if uml_internal.poll_edge_state[ek] then
+                uml_internal.reset_edge_state_for_key(uml_internal.poll_edge_state[ek], "off")
+            end
+        end
+    end
+    return false
+end
+
+function uml_internal.get_screen_size()
+    local W, H = 1920, 1080
+    local sr = rawget(_G, "stingray")
+    if sr and sr.Gui and type(sr.Gui.resolution) == "function" then
+        local ok, rw, rh = pcall(sr.Gui.resolution)
+        if ok and type(rw) == "number" and type(rh) == "number" and rw > 0 and rh > 0 then
+            W, H = rw, rh
+        end
+    end
+    return W, H
+end
+
+function uml_internal.get_ui_scale()
+    local W, H = uml_internal.get_screen_size()
+    local px = math.max(2, math.floor(H / 540 + 0.5))
+    return px, W / 1920, H / 1080
+end
+
+function uml_internal.make_color(a, r, g, b)
+    if b == nil then
+        a, r, g, b = 255, tonumber(a) or 255, tonumber(r) or 255, tonumber(g) or 255
+    else
+        a, r, g, b = tonumber(a) or 255, tonumber(r) or 255, tonumber(g) or 255, tonumber(b) or 255
+    end
+    local sr = rawget(_G, "stingray")
+    if sr and type(sr.Color) == "function" then
+        local ok, col = pcall(sr.Color, a, r, g, b)
+        if ok and col ~= nil then return col end
+    end
+    return { a = a, r = r, g = g, b = b, [1] = a, [2] = r, [3] = g, [4] = b }
+end
+
+function uml_internal.hud_draw_rect(x, y, w, h, col, layer)
+    x, y, w, h = tonumber(x) or 0, tonumber(y) or 0, tonumber(w) or 0, tonumber(h) or 0
+    if w <= 0 or h <= 0 then return false end
+    local sr = rawget(_G, "stingray")
+    if not sr or not sr.Gui or not sr.Gui.rect or not sr.Vector3 or not sr.Vector2 then return false end
+    local active_worlds = get_active_worlds(sr)
+    if #active_worlds == 0 then return false end
+    local c = col
+    if type(c) == "table" and sr.Color and type(c[1]) == "number" then
+        local ok_c, sc = pcall(sr.Color, c[1], c[2] or 255, c[3] or 255, c[4] or 255)
+        if ok_c and sc then c = sc end
+    elseif c == nil and sr.Color then
+        local ok_c, sc = pcall(sr.Color, 255, 235, 195, 45)
+        if ok_c and sc then c = sc end
+    end
+    local drawn = false
+    for i = 1, #active_worlds do
+        local g = get_gui_for_world(sr, active_worlds[i])
+        if g then
+            local ok = pcall(sr.Gui.rect, g, sr.Vector3(x, y, tonumber(layer) or 900), sr.Vector2(w, h), c)
+            if ok then drawn = true end
+        end
+    end
+    return drawn
+end
+
+function uml_internal.hud_draw_text(str, x, y, px, col, layer)
+    if str == nil then return false end
+    local sr = rawget(_G, "stingray")
+    if not sr or not sr.Gui or not sr.Gui.rect then return false end
+    local active_worlds = get_active_worlds(sr)
+    if #active_worlds == 0 then return false end
+    local scale_px = tonumber(px)
+    if not scale_px or scale_px <= 0 then
+        scale_px = uml_internal.get_ui_scale()
+    end
+    local c = col
+    if type(c) == "table" and sr.Color and type(c[1]) == "number" then
+        local ok_c, sc = pcall(sr.Color, c[1], c[2] or 255, c[3] or 255, c[4] or 255)
+        if ok_c and sc then c = sc end
+    elseif c == nil and sr.Color then
+        local ok_c, sc = pcall(sr.Color, 255, 220, 225, 235)
+        if ok_c and sc then c = sc end
+    end
+    local drawn = false
+    for i = 1, #active_worlds do
+        local g = get_gui_for_world(sr, active_worlds[i])
+        if g then
+            local ok = pcall(draw_pixel_text_on_gui, sr, g, tonumber(x) or 0, tonumber(y) or 0, tostring(str), scale_px, c, tonumber(layer) or 910)
+            if ok then drawn = true end
+        end
+    end
+    return drawn
+end
+
+uml_internal.menu_api = {
+    is_open = uml_internal.is_menu_open,
+    is_fullscreen = uml_internal.is_fullscreen_menu_open,
+    is_compact = uml_internal.is_compact_menu_open,
+    is_capturing = uml_internal.is_capturing_key,
+    get_capture_id = uml_internal.get_capture_id,
+    is_chat_open = uml_internal.is_chat_open,
+    is_window_focused = uml_internal.is_window_focused,
+    is_input_blocked = uml_internal.is_input_blocked,
+    get_state = uml_internal.get_menu_state,
+    state = uml_internal.get_menu_state,
+    open = uml_internal.open_menu,
+    close = uml_internal.close_menu,
+    toggle = uml_internal.toggle_menu,
+    select_mod = uml_internal.select_mod,
+    set_external_open = uml_internal.set_external_menu_open,
+    on_change = uml_internal.on_menu_change,
+    off_change = uml_internal.off_menu_change,
+    register_compact_shortcut = uml_internal.register_compact_shortcut,
+    screen_size = uml_internal.get_screen_size,
+    get_screen_size = uml_internal.get_screen_size,
+    resolution = uml_internal.get_screen_size,
+    scale = uml_internal.get_ui_scale,
+    color = uml_internal.make_color,
+    rect = uml_internal.hud_draw_rect,
+    draw_rect = uml_internal.hud_draw_rect,
+    text = uml_internal.hud_draw_text,
+    draw_text = uml_internal.hud_draw_text
+}
+
+local function dispatch_uml_bound_keys()
+    if #uml_key_bindings == 0 then return end
     local mbm = rawget(_G, "ModBindingsMenu")
     for i = 1, #uml_key_bindings do
         local entry = uml_key_bindings[i]
+        local latch_key = entry.id
+        local blocked = uml_internal.is_input_blocked(entry.allow_in_menu)
         local active_key = (mbm and type(mbm.get_binding) == "function" and mbm.get_binding(entry.id)) or entry.key
-        if type(active_key) == "string" and active_key ~= "" and active_key ~= "off" then
-            local is_dn = key_down(active_key)
-            local was_dn = uml_key_prev_down[entry.id] == true
-            uml_key_prev_down[entry.id] = is_dn
-            local ok, err = true, nil
-            if mode == "hold" then
-                if is_dn then ok, err = pcall(entry.cb, entry.mod) end
-            elseif mode == "release" then
-                if was_dn and not is_dn then ok, err = pcall(entry.cb, entry.mod) end
+        local norm_active = uml_internal.normalize_key_name(active_key)
+        if entry._last_key ~= nil and entry._last_key ~= norm_active then
+            local held = (norm_active ~= "off") and key_down(norm_active) or false
+            uml_internal.key_blocked_latch[latch_key] = held
+            uml_key_prev_down[latch_key] = held
+        end
+        entry._last_key = norm_active
+        if norm_active ~= "off" then
+            local is_dn = key_down(norm_active)
+            if blocked then
+                uml_internal.key_blocked_latch[latch_key] = is_dn
+                uml_key_prev_down[latch_key] = is_dn
+            elseif uml_internal.key_blocked_latch[latch_key] then
+                if not is_dn then
+                    uml_internal.key_blocked_latch[latch_key] = false
+                    uml_key_prev_down[latch_key] = false
+                else
+                    uml_key_prev_down[latch_key] = true
+                end
             else
-                if is_dn and not was_dn then ok, err = pcall(entry.cb, entry.mod) end
+                local was_dn = uml_key_prev_down[latch_key] == true
+                uml_key_prev_down[latch_key] = is_dn
+                local mode = entry.mode
+                local cb_owner = entry.owner_mod or (type(entry.mod) == "table" and (entry.mod._owner_mod or entry.mod.name)) or (type(entry.mod) == "string" and entry.mod) or nil
+                local ok, err = true, nil
+                if mode == "hold" then
+                    if is_dn then ok, err = uml_internal.call_with_owner(cb_owner, entry.cb, entry.mod) end
+                elseif mode == "release" then
+                    if was_dn and not is_dn then ok, err = uml_internal.call_with_owner(cb_owner, entry.cb, entry.mod) end
+                else
+                    if is_dn and not was_dn then ok, err = uml_internal.call_with_owner(cb_owner, entry.cb, entry.mod) end
+                end
+                if not ok then
+                    record_uml_error("key_binding:" .. tostring(entry.id), err)
+                end
             end
-            if not ok then
-                record_uml_error("key_binding:" .. tostring(entry.id), err)
-            end
+        else
+            uml_key_prev_down[latch_key] = false
+            uml_internal.key_blocked_latch[latch_key] = false
         end
     end
 end
@@ -1670,36 +2860,81 @@ local function handle_uml_menu_input(dt)
         end
     end
 
-    if not is_window_focused() then return end
+    if not is_window_focused() then
+        key_pressed("f9")
+        key_pressed("f2")
+        key_pressed("f5")
+        uml_internal.sync_chat_guard_edges()
+        uml_internal.sync_poll_latches()
+        dispatch_uml_bound_keys()
+        return
+    end
 
     local f9_hit = key_pressed("f9")
     local f2_hit = key_pressed("f2")
-    if f9_hit or f2_hit then
-        uml_ui_open = not uml_ui_open
-        uml_menu_open_logged = false
-        uml_key_capture_id = nil
-        if uml_ui_open then uml_chat_open = false end
-        log_write("[UML] Settings menu toggled via hotkey: " .. (uml_ui_open and "OPEN" or "CLOSED"))
+    local f5_hit = key_pressed("f5")
+    local is_ctrl_down = key_down("left ctrl") or key_down("right ctrl")
+    if uml_key_capture_id == nil and is_ctrl_down and f5_hit then
+        local mom_chk = rawget(_G, "ModOptionsMenu")
+        if not mom_chk or type(mom_chk.get) ~= "function" or mom_chk.get("uml_auto_reload") ~= false then
+            if type(trigger_loose_hot_reload) == "function" then
+                pcall(trigger_loose_hot_reload)
+            end
+        end
+        return
+    end
+
+    if (f9_hit or f2_hit) and uml_key_capture_id == nil and (not uml_chat_open) then
+        if uml_ui_open and uml_internal.compact_open then
+            -- Pressing F9/F2 inside compact mode switches smoothly to full-screen mode
+            uml_internal.compact_open = false
+            uml_menu_open_logged = false
+            uml_internal.notify_menu_listeners()
+            log_write("[UML] Settings menu expanded from compact to FULL")
+        else
+            uml_ui_open = not uml_ui_open
+            uml_internal.compact_open = false
+            uml_menu_open_logged = false
+            uml_key_capture_id = nil
+            uml_internal.capture_wait_buttons = {}
+            if uml_ui_open then uml_chat_open = false end
+            uml_internal.notify_menu_listeners()
+            log_write("[UML] Settings menu toggled via hotkey: " .. (uml_ui_open and "OPEN" or "CLOSED"))
+        end
+        uml_internal.sync_chat_guard_edges()
+        uml_internal.sync_poll_latches()
+        dispatch_uml_bound_keys()
+        return
+    end
+
+    if uml_internal.poll_compact_shortcuts() then
+        uml_internal.sync_chat_guard_edges()
+        uml_internal.sync_poll_latches()
+        dispatch_uml_bound_keys()
         return
     end
 
     if not uml_ui_open then
         -- Subsystem 11: Chat Box Guard (Enter opens/submits chat, Esc closes chat)
-        local enter_chat = key_pressed("enter") or key_pressed("numpad enter")
-        local esc_chat = key_pressed("escape") or key_pressed("esc")
-        if uml_chat_open then
+        local enter_chat = uml_internal.any_key_pressed("enter", "numpad enter", "return")
+        local esc_chat = uml_internal.any_key_pressed("escape", "esc")
+        if uml_internal.has_external_menu_open() then
+            uml_chat_open = false
+        elseif uml_chat_open then
             if enter_chat or esc_chat then
                 uml_chat_open = false
             end
-            return
         elseif enter_chat then
             uml_chat_open = true
-            return
         end
-
+        uml_internal.sync_poll_latches()
         dispatch_uml_bound_keys()
         return
     end
+
+    -- Keep allow_in_menu keybindings active while F9/compact menu is open (and blocked-latch synced if capturing)
+    uml_internal.sync_poll_latches()
+    dispatch_uml_bound_keys()
 
     local mom = rawget(_G, "ModOptionsMenu")
     local mbm = rawget(_G, "ModBindingsMenu")
@@ -1711,52 +2946,93 @@ local function handle_uml_menu_input(dt)
     -- Key capture mode for keybinding rows
     if uml_key_capture_id ~= nil then
         local cap_key = capture_any_key()
+        local function sync_capture_edges()
+            uml_internal.any_key_pressed(
+                "escape", "esc", "delete", "del", "backspace", "space",
+                "enter", "numpad enter", "return", "tab",
+                "up", "down", "left", "right", "page up", "page down", "home", "end",
+                "[", "left bracket", "]", "right bracket",
+                "-", "minus", "numpad -", "numpad minus",
+                "=", "equals", "equal", "numpad +", "numpad plus",
+                "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+                "numpad 0", "numpad 1", "numpad 2", "numpad 3", "numpad 4",
+                "numpad 5", "numpad 6", "numpad 7", "numpad 8", "numpad 9"
+            )
+            if cap_key then key_pressed(cap_key) end
+            key_repeat_timer["up"] = key_down("up") and 0.38 or nil
+            key_repeat_timer["down"] = key_down("down") and 0.38 or nil
+            key_repeat_timer["left"] = key_down("left") and 0.38 or nil
+            key_repeat_timer["right"] = key_down("right") and 0.38 or nil
+        end
         if cap_key == "escape" or cap_key == "esc" then
             uml_key_capture_id = nil
+            uml_internal.capture_wait_buttons = {}
+            sync_capture_edges()
+            uml_internal.notify_menu_listeners()
             return
-        elseif cap_key == "delete" or cap_key == "backspace" then
-            if mom then mom.set(uml_key_capture_id, "off") end
-            if mbm and type(mbm.set_binding) == "function" then pcall(mbm.set_binding, uml_key_capture_id, nil) end
-            log_write(string.format("[UML] Keybinding '%s' cleared", tostring(uml_key_capture_id)))
+        elseif cap_key == "delete" or cap_key == "del" or cap_key == "backspace" then
+            local cleared_id = uml_key_capture_id
+            if mbm and type(mbm.set_binding) == "function" then
+                pcall(mbm.set_binding, cleared_id, nil)
+                if mom and type(mom.get) == "function" and type(mom.set) == "function" and mom.get(cleared_id) ~= "off" then
+                    mom.set(cleared_id, "off")
+                end
+            elseif mom and type(mom.set) == "function" then
+                mom.set(cleared_id, "off")
+            end
+            log_write(string.format("[UML] Keybinding '%s' cleared", tostring(cleared_id)))
             uml_key_capture_id = nil
+            uml_internal.capture_wait_buttons = {}
+            sync_capture_edges()
+            uml_internal.notify_menu_listeners()
             return
         elseif cap_key and cap_key ~= "f9" and cap_key ~= "f2" then
-            if mom then mom.set(uml_key_capture_id, cap_key) end
-            if mbm and type(mbm.set_binding) == "function" then pcall(mbm.set_binding, uml_key_capture_id, cap_key) end
-            log_write(string.format("[UML] Keybinding '%s' bound to '%s'", tostring(uml_key_capture_id), tostring(cap_key)))
+            local bound_id = uml_key_capture_id
+            if mbm and type(mbm.set_binding) == "function" then
+                pcall(mbm.set_binding, bound_id, cap_key)
+                if mom and type(mom.get) == "function" and type(mom.set) == "function" and mom.get(bound_id) ~= cap_key then
+                    mom.set(bound_id, cap_key)
+                end
+            elseif mom and type(mom.set) == "function" then
+                mom.set(bound_id, cap_key)
+            end
+            log_write(string.format("[UML] Keybinding '%s' bound to '%s'", tostring(bound_id), tostring(cap_key)))
             uml_key_capture_id = nil
+            uml_internal.capture_wait_buttons = {}
+            sync_capture_edges()
+            uml_internal.notify_menu_listeners()
             return
         end
-        return
-    end
-
-    local esc_hit = key_pressed("escape") or key_pressed("esc")
-    if esc_hit then
-        uml_ui_open = false
-        uml_menu_open_logged = false
-        uml_key_capture_id = nil
-        log_write("[UML] Settings menu closed via ESC")
+        sync_capture_edges()
         return
     end
 
     -- Poll all navigation, shortcut, and action keys unconditionally so edge states stay synchronized
+    local esc_hit = uml_internal.any_key_pressed("escape", "esc")
+    local enter_hit = uml_internal.any_key_pressed("enter", "numpad enter", "return")
     local up_hit = key_step_with_repeat("up", dt)
     local down_hit = key_step_with_repeat("down", dt)
-    local left_hit = key_step_with_repeat("left", dt)
-    local right_hit = key_step_with_repeat("right", dt)
+    local left_hit, left_initial = key_step_with_repeat("left", dt)
+    local right_hit, right_initial = key_step_with_repeat("right", dt)
     local pgup_hit = key_pressed("page up")
     local pgdn_hit = key_pressed("page down")
     local home_hit = key_pressed("home")
     local end_hit = key_pressed("end")
-    local del_hit = key_pressed("delete")
+    local del_hit = uml_internal.any_key_pressed("delete", "del")
     local space_hit = key_pressed("space")
     local back_hit = key_pressed("backspace")
     local tab_hit = key_pressed("tab")
-    local lbracket_hit = key_pressed("[")
-    local rbracket_hit = key_pressed("]")
-    local scale_down_hit = key_pressed("-") or key_pressed("minus") or key_pressed("numpad -") or key_pressed("numpad minus")
-    local scale_up_hit = key_pressed("=") or key_pressed("equals") or key_pressed("numpad +") or key_pressed("numpad plus")
+    local lbracket_hit = uml_internal.any_key_pressed("[", "left bracket")
+    local rbracket_hit = uml_internal.any_key_pressed("]", "right bracket")
+    local scale_down_hit = uml_internal.any_key_pressed("-", "minus", "numpad -", "numpad minus")
+    local scale_up_hit = uml_internal.any_key_pressed("=", "equals", "equal", "numpad +", "numpad plus")
     local wheel_step = get_mouse_wheel_steps()
+
+    if esc_hit then
+        uml_internal.close_menu()
+        log_write("[UML] Settings menu closed via ESC")
+        return
+    end
 
     if wheel_step < 0 then up_hit = true end
     if wheel_step > 0 then down_hit = true end
@@ -1771,6 +3047,7 @@ local function handle_uml_menu_input(dt)
             if cur_s > 4 then cur_s = 1 end
         end
         mom.set("uml_ui_scale", cur_s)
+        uml_internal.notify_menu_listeners()
         log_write(string.format("[UML] UI Scale changed to mode %d", cur_s))
         return
     end
@@ -1789,9 +3066,14 @@ local function handle_uml_menu_input(dt)
     -- Direct 1-0 Mod Submenu Quick-Jump
     if shortcut_mod_idx and num_groups > 0 then
         if shortcut_mod_idx <= num_groups then
+            local prev_mod = uml_ui_mod_idx
+            local prev_focus = uml_ui_focus
             uml_ui_mod_idx = shortcut_mod_idx
             uml_ui_focus = "options"
             groups, cur_grp, cur_opt_idx = sync_submenu_state(order, reg)
+            if uml_ui_mod_idx ~= prev_mod or uml_ui_focus ~= prev_focus then
+                uml_internal.notify_menu_listeners()
+            end
             log_write(string.format("[UML] Submenu quick-jump [%d]: %s", shortcut_mod_idx, cur_grp and cur_grp.name or ""))
         end
         return
@@ -1799,6 +3081,7 @@ local function handle_uml_menu_input(dt)
 
     -- [ / ] Cycle Previous / Next Mod Submenu
     if (lbracket_hit or rbracket_hit) and num_groups > 0 then
+        local prev_mod = uml_ui_mod_idx
         if lbracket_hit then
             uml_ui_mod_idx = uml_ui_mod_idx - 1
             if uml_ui_mod_idx < 1 then uml_ui_mod_idx = num_groups end
@@ -1807,6 +3090,9 @@ local function handle_uml_menu_input(dt)
             if uml_ui_mod_idx > num_groups then uml_ui_mod_idx = 1 end
         end
         groups, cur_grp, cur_opt_idx = sync_submenu_state(order, reg)
+        if uml_ui_mod_idx ~= prev_mod then
+            uml_internal.notify_menu_listeners()
+        end
         log_write(string.format("[UML] Cycled mod submenu: %s", cur_grp and cur_grp.name or ""))
         return
     end
@@ -1814,6 +3100,7 @@ local function handle_uml_menu_input(dt)
     -- Tab toggles focus between Left Mod Sidebar ("mods") and Right Submenu ("options")
     if tab_hit then
         uml_ui_focus = (uml_ui_focus == "mods") and "options" or "mods"
+        uml_internal.notify_menu_listeners()
         return
     end
 
@@ -1822,6 +3109,8 @@ local function handle_uml_menu_input(dt)
     -- =========================================================================
     if uml_ui_focus == "mods" then
         if num_groups > 0 then
+            local prev_mod = uml_ui_mod_idx
+            local prev_focus = uml_ui_focus
             if up_hit then
                 uml_ui_mod_idx = uml_ui_mod_idx - 1
                 if uml_ui_mod_idx < 1 then uml_ui_mod_idx = num_groups end
@@ -1832,11 +3121,14 @@ local function handle_uml_menu_input(dt)
                 uml_ui_mod_idx = math.max(1, uml_ui_mod_idx - 6)
             elseif pgdn_hit or end_hit then
                 uml_ui_mod_idx = math.min(num_groups, uml_ui_mod_idx + 6)
-            elseif right_hit or space_hit then
+            elseif right_hit or space_hit or enter_hit then
                 uml_ui_focus = "options"
                 log_write(string.format("[UML] Entered mod submenu: %s", cur_grp and cur_grp.name or ""))
             end
             sync_submenu_state(order, reg)
+            if uml_ui_mod_idx ~= prev_mod or uml_ui_focus ~= prev_focus then
+                uml_internal.notify_menu_listeners()
+            end
         end
         return
     end
@@ -1846,12 +3138,14 @@ local function handle_uml_menu_input(dt)
     -- =========================================================================
     if back_hit then
         uml_ui_focus = "mods"
+        uml_internal.notify_menu_listeners()
         log_write("[UML] Returned to Mod List sidebar")
         return
     end
 
     if cur_grp and items and #items > 0 then
         local g_count = #items
+        local prev_opt_idx = cur_opt_idx
         if up_hit then
             cur_opt_idx = cur_opt_idx - 1
             if cur_opt_idx < 1 then cur_opt_idx = g_count end
@@ -1875,15 +3169,21 @@ local function handle_uml_menu_input(dt)
         end
 
         if cur_item and cur_item.is_category then
-            if right_hit or space_hit then
+            if right_hit or space_hit or enter_hit then
                 if cur_item.collapsed then
                     uml_ui_fold_states[cur_item.fold_key] = false
                     log_write(string.format("[UML] Category '%s' expanded", cur_item.category_name))
                     sync_submenu_state(order, reg)
+                    if cur_opt_idx ~= prev_opt_idx then
+                        uml_internal.notify_menu_listeners()
+                    end
                 else
                     if cur_opt_idx < #items then
                         cur_opt_idx = cur_opt_idx + 1
                         uml_ui_opt_idx_by_mod[cur_grp.name] = cur_opt_idx
+                    end
+                    if cur_opt_idx ~= prev_opt_idx then
+                        uml_internal.notify_menu_listeners()
                     end
                 end
                 return
@@ -1893,7 +3193,13 @@ local function handle_uml_menu_input(dt)
                     log_write(string.format("[UML] Category '%s' collapsed", cur_item.category_name))
                     sync_submenu_state(order, reg)
                 end
+                if cur_opt_idx ~= prev_opt_idx then
+                    uml_internal.notify_menu_listeners()
+                end
                 return
+            end
+            if cur_opt_idx ~= prev_opt_idx then
+                uml_internal.notify_menu_listeners()
             end
             return
         end
@@ -1903,22 +3209,45 @@ local function handle_uml_menu_input(dt)
         if del_hit and opt_id and mom then
             if type(mom.reset_option) == "function" then
                 mom.reset_option(opt_id)
+                local spec_del = reg[opt_id]
+                if spec_del and spec_del.type == "key" and mbm and type(mbm.get_binding) == "function" and type(mbm.set_binding) == "function" then
+                    local cur_m = mom.get(opt_id)
+                    if mbm.get_binding(opt_id) ~= cur_m then
+                        pcall(mbm.set_binding, opt_id, cur_m)
+                    end
+                end
                 log_write(string.format("[UML] Option '%s' reset to default (%s)", tostring(opt_id), tostring(mom.get(opt_id))))
+            end
+            if cur_opt_idx ~= prev_opt_idx then
+                uml_internal.notify_menu_listeners()
             end
             return
         end
 
-        if (left_hit or right_hit or space_hit) and opt_id and mom then
+        if (left_hit or right_hit or space_hit or enter_hit) and opt_id and mom then
             local spec = reg[opt_id] or {}
             local cur_val = mom.get(opt_id)
             if cur_val == nil then cur_val = spec.default end
 
             if spec.type == "key" then
-                uml_key_capture_id = opt_id
+                if enter_hit or space_hit or left_initial or right_initial then
+                    uml_key_capture_id = opt_id
+                    uml_internal.record_capture_wait_buttons()
+                    uml_internal.notify_menu_listeners()
+                    return
+                end
+            elseif spec.type == "button" or spec.type == "action" then
+                if enter_hit or space_hit or right_initial then
+                    if type(mom.trigger) == "function" then
+                        mom.trigger(opt_id)
+                    end
+                    log_write(string.format("[UML] Button option '%s' triggered", tostring(opt_id)))
+                end
             elseif spec.type == "choice" or (type(spec.choices) == "table" and #spec.choices > 0) then
                 local choices = (type(spec.choices) == "table" and #spec.choices > 0) and spec.choices or { "OFF", "ON" }
                 local count = #choices
                 local cur_idx = math.floor(tonumber(cur_val) or tonumber(spec.default) or 1)
+                if cur_idx < 1 or cur_idx > count then cur_idx = 1 end
                 if left_hit then
                     cur_idx = cur_idx - 1
                     if cur_idx < 1 then cur_idx = count end
@@ -1953,22 +3282,34 @@ local function handle_uml_menu_input(dt)
                 log_write(string.format("[UML] Option '%s' toggled to %s", tostring(opt_id), tostring(new_val)))
             end
         end
+        if cur_opt_idx ~= prev_opt_idx then
+            uml_internal.notify_menu_listeners()
+        end
     end
+end
 
-    local is_ctrl_down = key_down("left ctrl") or key_down("right ctrl")
-    if is_ctrl_down and key_pressed("f5") then
-        if type(trigger_loose_hot_reload) == "function" then
-            pcall(trigger_loose_hot_reload)
+function uml_internal.dispatch_bml_hooks(target, ...)
+    local bml = rawget(_G, "BootModLoader")
+    if type(bml) ~= "table" or type(bml.hooks) ~= "table" then return end
+    local list = rawget(bml.hooks, target)
+    if type(list) ~= "table" then return end
+    for i = 1, #list do
+        local fn = list[i]
+        if type(fn) == "function" then
+            fn(...)
         end
     end
 end
 
 -- Entrypoint Chaining
 init = function(...)
+    uml_internal.dispatch_bml_hooks("init", ...)
     return prev_init(...)
 end
+_G.__uml_inner_init = init
 
 render = function(...)
+    uml_internal.dispatch_bml_hooks("render", ...)
     return prev_render(...)
 end
 _G.__uml_inner_render = render
@@ -1979,7 +3320,7 @@ update = function(dt, ...)
         local id = update_order[i]
         local fn = update_hooks[id]
         if fn and type(fn) == "function" then
-            local ok, err = pcall(fn, dt, ...)
+            local ok, err = uml_internal.call_with_owner(uml_internal.update_hook_owners[id], fn, dt, ...)
             if not ok then
                 local cnt = (update_hook_errors[id] or 0) + 1
                 update_hook_errors[id] = cnt
@@ -1994,6 +3335,17 @@ update = function(dt, ...)
             end
         end
     end
+    uml_internal.dispatch_bml_hooks("update", dt, ...)
+    if uml_internal.dead_timer_pending then
+        uml_internal.dead_timer_pending = false
+        for i = #update_order, 1, -1 do
+            local k = update_order[i]
+            if update_hooks[k] == nil and type(k) == "string" and k:find(":timer_", 1, true) then
+                table.remove(update_order, i)
+                uml_internal.update_order_set[k] = nil
+            end
+        end
+    end
     return prev_update(dt, ...)
 end
 _G.__uml_inner_update = update
@@ -2003,14 +3355,16 @@ shutdown = function(...)
         local id = shutdown_order[i]
         local fn = shutdown_hooks[id]
         if fn and type(fn) == "function" then
-            local ok, err = pcall(fn, ...)
+            local ok, err = uml_internal.call_with_owner(uml_internal.shutdown_hook_owners[id], fn, ...)
             if not ok then
                 record_uml_error("on_shutdown:" .. tostring(id), err)
             end
         end
     end
+    uml_internal.dispatch_bml_hooks("shutdown", ...)
     return prev_shutdown(...)
 end
+_G.__uml_inner_shutdown = shutdown
 
 -- Engine environment check
 if stingray and stingray.Application and type(stingray.Application.build) == "function" and stingray.Application.build() ~= "release" then
@@ -2800,13 +4154,17 @@ local loader_state = {
     end,
     after_startup = function(fn)
         if type(fn) == "function" then
+            local fn_owner = uml_internal.current_mod_owner()
             if startup_finished then
-                local ok, err = pcall(fn)
+                local ok, err = uml_internal.call_with_owner(fn_owner, fn)
                 if not ok then
                     record_uml_error("after_startup", err)
                 end
             else
                 table.insert(after_startup_queue, fn)
+                if fn_owner then
+                    uml_internal.after_startup_owners[fn] = fn_owner
+                end
             end
             return true
         end
@@ -2817,26 +4175,14 @@ local loader_state = {
             fn = id
             id = "anonymous_" .. tostring(fn)
         end
-        if type(id) ~= "string" or id == "" then return false end
-        if type(fn) ~= "function" and fn ~= nil then return false end
-        if update_hooks[id] == nil and fn ~= nil then
-            update_order[#update_order + 1] = id
-        end
-        update_hooks[id] = fn
-        return true
+        return uml_internal.register_update_hook(id, fn, uml_internal.current_mod_owner())
     end,
     on_shutdown = function(id, fn)
         if type(id) == "function" and fn == nil then
             fn = id
             id = "anonymous_" .. tostring(fn)
         end
-        if type(id) ~= "string" or id == "" then return false end
-        if type(fn) ~= "function" and fn ~= nil then return false end
-        if shutdown_hooks[id] == nil and fn ~= nil then
-            shutdown_order[#shutdown_order + 1] = id
-        end
-        shutdown_hooks[id] = fn
-        return true
+        return uml_internal.register_shutdown_hook(id, fn, uml_internal.current_mod_owner())
     end
 }
 rawset(_G, "CowboyBingusModLoader", loader_state)
@@ -2857,15 +4203,19 @@ BootModLoader = {
     }),
     hook = function(target, fn)
         if type(target) == "string" and type(fn) == "function" then
+            local hook_owner = uml_internal.current_mod_owner()
             local safe_fn = function(...)
+                local prev_owner = uml_internal.active_hook_owner
+                if hook_owner ~= nil then uml_internal.active_hook_owner = hook_owner end
                 local res = { pcall(fn, ...) }
+                uml_internal.active_hook_owner = prev_owner
                 if not res[1] then
                     record_uml_error("BootModLoader.hook:" .. target, res[2])
                     return nil
                 end
                 return unpack(res, 2)
             end
-            table.insert(BootModLoader.hooks, { target = target, fn = safe_fn, raw_fn = fn, mod = active_loading_mod_name })
+            table.insert(BootModLoader.hooks, { target = target, fn = safe_fn, raw_fn = fn, mod = hook_owner })
             table.insert(BootModLoader.hooks[target], safe_fn)
             return true
         end
@@ -2884,7 +4234,7 @@ local hd2rt = {
     on = function(evt, cb)
         if type(evt) == "string" and type(cb) == "function" then
             hd2rt_listeners[evt] = hd2rt_listeners[evt] or {}
-            table.insert(hd2rt_listeners[evt], { fn = cb, mod = active_loading_mod_name })
+            table.insert(hd2rt_listeners[evt], { fn = cb, mod = uml_internal.current_mod_owner() })
             return true
         end
         return false
@@ -2894,8 +4244,9 @@ local hd2rt = {
         if list then
             for _, item in ipairs(list) do
                 local fn = type(item) == "table" and item.fn or item
+                local item_owner = type(item) == "table" and item.mod or nil
                 if type(fn) == "function" then
-                    local ok, err = pcall(fn, ...)
+                    local ok, err = uml_internal.call_with_owner(item_owner, fn, ...)
                     if not ok then
                         record_uml_error("hd2rt.listen:" .. tostring(evt), err)
                     end
@@ -2956,6 +4307,8 @@ make_options_table = function(default_cat, mod_name)
         if not clean_id then return false, "invalid option id" end
         return chef_api.options.register(clean_id, clean_spec)
     end
+    opt_table.register_option = opt_table.register
+    opt_table.add_option = opt_table.register
     opt_table.get = function(id) return chef_api.options.get(id) end
     opt_table.set = function(id, val) return chef_api.options.set(id, val) end
     opt_table.on_change = function(id, fn) return chef_api.options.on_change(id, fn) end
@@ -2970,29 +4323,43 @@ make_options_table = function(default_cat, mod_name)
     return opt_table
 end
 
+function uml_internal.format_chef_log(skip_tbl, fmt, ...)
+    if type(fmt) == "table" and (fmt == skip_tbl or fmt == chef_api) then
+        if select('#', ...) == 0 then return "" end
+        fmt = select(1, ...)
+        if select('#', ...) > 1 then
+            local ok, res = pcall(string.format, tostring(fmt or ""), select(2, ...))
+            if ok then return res end
+        end
+        return tostring(fmt or "")
+    end
+    if select('#', ...) > 0 then
+        local ok, res = pcall(string.format, tostring(fmt or ""), ...)
+        if ok then return res end
+    end
+    return tostring(fmt or "")
+end
+
 chef_api = {
     api_level = 3,
     loader_name = "UniversalModLoader",
-    loader_version = "2.0.3",
+    loader_version = "2.0.4",
     is_chef_loader = true,
     is_universal_loader = true,
+    shared = chef_shared_state,
     after_startup = loader_state.after_startup,
     on = function(event_name, callback)
+        if type(event_name) == "table" and type(callback) == "string" then
+            -- Colon syntax fallback handled via ... if needed; ignore if invalid
+            return false
+        end
         if type(callback) ~= "function" then return false end
         if event_name == "update" then
             local id = active_loading_mod_name and (active_loading_mod_name .. "_chef_update") or ("chef_update_" .. tostring(#update_order + 1))
-            if update_hooks[id] == nil then
-                update_order[#update_order + 1] = id
-            end
-            update_hooks[id] = callback
-            return true
+            return uml_internal.register_update_hook(id, callback, active_loading_mod_name)
         elseif event_name == "shutdown" then
             local id = active_loading_mod_name and (active_loading_mod_name .. "_chef_shut") or ("chef_shut_" .. tostring(#shutdown_order + 1))
-            if shutdown_hooks[id] == nil then
-                shutdown_order[#shutdown_order + 1] = id
-            end
-            shutdown_hooks[id] = callback
-            return true
+            return uml_internal.register_shutdown_hook(id, callback, active_loading_mod_name)
         elseif event_name == "init" or event_name == "startup" or event_name == "after_startup" then
             return loader_state.after_startup(callback)
         elseif type(event_name) == "string" then
@@ -3007,15 +4374,13 @@ chef_api = {
     },
     options = {
         register = function(id, spec)
+            local target_mod = active_loading_mod_name or infer_caller_mod_name()
+            local fmt_mod = target_mod and format_mod_title(target_mod) or nil
+            local clean_id, clean_spec = wrap_spec(id, spec, nil, fmt_mod)
             local mom = rawget(_G, "ModOptionsMenu")
             if mom and type(mom.register_option) == "function" then
-                if type(id) == "table" and spec == nil then
-                    local clean_id = id.id or id.name or id.key
-                    if clean_id then
-                        return mom.register_option(clean_id, id)
-                    end
-                elseif type(id) == "string" and (type(spec) == "table" or spec == nil) then
-                    return mom.register_option(id, spec)
+                if type(clean_id) == "string" and clean_id ~= "" and (type(clean_spec) == "table" or clean_spec == nil) then
+                    return mom.register_option(clean_id, clean_spec)
                 end
             end
             return false
@@ -3042,7 +4407,17 @@ chef_api = {
     },
     group = function(group_name) return make_options_table(group_name, nil) end,
     category = function(cat_name) return make_options_table(cat_name, nil) end,
+    add_category = function(cat_name) return make_options_table(cat_name, nil) end,
     option = function(id, spec)
+        return chef_api.options.register(id, spec)
+    end,
+    register = function(id, spec)
+        return chef_api.options.register(id, spec)
+    end,
+    register_option = function(id, spec)
+        return chef_api.options.register(id, spec)
+    end,
+    add_option = function(id, spec)
         return chef_api.options.register(id, spec)
     end,
     get = function(id)
@@ -3131,60 +4506,87 @@ chef_api = {
         return false, "invalid function"
     end,
     log = function(fmt, ...)
-        pcall(print, "[ChefMod] " .. string.format(tostring(fmt or ""), ...))
-    end
+        pcall(print, "[ChefMod] " .. uml_internal.format_chef_log(nil, fmt, ...))
+    end,
+    listen = function(evt, cb) return chef_api.on(evt, cb) end,
+    hook = function(evt, cb) return chef_api.on(evt, cb) end,
+    add_hook = function(evt, cb) return chef_api.on(evt, cb) end,
+    info = function(fmt, ...) pcall(print, "[ChefMod] " .. uml_internal.format_chef_log(nil, fmt, ...)) end,
+    warn = function(fmt, ...) pcall(print, "[ChefMod] [WARN] " .. uml_internal.format_chef_log(nil, fmt, ...)) end,
+    error = function(fmt, ...) pcall(print, "[ChefMod] [ERROR] " .. uml_internal.format_chef_log(nil, fmt, ...)) end
 }
 
 create_chef_mod_context = function(mod_name)
     local formatted_mod = format_mod_title(mod_name)
     local mod_options = make_options_table(nil, mod_name)
 
-    local ctx = {
+    local ctx
+    local function reg_opt(a, b, c)
+        local id, spec = a, b
+        if a == ctx then id, spec = b, c end
+        local clean_id, clean_spec = wrap_spec(id, spec, nil, formatted_mod)
+        return chef_api.options.register(clean_id, clean_spec)
+    end
+
+    ctx = {
         api_level = 3,
         loader_name = "UniversalModLoader",
-        loader_version = "2.0.3",
+        loader_version = "2.0.4",
         is_chef_loader = true,
         is_universal_loader = true,
         mod_name = mod_name,
         name = formatted_mod,
         options = mod_options,
-        option = function(id, spec)
-            local clean_id, clean_spec = wrap_spec(id, spec, nil, formatted_mod)
-            return chef_api.options.register(clean_id, clean_spec)
-        end,
-        register_option = function(id, spec)
-            local clean_id, clean_spec = wrap_spec(id, spec, nil, formatted_mod)
-            return chef_api.options.register(clean_id, clean_spec)
-        end,
-        register = function(id, spec)
-            local clean_id, clean_spec = wrap_spec(id, spec, nil, formatted_mod)
-            return chef_api.options.register(clean_id, clean_spec)
-        end,
-        group = function(group_name)
+        option = reg_opt,
+        register_option = reg_opt,
+        register = reg_opt,
+        add_option = reg_opt,
+        group = function(a, b)
+            local group_name = (a == ctx) and b or a
             return make_options_table(group_name, mod_name)
         end,
-        category = function(cat_name)
+        category = function(a, b)
+            local cat_name = (a == ctx) and b or a
             return make_options_table(cat_name, mod_name)
         end,
-        add_category = function(cat_name)
+        add_category = function(a, b)
+            local cat_name = (a == ctx) and b or a
             return make_options_table(cat_name, mod_name)
         end,
-        get = function(id) return chef_api.get(id) end,
-        set = function(id, val) return chef_api.set(id, val) end,
-        on = function(evt, cb) return chef_api.on(evt, cb) end,
-        listen = function(evt, cb) return chef_api.on(evt, cb) end,
-        hook = function(evt, cb) return chef_api.on(evt, cb) end,
-        add_hook = function(evt, cb) return chef_api.on(evt, cb) end,
+        get = function(a, b) return chef_api.get((a == ctx) and b or a) end,
+        set = function(a, b, c)
+            if a == ctx then return chef_api.set(b, c) end
+            return chef_api.set(a, b)
+        end,
+        on = function(a, b, c)
+            if a == ctx then return chef_api.on(b, c) end
+            return chef_api.on(a, b)
+        end,
+        listen = function(a, b, c)
+            if a == ctx then return chef_api.on(b, c) end
+            return chef_api.on(a, b)
+        end,
+        hook = function(a, b, c)
+            if a == ctx then return chef_api.on(b, c) end
+            return chef_api.on(a, b)
+        end,
+        add_hook = function(a, b, c)
+            if a == ctx then return chef_api.on(b, c) end
+            return chef_api.on(a, b)
+        end,
         after_startup = chef_api.after_startup,
-        on_change = function(id, fn) return chef_api.on_change(id, fn) end,
+        on_change = function(a, b, c)
+            if a == ctx then return chef_api.on_change(b, c) end
+            return chef_api.on_change(a, b)
+        end,
         state = chef_api.state,
         shared = chef_shared_state,
         own_log = function(name, ...) return chef_api.own_log(name or mod_name, ...) end,
         call_kind = chef_api.call_kind,
-        log = chef_api.log,
-        info = function(fmt, ...) pcall(print, "[" .. formatted_mod .. "] " .. string.format(fmt, ...)) end,
-        warn = function(fmt, ...) pcall(print, "[" .. formatted_mod .. "] [WARN] " .. string.format(fmt, ...)) end,
-        error = function(fmt, ...) pcall(print, "[" .. formatted_mod .. "] [ERROR] " .. string.format(fmt, ...)) end,
+        log = function(fmt, ...) pcall(print, "[" .. formatted_mod .. "] " .. uml_internal.format_chef_log(ctx, fmt, ...)) end,
+        info = function(fmt, ...) pcall(print, "[" .. formatted_mod .. "] " .. uml_internal.format_chef_log(ctx, fmt, ...)) end,
+        warn = function(fmt, ...) pcall(print, "[" .. formatted_mod .. "] [WARN] " .. uml_internal.format_chef_log(ctx, fmt, ...)) end,
+        error = function(fmt, ...) pcall(print, "[" .. formatted_mod .. "] [ERROR] " .. uml_internal.format_chef_log(ctx, fmt, ...)) end,
         bindings = chef_api.bindings
     }
     setmetatable(ctx, { __index = chef_api })
@@ -3201,13 +4603,10 @@ chef_api.add_category = chef_api.group
 chef_api.options.group = chef_api.group
 chef_api.options.category = chef_api.group
 chef_api.options.add_category = chef_api.group
+chef_api.options.register_option = chef_api.options.register
+chef_api.options.add_option = chef_api.options.register
 
 _G.ChefSharedLoader = chef_api
-
-local chef_preload_handler = function(opt_mod_name)
-    local target_mod = opt_mod_name or active_loading_mod_name or infer_caller_mod_name()
-    return create_chef_mod_context(target_mod)
-end
 
 local chef_aliases = {
     "ChefSharedLoader",
@@ -3227,6 +4626,17 @@ local chef_aliases = {
     "chef"
 }
 for _, alias in ipairs(chef_aliases) do
+    uml_internal.chef_alias_set[alias] = true
+end
+
+local chef_preload_handler = function(opt_mod_name)
+    if opt_mod_name == nil or uml_internal.chef_alias_set[opt_mod_name] then
+        return chef_api
+    end
+    return create_chef_mod_context(opt_mod_name)
+end
+
+for _, alias in ipairs(chef_aliases) do
     package.preload[alias] = chef_preload_handler
     package.loaded[alias] = chef_api
 end
@@ -3241,6 +4651,27 @@ local function get_settings_file_paths()
         localapp .. "/UniversalModLoader/mod_settings.json",
         "uml_mod_settings.json"
     }
+end
+
+function uml_internal.json_escape_string(s)
+    local out = { '"' }
+    for i = 1, #s do
+        local b = string.byte(s, i)
+        if b == 34 then out[#out + 1] = '\\"'
+        elseif b == 92 then out[#out + 1] = '\\\\'
+        elseif b == 8 then out[#out + 1] = '\\b'
+        elseif b == 12 then out[#out + 1] = '\\f'
+        elseif b == 10 then out[#out + 1] = '\\n'
+        elseif b == 13 then out[#out + 1] = '\\r'
+        elseif b == 9 then out[#out + 1] = '\\t'
+        elseif b < 32 or b == 127 then
+            out[#out + 1] = string.format("\\u%04x", b)
+        else
+            out[#out + 1] = string.char(b)
+        end
+    end
+    out[#out + 1] = '"'
+    return table.concat(out)
 end
 
 local function resilient_parse_json(content)
@@ -3273,6 +4704,10 @@ local function resilient_parse_json(content)
             if c == '\\' then
                 chunks[#chunks + 1] = content:sub(s_start, pos - 1)
                 pos = pos + 1
+                if pos > len then
+                    s_start = pos
+                    break
+                end
                 local esc = content:sub(pos, pos)
                 if esc == '"' then chunks[#chunks + 1] = '"'
                 elseif esc == '\\' then chunks[#chunks + 1] = '\\'
@@ -3284,13 +4719,19 @@ local function resilient_parse_json(content)
                 elseif esc == 't' then chunks[#chunks + 1] = '\t'
                 elseif esc == 'u' then
                     local hex = content:sub(pos + 1, pos + 4)
-                    local code = tonumber(hex, 16)
-                    if code and code >= 32 and code < 127 then
-                        chunks[#chunks + 1] = string.char(code)
+                    if #hex == 4 and hex:match("^%x%x%x%x$") then
+                        local code = tonumber(hex, 16)
+                        if code and code >= 0 and code < 128 then
+                            chunks[#chunks + 1] = string.char(code)
+                        elseif code and code >= 0x80 and code <= 0xFFFF and not (code >= 0xD800 and code <= 0xDFFF) then
+                            chunks[#chunks + 1] = utf8_lib.char(code)
+                        else
+                            chunks[#chunks + 1] = "?"
+                        end
+                        pos = pos + 4
                     else
-                        chunks[#chunks + 1] = "?"
+                        chunks[#chunks + 1] = "u"
                     end
-                    pos = pos + 4
                 else
                     chunks[#chunks + 1] = esc
                 end
@@ -3304,7 +4745,141 @@ local function resilient_parse_json(content)
                 pos = pos + 1
             end
         end
+        if s_start <= len then
+            chunks[#chunks + 1] = content:sub(s_start, len)
+        end
         return table.concat(chunks)
+    end
+
+    local function skip_balanced_container()
+        local open_c = content:sub(pos, pos)
+        local close_c = (open_c == '{') and '}' or ']'
+        local depth = 0
+        while pos <= len do
+            local c = content:sub(pos, pos)
+            if c == '"' then
+                parse_string()
+            elseif c == open_c then
+                depth = depth + 1
+                pos = pos + 1
+            elseif c == close_c then
+                depth = depth - 1
+                pos = pos + 1
+                if depth <= 0 then return end
+            else
+                pos = pos + 1
+            end
+        end
+    end
+
+    local function is_delim(idx)
+        if idx > len then return true end
+        local d = content:sub(idx, idx)
+        return d == ' ' or d == '\t' or d == '\r' or d == '\n' or d == ',' or d == '}' or d == ']'
+    end
+
+    local function skip_ws_only()
+        while pos <= len do
+            local c = content:sub(pos, pos)
+            if c == ' ' or c == '\t' or c == '\r' or c == '\n' then
+                pos = pos + 1
+            else
+                break
+            end
+        end
+    end
+
+    local function try_parse_strict_val(depth)
+        if depth > 10 then return nil, false end
+        skip_ws_only()
+        if pos > len then return nil, false end
+        local vc = content:sub(pos, pos)
+        if vc == '"' then
+            local s = parse_string()
+            return s, (s ~= nil)
+        elseif vc == '{' then
+            pos = pos + 1
+            local obj = {}
+            skip_ws_only()
+            if pos <= len and content:sub(pos, pos) == '}' then
+                pos = pos + 1
+                return obj, true
+            end
+            while pos <= len do
+                skip_ws_only()
+                if content:sub(pos, pos) ~= '"' then return nil, false end
+                local k = parse_string()
+                if k == nil then return nil, false end
+                skip_ws_only()
+                if pos > len or content:sub(pos, pos) ~= ':' then return nil, false end
+                pos = pos + 1
+                local sub_v, ok_v = try_parse_strict_val(depth + 1)
+                if not ok_v then return nil, false end
+                obj[k] = sub_v
+                skip_ws_only()
+                local sep = content:sub(pos, pos)
+                if sep == ',' then
+                    pos = pos + 1
+                    skip_ws_only()
+                    if content:sub(pos, pos) == '}' then
+                        pos = pos + 1
+                        return obj, true
+                    end
+                elseif sep == '}' then
+                    pos = pos + 1
+                    return obj, true
+                else
+                    return nil, false
+                end
+            end
+            return nil, false
+        elseif vc == '[' then
+            pos = pos + 1
+            local arr = {}
+            skip_ws_only()
+            if pos <= len and content:sub(pos, pos) == ']' then
+                pos = pos + 1
+                return arr, true
+            end
+            while pos <= len do
+                local sub_v, ok_v = try_parse_strict_val(depth + 1)
+                if not ok_v then return nil, false end
+                arr[#arr + 1] = sub_v
+                skip_ws_only()
+                local sep = content:sub(pos, pos)
+                if sep == ',' then
+                    pos = pos + 1
+                    skip_ws_only()
+                    if content:sub(pos, pos) == ']' then
+                        pos = pos + 1
+                        return arr, true
+                    end
+                elseif sep == ']' then
+                    pos = pos + 1
+                    return arr, true
+                else
+                    return nil, false
+                end
+            end
+            return nil, false
+        elseif content:sub(pos, pos + 3) == "true" and is_delim(pos + 4) then
+            pos = pos + 4
+            return true, true
+        elseif content:sub(pos, pos + 4) == "false" and is_delim(pos + 5) then
+            pos = pos + 5
+            return false, true
+        elseif content:sub(pos, pos + 3) == "null" and is_delim(pos + 4) then
+            pos = pos + 4
+            return nil, true
+        else
+            local num_str = content:sub(pos):match("^([%-%+]?%d*%.?%d+[eE]?[%-%+]?%d*)")
+            local num_val = num_str and tonumber(num_str) or nil
+            if num_val ~= nil and is_delim(pos + #num_str) then
+                pos = pos + #num_str
+                return num_val, true
+            end
+        end
+        return nil, false
     end
 
     while pos <= len do
@@ -3325,22 +4900,33 @@ local function resilient_parse_json(content)
                     if vc == '"' then
                         val = parse_string()
                         parsed_any = true
-                    elseif content:sub(pos, pos + 3) == "true" then
+                    elseif vc == '{' or vc == '[' then
+                        local saved_pos = pos
+                        local sub_tbl, ok_tbl = try_parse_strict_val(0)
+                        if ok_tbl then
+                            val = sub_tbl
+                        else
+                            pos = saved_pos
+                            skip_balanced_container()
+                        end
+                        parsed_any = true
+                    elseif content:sub(pos, pos + 3) == "true" and is_delim(pos + 4) then
                         val = true
                         pos = pos + 4
                         parsed_any = true
-                    elseif content:sub(pos, pos + 4) == "false" then
+                    elseif content:sub(pos, pos + 4) == "false" and is_delim(pos + 5) then
                         val = false
                         pos = pos + 5
                         parsed_any = true
-                    elseif content:sub(pos, pos + 3) == "null" then
+                    elseif content:sub(pos, pos + 3) == "null" and is_delim(pos + 4) then
                         val = nil
                         pos = pos + 4
                         parsed_any = true
                     else
                         local num_str = content:sub(pos):match("^([%-%+]?%d*%.?%d+[eE]?[%-%+]?%d*)")
-                        if num_str and num_str ~= "" and num_str ~= "-" and num_str ~= "+" then
-                            val = tonumber(num_str)
+                        local num_val = num_str and tonumber(num_str) or nil
+                        if num_val ~= nil then
+                            val = num_val
                             pos = pos + #num_str
                             parsed_any = true
                         else
@@ -3404,25 +4990,70 @@ local function load_saved_settings()
     return out
 end
 
+local function serialize_json_value(v, depth, seen)
+    depth = depth or 0
+    if depth > 8 then return nil end
+    local tv = type(v)
+    if tv == "boolean" then
+        return v and "true" or "false"
+    elseif tv == "number" then
+        if v ~= v or v == math.huge or v == -math.huge then return nil end
+        return tostring(v)
+    elseif tv == "string" then
+        return uml_internal.json_escape_string(v)
+    elseif tv == "table" then
+        seen = seen or {}
+        if seen[v] then return nil end
+        seen[v] = true
+        local n = #v
+        local count = 0
+        local is_array = true
+        local keys = {}
+        for k in pairs(v) do
+            count = count + 1
+            if type(k) ~= "number" or k < 1 or k > n or math.floor(k) ~= k then
+                is_array = false
+            end
+            if type(k) == "string" or type(k) == "number" then
+                keys[#keys + 1] = k
+            end
+        end
+        if count == 0 then
+            seen[v] = nil
+            return "{}"
+        end
+        if is_array and n == count then
+            local arr = {}
+            for i = 1, n do
+                local sv = serialize_json_value(v[i], depth + 1, seen)
+                arr[#arr + 1] = sv or "null"
+            end
+            seen[v] = nil
+            return "[" .. table.concat(arr, ", ") .. "]"
+        end
+        table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+        local obj = {}
+        for i = 1, #keys do
+            local k = keys[i]
+            local sv = serialize_json_value(v[k], depth + 1, seen)
+            if sv ~= nil then
+                obj[#obj + 1] = uml_internal.json_escape_string(tostring(k)) .. ": " .. sv
+            end
+        end
+        seen[v] = nil
+        return "{" .. table.concat(obj, ", ") .. "}"
+    end
+    return nil
+end
+
 local function save_settings_to_disk(values)
     if type(values) ~= "table" then return false end
     local parts = {}
     for k, v in pairs(values) do
         if type(k) == "string" and k ~= "" then
-            local val_str = nil
-            if type(v) == "boolean" then
-                val_str = v and "true" or "false"
-            elseif type(v) == "number" then
-                if v ~= v or v == math.huge or v == -math.huge then
-                    val_str = nil
-                else
-                    val_str = tostring(v)
-                end
-            elseif type(v) == "string" then
-                val_str = string.format("%q", v)
-            end
+            local val_str = serialize_json_value(v, 0)
             if val_str ~= nil then
-                parts[#parts + 1] = string.format("  %q: %s", tostring(k), val_str)
+                parts[#parts + 1] = "  " .. uml_internal.json_escape_string(k) .. ": " .. val_str
             end
         end
     end
@@ -3430,7 +5061,7 @@ local function save_settings_to_disk(values)
     local saved = false
     local paths = get_settings_file_paths()
     for i = 1, #paths do
-        local f = io.open(paths[i], "w")
+        local f = io.open(paths[i], "wb")
         if f then
             f:write(payload)
             f:close()
@@ -3460,8 +5091,14 @@ if rawget(_G, "ModOptionsMenu") == nil then
         change_callbacks = callbacks_opts,
         ready = function() return true end,
         register_option = function(id, spec)
+            if type(id) == "table" and spec == nil then
+                spec = id
+                id = spec.id or spec.name or spec.key
+            end
             if type(id) ~= "string" or id == "" then return false, "invalid option id" end
             spec = type(spec) == "table" and spec or {}
+            if spec.type == "action" then spec.type = "button" end
+            spec.owner_mod = spec.owner_mod or uml_internal.current_mod_owner()
             if not spec.mod and not spec.title and not spec.mod_name then
                 if active_loading_mod_name then
                     spec.mod = format_mod_title(active_loading_mod_name)
@@ -3488,24 +5125,81 @@ if rawget(_G, "ModOptionsMenu") == nil then
             if fallback_opts[id] == nil and spec.default ~= nil then
                 fallback_opts[id] = spec.default
             end
+            if type(spec.on_change) == "function" then
+                local cbs = callbacks_opts[id] or {}
+                callbacks_opts[id] = cbs
+                local exists = false
+                for i = 1, #cbs do
+                    if cbs[i] == spec.on_change then exists = true; break end
+                end
+                if not exists then
+                    cbs[#cbs + 1] = spec.on_change
+                end
+                if spec.owner_mod then
+                    uml_internal.mom_cb_owners[spec.on_change] = spec.owner_mod
+                end
+            end
             return true
         end,
-        get = function(id)
-            if type(id) ~= "string" or id == "" then return nil end
+        get = function(id, default_val)
+            if type(id) ~= "string" or id == "" then return default_val end
             if fallback_opts[id] ~= nil then return fallback_opts[id] end
             local s = registered_opts[id]
-            if s then return s.default end
-            return nil
+            if s and s.default ~= nil then return s.default end
+            return default_val
+        end,
+        trigger = function(id, ...)
+            if type(id) ~= "string" or id == "" then return false end
+            local s = registered_opts[id]
+            local cbs = callbacks_opts[id]
+            if not s and not cbs then return false end
+            local owner = s and s.owner_mod or uml_internal.current_mod_owner()
+            if s then
+                local click_fn = s.on_click or s.callback or s.on_press or s.action
+                if type(click_fn) == "function" then
+                    local ok_c, err_c = uml_internal.call_with_owner(owner, click_fn, id, ...)
+                    if not ok_c then
+                        record_uml_error("button_click:" .. tostring(id), err_c)
+                    end
+                end
+            end
+            if cbs then
+                for i = 1, #cbs do
+                    local fn = cbs[i]
+                    local ok_b, err_b = uml_internal.call_with_owner(uml_internal.mom_cb_owners[fn] or owner, fn, true, id, nil)
+                    if not ok_b then
+                        record_uml_error("on_change:" .. tostring(id), err_b)
+                    end
+                end
+            end
+            return true
         end,
         set = function(id, v)
             if type(id) ~= "string" or id == "" then return false end
             local old = fallback_opts[id]
             fallback_opts[id] = v
             mom_stub.revision = mom_stub.revision + 1
+            if (uml_internal.syncing_binding_mom or 0) == 0 then
+                local s = registered_opts[id]
+                local mbm = rawget(_G, "ModBindingsMenu")
+                local has_bind = mbm and type(mbm.bindings) == "table" and mbm.bindings[id] ~= nil
+                if (s and s.type == "key") or has_bind then
+                    local norm_k = uml_internal.normalize_key_name(v)
+                    if has_bind and type(mbm.assignments) == "table" then
+                        mbm.assignments[id] = norm_k
+                        if type(mbm.revision) == "number" then mbm.revision = mbm.revision + 1 end
+                    end
+                    uml_internal.sync_binding_key_change(id, norm_k)
+                end
+            end
             local cbs = callbacks_opts[id]
             if cbs then
                 for i = 1, #cbs do
-                    pcall(cbs[i], v, id, old)
+                    local fn = cbs[i]
+                    local ok_c, err_c = uml_internal.call_with_owner(uml_internal.mom_cb_owners[fn], fn, v, id, old)
+                    if not ok_c then
+                        record_uml_error("on_change:" .. tostring(id), err_c)
+                    end
                 end
             end
             pcall(save_settings_to_disk, fallback_opts)
@@ -3515,6 +5209,10 @@ if rawget(_G, "ModOptionsMenu") == nil then
             if type(id) == "string" and type(cb) == "function" then
                 callbacks_opts[id] = callbacks_opts[id] or {}
                 table.insert(callbacks_opts[id], cb)
+                local cb_owner = uml_internal.current_mod_owner()
+                if cb_owner then
+                    uml_internal.mom_cb_owners[cb] = cb_owner
+                end
                 return true
             end
             return false, "invalid callback"
@@ -3528,15 +5226,49 @@ if rawget(_G, "ModOptionsMenu") == nil then
             return false
         end,
         reset = function()
+            local changed = {}
+            local mbm = rawget(_G, "ModBindingsMenu")
+            local mbm_binds = mbm and type(mbm.bindings) == "table" and mbm.bindings or nil
             for id, s in pairs(registered_opts) do
                 if s and s.default ~= nil then
+                    local old = fallback_opts[id]
+                    if old ~= s.default then
+                        changed[#changed + 1] = { id = id, old = old, new = s.default }
+                    end
                     fallback_opts[id] = s.default
+                    if (uml_internal.syncing_binding_mom or 0) == 0 and (s.type == "key" or (mbm_binds and mbm_binds[id] ~= nil)) then
+                        local norm_k = uml_internal.normalize_key_name(s.default)
+                        if mbm_binds and mbm_binds[id] ~= nil and type(mbm.assignments) == "table" then
+                            mbm.assignments[id] = norm_k
+                            if type(mbm.revision) == "number" then mbm.revision = mbm.revision + 1 end
+                        end
+                        uml_internal.sync_binding_key_change(id, norm_k)
+                    end
                 end
             end
             mom_stub.revision = mom_stub.revision + 1
             pcall(save_settings_to_disk, fallback_opts)
+            for i = 1, #changed do
+                local ch = changed[i]
+                local cbs = callbacks_opts[ch.id]
+                if cbs then
+                    for j = 1, #cbs do
+                        local fn = cbs[j]
+                        local ok_r, err_r = uml_internal.call_with_owner(uml_internal.mom_cb_owners[fn], fn, ch.new, ch.id, ch.old)
+                        if not ok_r then
+                            record_uml_error("on_change:" .. tostring(ch.id), err_r)
+                        end
+                    end
+                end
+            end
             return true
         end,
+        menu = uml_internal.menu_api,
+        is_menu_open = uml_internal.is_menu_open,
+        get_menu_state = uml_internal.get_menu_state,
+        open_menu = uml_internal.open_menu,
+        close_menu = uml_internal.close_menu,
+        toggle_menu = uml_internal.toggle_menu,
         log = function(...) end
     }
     _G.ModOptionsMenu = mom_stub
@@ -3567,12 +5299,9 @@ if rawget(_G, "ModBindingsMenu") == nil then
     local bound_keys = {}
     local registry_binds = {}
     local order_binds = {}
-    local sr_keyboard = nil
     local function get_kb()
-        if sr_keyboard ~= nil then return sr_keyboard end
         local sr = rawget(_G, "stingray")
-        if sr and sr.Keyboard then sr_keyboard = sr.Keyboard end
-        return sr_keyboard
+        return (sr and (rawget(sr, "Keyboard") or rawget(_G, "Keyboard"))) or rawget(_G, "Keyboard")
     end
 
     local function extract_default_key(slot, extra)
@@ -3590,6 +5319,27 @@ if rawget(_G, "ModBindingsMenu") == nil then
     end
 
     local mbm_stub
+    local function resolve_query_params(id, allow_in_menu)
+        local rec = registry_binds[id]
+        local allow_menu
+        if allow_in_menu ~= nil then
+            allow_menu = (allow_in_menu == true)
+        else
+            allow_menu = (rec and rec.allow_in_menu == true) or false
+        end
+        local mom = rawget(_G, "ModOptionsMenu")
+        local k = (mom and mom.get(id)) or bound_keys[id] or (rec and rec.default)
+        local norm_k = uml_internal.normalize_key_name(k)
+        if norm_k == "off" then
+            local ek = "mbm:" .. tostring(id)
+            if uml_internal.poll_edge_state[ek] then
+                uml_internal.reset_edge_state_for_key(uml_internal.poll_edge_state[ek], "off")
+            end
+            return allow_menu, "off", rec and rec.owner_mod or nil
+        end
+        return allow_menu, norm_k, (rec and rec.owner_mod) or uml_internal.current_mod_owner()
+    end
+
     mbm_stub = {
         api = 1,
         version = 4,
@@ -3610,12 +5360,18 @@ if rawget(_G, "ModBindingsMenu") == nil then
             end
             local def_k = extract_default_key(default_key, extra)
             local cat = (type(extra) == "table" and type(extra.category) == "string" and extra.category) or "Keybindings"
+            local allow_menu = (type(extra) == "table" and extra.allow_in_menu == true) or false
+            local owner_mod = uml_internal.current_mod_owner(
+                type(extra) == "table" and (extra.owner_mod or (type(extra.mod) == "table" and extra.mod._owner_mod) or (type(extra.mod) == "string" and extra.mod) or nil) or nil
+            )
             registry_binds[id] = {
                 id = id,
                 label = label or id,
                 default = def_k,
                 extra = extra,
-                category = cat
+                category = cat,
+                allow_in_menu = allow_menu,
+                owner_mod = owner_mod
             }
             local mom = rawget(_G, "ModOptionsMenu")
             if mom and type(mom.register_option) == "function" then
@@ -3624,7 +5380,8 @@ if rawget(_G, "ModBindingsMenu") == nil then
                     label = label or id,
                     default = def_k,
                     mod = cat,
-                    description = "Press Left/Right to rebind key (ESC to cancel, DEL to unbind)."
+                    description = (type(extra) == "table" and type(extra.description) == "string" and extra.description)
+                        or "Press Left/Right to rebind key (ESC to cancel, DEL to unbind)."
                 })
                 local saved_k = mom.get(id)
                 if type(saved_k) == "string" and saved_k ~= "" then
@@ -3633,6 +5390,32 @@ if rawget(_G, "ModBindingsMenu") == nil then
             end
             if bound_keys[id] == nil and def_k ~= nil then
                 bound_keys[id] = def_k
+            end
+            if type(extra) == "table" and type(extra.callback) == "function" then
+                local mode = (type(extra.mode) == "string" and extra.mode:lower()) or "press"
+                local updated = false
+                for i = 1, #uml_key_bindings do
+                    if uml_key_bindings[i].id == id then
+                        uml_key_bindings[i].key = def_k
+                        uml_key_bindings[i].cb = extra.callback
+                        uml_key_bindings[i].mode = mode
+                        uml_key_bindings[i].allow_in_menu = allow_menu
+                        uml_key_bindings[i].owner_mod = owner_mod
+                        updated = true
+                        break
+                    end
+                end
+                if not updated then
+                    uml_key_bindings[#uml_key_bindings + 1] = {
+                        id = id,
+                        key = def_k,
+                        cb = extra.callback,
+                        mode = mode,
+                        allow_in_menu = allow_menu,
+                        mod = extra.mod,
+                        owner_mod = owner_mod
+                    }
+                end
             end
             mbm_stub.revision = mbm_stub.revision + 1
             return true
@@ -3648,13 +5431,16 @@ if rawget(_G, "ModBindingsMenu") == nil then
             return (mom and mom.get(id)) or bound_keys[id] or (registry_binds[id] and registry_binds[id].default)
         end,
         set_binding = function(id, key)
-            local norm = (type(key) == "string" and key ~= "") and key:lower() or "off"
+            local norm = uml_internal.normalize_key_name(key)
             bound_keys[id] = norm
+            mbm_stub.revision = mbm_stub.revision + 1
+            uml_internal.sync_binding_key_change(id, norm)
             local mom = rawget(_G, "ModOptionsMenu")
             if mom and mom.registered and mom.registered[id] then
-                mom.set(id, norm)
+                uml_internal.syncing_binding_mom = (uml_internal.syncing_binding_mom or 0) + 1
+                pcall(mom.set, id, norm)
+                uml_internal.syncing_binding_mom = math.max(0, uml_internal.syncing_binding_mom - 1)
             end
-            mbm_stub.revision = mbm_stub.revision + 1
             return true
         end,
         reset_binding = function(id)
@@ -3665,42 +5451,36 @@ if rawget(_G, "ModBindingsMenu") == nil then
             end
             return false
         end,
-        is_down = function(id)
-            if not is_gameplay_input_allowed() then return false end
-            local mom = rawget(_G, "ModOptionsMenu")
-            local k = (mom and mom.get(id)) or bound_keys[id] or (registry_binds[id] and registry_binds[id].default)
-            if type(k) ~= "string" or k == "" or k == "off" then return false end
-            local kb = get_kb()
-            if kb then
-                local bid = resolve_button_id(kb, k)
-                if bid ~= nil and query_device_button(kb, bid, "button") then
-                    return true
-                end
+        is_down = function(id, allow_in_menu)
+            local allow_menu, k, owner = resolve_query_params(id, allow_in_menu)
+            if k == "off" then return false end
+            if uml_internal.is_input_blocked(allow_menu) then
+                uml_internal.poll_edge_key("mbm:" .. tostring(id), k, allow_menu, false, owner)
+                return false
             end
-            return false
+            uml_internal.poll_edge_key("mbm:" .. tostring(id), k, allow_menu, false, owner)
+            local st = uml_internal.poll_edge_state["mbm:" .. tostring(id)]
+            if st and st.blocked_latch then return false end
+            return key_down(k)
         end,
-        is_pressed = function(id)
-            if not is_gameplay_input_allowed() then return false end
-            local mom = rawget(_G, "ModOptionsMenu")
-            local k = (mom and mom.get(id)) or bound_keys[id] or (registry_binds[id] and registry_binds[id].default)
-            if type(k) ~= "string" or k == "" or k == "off" then return false end
-            local kb = get_kb()
-            if kb then
-                local bid = resolve_button_id(kb, k)
-                if bid ~= nil and query_device_button(kb, bid, "pressed") then
-                    return true
-                end
-            end
-            return false
+        is_pressed = function(id, allow_in_menu)
+            local allow_menu, k, owner = resolve_query_params(id, allow_in_menu)
+            if k == "off" then return false end
+            return uml_internal.poll_edge_key("mbm:" .. tostring(id), k, allow_menu, false, owner)
         end,
-        poll = function(ids, out)
+        consume_press = function(id, allow_in_menu)
+            local allow_menu, k, owner = resolve_query_params(id, allow_in_menu)
+            if k == "off" then return false end
+            return uml_internal.poll_edge_key("mbm:" .. tostring(id), k, allow_menu, true, owner)
+        end,
+        poll = function(ids, out, allow_in_menu)
             if type(ids) ~= "table" or type(out) ~= "table" then return false, "invalid poll arguments" end
             out.down = out.down or {}
             out.pressed = out.pressed or {}
             out.released = out.released or {}
             out.last = out.last or {}
             for i = 1, #ids do
-                local down = mbm_stub.is_down(ids[i]) == true
+                local down = mbm_stub.is_down(ids[i], allow_in_menu) == true
                 local was = out.last[i] == true
                 out.down[i] = down
                 out.pressed[i] = down and not was
@@ -3748,7 +5528,7 @@ if rawget(_G, "RatsSharedLoader") == nil then
             return true
         end,
         get_spec = function(self, name)
-            if type(self) == "string" and name == nil then
+            if type(self) == "string" then
                 name = self
                 self = rat_api
             elseif type(self) ~= "table" then
@@ -3768,30 +5548,41 @@ if rawget(_G, "RatsSharedLoader") == nil then
             self.hooks = self.hooks or {}
             self.hooks[evt] = self.hooks[evt] or {}
             table.insert(self.hooks[evt], cb)
+            local cb_owner = uml_internal.current_mod_owner()
+            if cb_owner then
+                uml_internal.rat_hook_owners[cb] = cb_owner
+            end
             if (evt == "update" or evt == "on_update") and type(cb) == "function" then
-                local id = active_loading_mod_name and (active_loading_mod_name .. "_rats_update") or ("rats_update_" .. tostring(#update_order + 1))
-                if update_hooks[id] == nil then
-                    update_order[#update_order + 1] = id
-                end
-                update_hooks[id] = cb
+                local id = cb_owner and (cb_owner .. "_rats_update") or ("rats_update_" .. tostring(#update_order + 1))
+                uml_internal.register_update_hook(id, cb, cb_owner)
             elseif (evt == "init" or evt == "startup" or evt == "after_startup") and type(cb) == "function" then
                 loader_state.after_startup(cb)
             end
             return true
         end,
-        trigger = function(self, evt, ...)
-            if type(self) == "string" then
+        trigger = function(self, ...)
+            local evt
+            local is_dot = (type(self) == "string")
+            if is_dot then
                 evt = self
                 self = rat_api
-            elseif type(self) ~= "table" then
-                self = rat_api
+            else
+                if type(self) ~= "table" then
+                    self = rat_api
+                end
+                evt = select(1, ...)
             end
             local list = self.hooks and self.hooks[evt]
             if list then
                 for i = 1, #list do
                     local fn = list[i]
                     if type(fn) == "function" then
-                        local ok, err = pcall(fn, ...)
+                        local ok, err
+                        if is_dot then
+                            ok, err = uml_internal.call_with_owner(uml_internal.rat_hook_owners[fn], fn, ...)
+                        else
+                            ok, err = uml_internal.call_with_owner(uml_internal.rat_hook_owners[fn], fn, select(2, ...))
+                        end
                         if not ok then
                             record_uml_error("RatsSharedLoader:" .. tostring(evt), err)
                         end
@@ -3861,12 +5652,589 @@ local function topological_sort_modules(modules, deps_map)
 end
 
 -- Subsystem 4.1: Native Modern UML Developer API (60-second modder template)
+function uml_internal.register_key_callback(mod_name, mod_self, owner_mod, key_or_spec, callback, trigger_mode, opts)
+    local kname = key_or_spec
+    local cb = callback
+    local mode = trigger_mode
+    local extra = opts
+    if type(key_or_spec) == "table" then
+        extra = key_or_spec
+        kname = key_or_spec.key or key_or_spec.default
+        cb = key_or_spec.callback or key_or_spec.cb or callback
+        mode = key_or_spec.mode or key_or_spec.trigger_mode or mode
+    elseif type(key_or_spec) == "string" and type(callback) == "string" and type(trigger_mode) == "function" then
+        local orig_opts = type(opts) == "table" and opts or {}
+        extra = {}
+        for k, v in pairs(orig_opts) do extra[k] = v end
+        if extra.id == nil or extra.id == "" then
+            extra.id = key_or_spec
+        end
+        if extra.label == nil or extra.label == "" then
+            extra.label = key_or_spec:gsub("[%-_]+", " "):gsub("^%s*(.-)%s*$", "%1")
+        end
+        kname = callback
+        cb = trigger_mode
+        mode = (type(opts) == "string" and opts) or extra.mode or extra.trigger_mode or "press"
+    elseif type(trigger_mode) == "table" and opts == nil then
+        extra = trigger_mode
+        mode = trigger_mode.mode or trigger_mode.trigger_mode
+    end
+    extra = type(extra) == "table" and extra or {}
+    if type(kname) ~= "string" or kname == "" or type(cb) ~= "function" then
+        return false
+    end
+    local norm_k = kname:lower()
+    local has_explicit_id = (type(extra.id) == "string" and extra.id ~= "")
+    local bind_id
+    if has_explicit_id then
+        bind_id = (extra.id:find(".", 1, true) or not mod_name) and extra.id or (mod_name .. "." .. extra.id)
+    elseif mod_name then
+        bind_id = mod_name .. ".key_" .. norm_k:gsub("%s+", "_")
+    else
+        bind_id = "uml.key_" .. norm_k:gsub("%s+", "_") .. "_" .. tostring(#uml_key_bindings + 1)
+    end
+    local allow_menu = (extra.allow_in_menu == true)
+    local norm_mode = (type(mode) == "string" and mode:lower()) or "press"
+    local resolved_owner = uml_internal.current_mod_owner(owner_mod)
+    local mbm = rawget(_G, "ModBindingsMenu")
+    if (mod_name or extra.register_binding == true or has_explicit_id) and mbm and type(mbm.register_binding) == "function" then
+        local def_cat = mod_name or "UML"
+        local def_label = extra.label or (def_cat .. " (" .. norm_k:upper() .. ")")
+        pcall(mbm.register_binding, bind_id, def_label, norm_k, {
+            default = norm_k,
+            category = extra.category or def_cat,
+            description = extra.description,
+            allow_in_menu = allow_menu,
+            owner_mod = resolved_owner
+        })
+    end
+    local updated = false
+    if has_explicit_id then
+        for i = 1, #uml_key_bindings do
+            if uml_key_bindings[i].id == bind_id then
+                uml_key_bindings[i].key = norm_k
+                uml_key_bindings[i].cb = cb
+                uml_key_bindings[i].mode = norm_mode
+                uml_key_bindings[i].allow_in_menu = allow_menu
+                uml_key_bindings[i].mod = mod_self
+                uml_key_bindings[i].owner_mod = resolved_owner
+                updated = true
+                break
+            end
+        end
+    end
+    if not updated then
+        uml_key_bindings[#uml_key_bindings + 1] = {
+            id = bind_id,
+            key = norm_k,
+            cb = cb,
+            mode = norm_mode,
+            allow_in_menu = allow_menu,
+            mod = mod_self,
+            owner_mod = resolved_owner
+        }
+    end
+    return true, bind_id
+end
+
+function uml_internal.poll_id_or_key(mod_prefix, id_or_key, allow_in_menu, mode)
+    if type(id_or_key) ~= "string" or id_or_key == "" then return false end
+    local mbm = rawget(_G, "ModBindingsMenu")
+    local target_id = id_or_key
+    if mbm and type(mbm.bindings) == "table" then
+        if mod_prefix and not id_or_key:find(".", 1, true) and mbm.bindings[mod_prefix .. "." .. id_or_key] then
+            target_id = mod_prefix .. "." .. id_or_key
+        end
+        if mbm.bindings[target_id] then
+            if mode == "down" then
+                return mbm.is_down(target_id, allow_in_menu)
+            elseif mode == "consume" then
+                return mbm.consume_press(target_id, allow_in_menu)
+            else
+                return mbm.is_pressed(target_id, allow_in_menu)
+            end
+        end
+    end
+    local owner = uml_internal.current_mod_owner(mod_prefix)
+    local scope = mod_prefix or owner or "global"
+    local allow_menu = (allow_in_menu == true)
+    local norm_k = uml_internal.normalize_key_name(id_or_key)
+    if norm_k == "off" then return false end
+    local raw_latch = "raw:" .. tostring(scope) .. ":" .. norm_k
+    if mode == "down" then
+        if uml_internal.is_input_blocked(allow_menu) then
+            uml_internal.poll_edge_key(raw_latch, norm_k, allow_menu, false, owner)
+            return false
+        end
+        uml_internal.poll_edge_key(raw_latch, norm_k, allow_menu, false, owner)
+        local st = uml_internal.poll_edge_state[raw_latch]
+        if st and st.blocked_latch then return false end
+        return key_down(norm_k)
+    end
+    return uml_internal.poll_edge_key(raw_latch, norm_k, allow_menu, mode == "consume", owner)
+end
+
 local uml_registered_mods = {}
 local uml_api
+
+-- ==============================================================================
+-- 6.1 FOUNDATIONAL 7-DOMAIN KERNEL (config, input, ui, hooks, locales, audio, engine)
+-- ==============================================================================
+function uml_internal.wrap_domain_colon_safe(tbl)
+    if type(tbl) ~= "table" then return tbl end
+    local seen = {}
+    local wrapped = {}
+    for k, v in pairs(tbl) do
+        if type(k) ~= "number" and type(v) == "function" then
+            if not seen[v] then
+                local orig = v
+                seen[v] = function(first, ...)
+                    if rawequal(first, tbl) then
+                        return orig(...)
+                    end
+                    return orig(first, ...)
+                end
+            end
+            wrapped[k] = seen[v]
+        end
+    end
+    for k, fn in pairs(wrapped) do
+        tbl[k] = fn
+    end
+    return tbl
+end
+
+uml_internal.menu_api.notify = push_uml_notification
+uml_internal.menu_api.register_compact = uml_internal.register_compact_shortcut
+uml_internal.wrap_domain_colon_safe(uml_internal.menu_api)
+
+uml_internal.config_api = {
+    register = function(id, spec)
+        local mom = rawget(_G, "ModOptionsMenu")
+        if mom and type(mom.register_option) == "function" then
+            return mom.register_option(id, spec)
+        end
+        return false
+    end,
+    get = function(id, default_val)
+        local mom = rawget(_G, "ModOptionsMenu")
+        if mom and type(mom.get) == "function" then
+            return mom.get(id, default_val)
+        end
+        return default_val
+    end,
+    set = function(id, val)
+        local mom = rawget(_G, "ModOptionsMenu")
+        if mom and type(mom.set) == "function" then
+            return mom.set(id, val)
+        end
+        return false
+    end,
+    on_change = function(id, cb)
+        local mom = rawget(_G, "ModOptionsMenu")
+        if mom and type(mom.on_change) == "function" then
+            return mom.on_change(id, cb)
+        end
+        return false
+    end,
+    trigger = function(id, ...)
+        local mom = rawget(_G, "ModOptionsMenu")
+        if mom and type(mom.trigger) == "function" then
+            return mom.trigger(id, ...)
+        end
+        return false
+    end,
+    reset_option = function(id)
+        local mom = rawget(_G, "ModOptionsMenu")
+        if mom and type(mom.reset_option) == "function" then
+            return mom.reset_option(id)
+        end
+        return false
+    end,
+    reset = function()
+        local mom = rawget(_G, "ModOptionsMenu")
+        if mom and type(mom.reset) == "function" then
+            return mom.reset()
+        end
+        return false
+    end
+}
+uml_internal.config_api.option = uml_internal.config_api.register
+uml_internal.config_api.register_option = uml_internal.config_api.register
+uml_internal.config_api.load_data = uml_internal.config_api.get
+uml_internal.config_api.save_data = uml_internal.config_api.set
+uml_internal.wrap_domain_colon_safe(uml_internal.config_api)
+
+uml_internal.input_api = {
+    bind = function(key_name, callback, trigger_mode, opts)
+        return uml_internal.register_key_callback(nil, uml_api, uml_internal.current_mod_owner(), key_name, callback, trigger_mode, opts)
+    end,
+    get_binding = function(id)
+        local mbm = rawget(_G, "ModBindingsMenu")
+        if mbm and type(mbm.get_binding) == "function" then
+            return mbm.get_binding(id)
+        end
+        return nil
+    end,
+    set_binding = function(id, key)
+        local mbm = rawget(_G, "ModBindingsMenu")
+        if mbm and type(mbm.set_binding) == "function" then
+            return mbm.set_binding(id, key)
+        end
+        return false
+    end,
+    reset_binding = function(id)
+        local mbm = rawget(_G, "ModBindingsMenu")
+        if mbm and type(mbm.reset_binding) == "function" then
+            return mbm.reset_binding(id)
+        end
+        return false
+    end,
+    is_down = function(id_or_key, allow_in_menu)
+        return uml_internal.poll_id_or_key(nil, id_or_key, allow_in_menu, "down")
+    end,
+    is_pressed = function(id_or_key, allow_in_menu)
+        return uml_internal.poll_id_or_key(nil, id_or_key, allow_in_menu, "press")
+    end,
+    consume_press = function(id_or_key, allow_in_menu)
+        return uml_internal.poll_id_or_key(nil, id_or_key, allow_in_menu, "consume")
+    end,
+    is_blocked = uml_internal.is_input_blocked,
+    is_chat_open = uml_internal.is_chat_open,
+    is_window_focused = uml_internal.is_window_focused
+}
+uml_internal.input_api.bind_key = uml_internal.input_api.bind
+uml_internal.input_api.is_key_down = uml_internal.input_api.is_down
+uml_internal.input_api.consume_key_press = uml_internal.input_api.consume_press
+uml_internal.input_api.is_input_blocked = uml_internal.input_api.is_blocked
+uml_internal.input_api.is_chat_active = uml_internal.input_api.is_chat_open
+uml_internal.wrap_domain_colon_safe(uml_internal.input_api)
+
+uml_internal.hooks_api = {
+    on_init = function(fn)
+        if type(fn) ~= "function" then return false end
+        return loader_state.after_startup(fn)
+    end,
+    on_update = function(id_or_fn, fn_or_interval, interval_sec)
+        local owner = uml_internal.current_mod_owner()
+        if type(id_or_fn) == "function" then
+            local hid = (owner and (tostring(owner) .. ":update")) or ("uml_update_" .. tostring(#update_order + 1))
+            return uml_internal.register_update_hook(hid, id_or_fn, owner, fn_or_interval)
+        elseif type(id_or_fn) == "string" then
+            return uml_internal.register_update_hook(id_or_fn, fn_or_interval, owner, interval_sec)
+        end
+        return false
+    end,
+    on_shutdown = function(id_or_fn, fn)
+        local owner = uml_internal.current_mod_owner()
+        if type(id_or_fn) == "function" then
+            local sid = (owner and (tostring(owner) .. ":shutdown")) or ("uml_shut_" .. tostring(#shutdown_order + 1))
+            return uml_internal.register_shutdown_hook(sid, id_or_fn, owner)
+        elseif type(id_or_fn) == "string" then
+            return uml_internal.register_shutdown_hook(id_or_fn, fn, owner)
+        end
+        return false
+    end,
+    after = function(delay_sec, fn, owner_mod)
+        return uml_internal.schedule_timer(delay_sec, fn, false, owner_mod)
+    end,
+    every = function(interval_sec, fn, owner_mod)
+        return uml_internal.schedule_timer(interval_sec, fn, true, owner_mod)
+    end,
+    cancel_timer = uml_internal.cancel_timer,
+    hook = function(target_table, method_name, hook_fn, owner_mod)
+        return uml_internal.hook_function(target_table, method_name, hook_fn, owner_mod)
+    end,
+    unhook = function(target_table, method_name, hook_fn_or_owner)
+        return uml_internal.unhook_function(target_table, method_name, hook_fn_or_owner)
+    end,
+    on = function(evt, cb)
+        return chef_api.on(evt, cb)
+    end,
+    emit = function(evt, ...)
+        return hd2rt.emit(evt, ...)
+    end
+}
+uml_internal.wrap_domain_colon_safe(uml_internal.hooks_api)
+
+function uml_internal.can_index_object(obj)
+    local t = type(obj)
+    return t == "table" or t == "userdata"
+end
+
+function uml_internal.safe_get_field(obj, key)
+    if not uml_internal.can_index_object(obj) then return nil end
+    if type(obj) == "table" then
+        return obj[key]
+    end
+    local ok, val = pcall(function() return obj[key] end)
+    if ok then return val end
+    return nil
+end
+
+function uml_internal.resolve_stingray_method(instance, mod_tbl, fn_name)
+    local fn = uml_internal.safe_get_field(mod_tbl, fn_name)
+    if type(fn) == "function" then return fn end
+    fn = uml_internal.safe_get_field(instance, fn_name)
+    if type(fn) == "function" then return fn end
+    return nil
+end
+
+function uml_internal.resolve_wwise_world(explicit_world)
+    local sr = rawget(_G, "stingray")
+    if not uml_internal.can_index_object(sr) then return nil, nil end
+    local ww_mod = uml_internal.safe_get_field(sr, "Wwise") or rawget(_G, "Wwise")
+    local ww_world_mod = uml_internal.safe_get_field(sr, "WwiseWorld") or rawget(_G, "WwiseWorld")
+    local w = explicit_world
+    if not w then
+        local active = get_active_worlds(sr)
+        w = active[1]
+    end
+    if not w then return nil, ww_world_mod end
+    local get_ww = uml_internal.resolve_stingray_method(nil, ww_mod, "wwise_world")
+    if get_ww then
+        local ok, ww = pcall(get_ww, w)
+        if ok and ww then return ww, ww_world_mod end
+    end
+    local w_mod = uml_internal.safe_get_field(sr, "World")
+    local get_data = uml_internal.resolve_stingray_method(nil, w_mod, "get_data")
+    if get_data then
+        local ok, ww = pcall(get_data, w, "wwise_world")
+        if ok and ww then return ww, ww_world_mod end
+    end
+    return nil, ww_world_mod
+end
+
+uml_internal.audio_api = {
+    world = function(explicit_world)
+        local ww = uml_internal.resolve_wwise_world(explicit_world)
+        return ww
+    end,
+    play = function(event_name_or_id, unit_or_source, explicit_world)
+        if event_name_or_id == nil or event_name_or_id == "" then return nil end
+        local ww, ww_mod = uml_internal.resolve_wwise_world(explicit_world)
+        local trig = uml_internal.resolve_stingray_method(ww, ww_mod, "trigger_event")
+        if not ww or not trig then return nil end
+        if unit_or_source ~= nil then
+            local ok, pid, src_id = pcall(trig, ww, event_name_or_id, unit_or_source)
+            if ok then return pid or true, src_id end
+        else
+            local ok, pid, src_id = pcall(trig, ww, event_name_or_id)
+            if ok then return pid or true, src_id end
+        end
+        return nil
+    end,
+    stop = function(playing_id, explicit_world)
+        if playing_id == nil then return false end
+        local ww, ww_mod = uml_internal.resolve_wwise_world(explicit_world)
+        local stop_fn = uml_internal.resolve_stingray_method(ww, ww_mod, "stop_event")
+        if not ww or not stop_fn then return false end
+        local ok = pcall(stop_fn, ww, playing_id)
+        return ok == true
+    end,
+    is_playing = function(playing_id, explicit_world)
+        if playing_id == nil then return false end
+        local ww, ww_mod = uml_internal.resolve_wwise_world(explicit_world)
+        local chk_fn = uml_internal.resolve_stingray_method(ww, ww_mod, "is_playing")
+        if not ww or not chk_fn then return false end
+        local ok, res = pcall(chk_fn, ww, playing_id)
+        return ok and (res == true) or false
+    end,
+    set_parameter = function(name, value, source_id, explicit_world)
+        if type(name) ~= "string" or name == "" or type(value) ~= "number" then return false end
+        local ww, ww_mod = uml_internal.resolve_wwise_world(explicit_world)
+        if not ww then return false end
+        if source_id ~= nil then
+            local src_fn = uml_internal.resolve_stingray_method(ww, ww_mod, "set_source_parameter")
+            if src_fn then
+                local ok = pcall(src_fn, ww, source_id, name, value)
+                if ok then return true end
+            end
+        end
+        local glob_fn = uml_internal.resolve_stingray_method(ww, ww_mod, "set_global_parameter")
+        if glob_fn then
+            local ok = pcall(glob_fn, ww, name, value)
+            return ok == true
+        end
+        return false
+    end
+}
+uml_internal.audio_api.trigger_event = uml_internal.audio_api.play
+uml_internal.audio_api.stop_event = uml_internal.audio_api.stop
+uml_internal.audio_api.set_rtpc = uml_internal.audio_api.set_parameter
+uml_internal.wrap_domain_colon_safe(uml_internal.audio_api)
+
+function uml_internal.extract_xyz(v)
+    if type(v) == "table" then
+        local x = tonumber(v.x or v[1]) or 0
+        local y = tonumber(v.y or v[2]) or 0
+        local z = tonumber(v.z or v[3]) or 0
+        return x, y, z
+    end
+    local sr = rawget(_G, "stingray")
+    local v3_mod = uml_internal.safe_get_field(sr, "Vector3") or rawget(_G, "Vector3")
+    local fx = uml_internal.resolve_stingray_method(nil, v3_mod, "x")
+    local fy = uml_internal.resolve_stingray_method(nil, v3_mod, "y")
+    local fz = uml_internal.resolve_stingray_method(nil, v3_mod, "z")
+    if fx and fy and fz then
+        local okx, x = pcall(fx, v)
+        local oky, y = pcall(fy, v)
+        local okz, z = pcall(fz, v)
+        if okx and oky and okz then
+            return tonumber(x) or 0, tonumber(y) or 0, tonumber(z) or 0
+        end
+    end
+    return 0, 0, 0
+end
+
+uml_internal.engine_api = {
+    main_world = function()
+        local sr = rawget(_G, "stingray")
+        local app_mod = uml_internal.safe_get_field(sr, "Application")
+        local mw_fn = uml_internal.resolve_stingray_method(nil, app_mod, "main_world")
+        if mw_fn then
+            local ok, w = pcall(mw_fn)
+            if ok and w then return w end
+        end
+        return nil
+    end,
+    worlds = function()
+        local sr = rawget(_G, "stingray")
+        if not uml_internal.can_index_object(sr) then return {} end
+        return get_active_worlds(sr)
+    end,
+    unit_alive = function(unit)
+        if unit == nil then return false end
+        local sr = rawget(_G, "stingray")
+        local u_mod = uml_internal.safe_get_field(sr, "Unit") or rawget(_G, "Unit")
+        local alive_fn = uml_internal.resolve_stingray_method(nil, u_mod, "alive")
+        if alive_fn then
+            local ok, alive = pcall(alive_fn, unit)
+            return ok and (alive == true) or false
+        end
+        return false
+    end,
+    unit_position = function(unit, node_index)
+        if not uml_internal.engine_api.unit_alive(unit) then return nil end
+        local sr = rawget(_G, "stingray")
+        local u_mod = uml_internal.safe_get_field(sr, "Unit") or rawget(_G, "Unit")
+        local pos_fn = uml_internal.resolve_stingray_method(nil, u_mod, "world_position")
+        if pos_fn then
+            local ok, pos = pcall(pos_fn, unit, tonumber(node_index) or 0)
+            if ok and pos ~= nil then return pos end
+        end
+        return nil
+    end,
+    world_to_screen = function(camera, world_pos)
+        if camera == nil or world_pos == nil then return nil, nil, nil end
+        local sr = rawget(_G, "stingray")
+        local c_mod = uml_internal.safe_get_field(sr, "Camera") or rawget(_G, "Camera")
+        local wts_fn = uml_internal.resolve_stingray_method(nil, c_mod, "world_to_screen")
+        if wts_fn then
+            local ok, r1, r2, r3 = pcall(wts_fn, camera, world_pos)
+            if ok and r1 ~= nil then
+                if type(r1) == "number" then
+                    return r1, tonumber(r2) or 0, tonumber(r3) or 0
+                end
+                local sx, sy, sz = uml_internal.extract_xyz(r1)
+                return sx, sy, sz
+            end
+        end
+        return nil, nil, nil
+    end,
+    raycast = function(from_pos, dir, max_dist, collision_filter, explicit_world)
+        if from_pos == nil or dir == nil then return false end
+        local sr = rawget(_G, "stingray")
+        if not uml_internal.can_index_object(sr) then return false end
+        local w = explicit_world or uml_internal.engine_api.main_world()
+        local w_mod = uml_internal.safe_get_field(sr, "World")
+        local pw_fn = uml_internal.resolve_stingray_method(nil, w_mod, "physics_world")
+        if not w or not pw_fn then return false end
+        local ok_pw, pw = pcall(pw_fn, w)
+        if not ok_pw or not pw then return false end
+        local pw_mod = uml_internal.safe_get_field(sr, "PhysicsWorld") or rawget(_G, "PhysicsWorld")
+        local ray_fn = uml_internal.resolve_stingray_method(pw, pw_mod, "immediate_raycast") or uml_internal.resolve_stingray_method(pw, pw_mod, "raycast")
+        if not ray_fn then return false end
+        local dist = tonumber(max_dist) or 100
+        local filter = (type(collision_filter) == "string" and collision_filter ~= "") and collision_filter or "filter_player_raycast"
+        local ok, r1, r2, r3, r4, r5 = pcall(ray_fn, pw, from_pos, dir, dist, "closest", "collision_filter", filter)
+        if not ok then return false end
+        if type(r1) == "boolean" then
+            return r1 == true, r2, r3, r4, r5
+        end
+        if r1 ~= nil then
+            return true, r1, r2, r3, r4
+        end
+        return false
+    end,
+    vec3 = function(x, y, z)
+        x, y, z = tonumber(x) or 0, tonumber(y) or 0, tonumber(z) or 0
+        local sr = rawget(_G, "stingray")
+        local v3_mod = uml_internal.safe_get_field(sr, "Vector3")
+        if type(v3_mod) == "function" or (uml_internal.can_index_object(v3_mod) and getmetatable(v3_mod)) then
+            local ok, v = pcall(v3_mod, x, y, z)
+            if ok and v ~= nil then return v end
+        end
+        return { x = x, y = y, z = z, [1] = x, [2] = y, [3] = z }
+    end,
+    box_vec3 = function(x_or_v, y, z)
+        local x, vy, vz
+        if type(x_or_v) == "number" or x_or_v == nil then
+            x, vy, vz = tonumber(x_or_v) or 0, tonumber(y) or 0, tonumber(z) or 0
+        else
+            x, vy, vz = uml_internal.extract_xyz(x_or_v)
+        end
+        return {
+            x = x, y = vy, z = vz,
+            [1] = x, [2] = vy, [3] = vz,
+            unbox = function(self)
+                return uml_internal.engine_api.vec3(self.x, self.y, self.z)
+            end,
+            store = function(self, nx_or_v, ny, nz)
+                if type(nx_or_v) == "number" then
+                    self.x, self.y, self.z = nx_or_v, tonumber(ny) or 0, tonumber(nz) or 0
+                else
+                    self.x, self.y, self.z = uml_internal.extract_xyz(nx_or_v)
+                end
+                self[1], self[2], self[3] = self.x, self.y, self.z
+                return self
+            end
+        }
+    end,
+    unbox_vec3 = function(box)
+        local sr = rawget(_G, "stingray")
+        local v3b_mod = uml_internal.safe_get_field(sr, "Vector3Box") or rawget(_G, "Vector3Box")
+        local unbox_fn = uml_internal.resolve_stingray_method(box, v3b_mod, "unbox")
+        if unbox_fn and box ~= nil then
+            local ok, v = pcall(unbox_fn, box)
+            if ok and v ~= nil then return v end
+        end
+        local x, y, z = uml_internal.extract_xyz(box)
+        return uml_internal.engine_api.vec3(x, y, z)
+    end,
+    log = log_write,
+    error = function(msg, source)
+        record_uml_error(source or "engine", msg)
+    end,
+    get_error_log = function() return _G.uml_error_log end,
+    sort_dependencies = topological_sort_modules
+}
+uml_internal.wrap_domain_colon_safe(uml_internal.engine_api)
+
 uml_api = {
-    version = "2.0.3",
+    version = "2.0.4",
     api = 2,
     mods = uml_registered_mods,
+    config = uml_internal.config_api,
+    input = uml_internal.input_api,
+    ui = uml_internal.menu_api,
+    menu = uml_internal.menu_api,
+    hud = uml_internal.menu_api,
+    hooks = uml_internal.hooks_api,
+    locales = UML_OFFICIAL_LOCALES,
+    i18n = UML_OFFICIAL_LOCALES,
+    audio = uml_internal.audio_api,
+    engine = uml_internal.engine_api,
     register = function(name, spec)
         if type(name) ~= "string" or name == "" then name = "UnnamedMod_" .. tostring(#uml_key_bindings + 1) end
         spec = type(spec) == "table" and spec or {}
@@ -3874,17 +6242,50 @@ uml_api = {
             mod_dependencies[name] = spec.needs
         end
 
+        local owner_mod = active_loading_mod_name or name
+        local function resolve_opt_id(id)
+            if type(id) ~= "string" or id == "" then return nil, nil end
+            local full_id = id:find(".", 1, true) and id or (name .. "." .. id)
+            local mom = rawget(_G, "ModOptionsMenu")
+            local target_id = full_id
+            if mom and mom.registered and mom.registered[id] and not mom.registered[full_id] then
+                target_id = id
+            end
+            return target_id, full_id
+        end
+
+        local function resolve_bind_id(id)
+            if type(id) ~= "string" or id == "" then return id end
+            local mbm = rawget(_G, "ModBindingsMenu")
+            if mbm and type(mbm.bindings) == "table" and not id:find(".", 1, true) then
+                local full = name .. "." .. id
+                if mbm.bindings[full] ~= nil then return full end
+            end
+            return id
+        end
+
         local mod_obj = {
             name = name,
             version = spec.version or "1.0.0",
             author = spec.author or "Unknown",
             description = spec.description or "",
-            needs = spec.needs or {}
+            needs = spec.needs or {},
+            audio = uml_internal.audio_api,
+            engine = uml_internal.engine_api,
+            _owner_mod = owner_mod
         }
+
+        function mod_obj:play_sound(event_name_or_id, unit_or_source, explicit_world)
+            return uml_internal.audio_api.play(event_name_or_id, unit_or_source, explicit_world)
+        end
+
+        function mod_obj:stop_sound(playing_id, explicit_world)
+            return uml_internal.audio_api.stop(playing_id, explicit_world)
+        end
 
         function mod_obj:on_init(fn)
             if type(fn) == "function" then
-                local ok, err = pcall(fn, self)
+                local ok, err = uml_internal.call_with_owner(owner_mod, fn, self)
                 if not ok then
                     record_uml_error("on_init:" .. tostring(name), err)
                     return false
@@ -3894,57 +6295,91 @@ uml_api = {
             return false
         end
 
-        function mod_obj:on_update(fn)
+        function mod_obj:on_update(fn, interval_sec)
             if type(fn) == "function" then
                 local hook_id = "uml_mod_" .. tostring(name)
-                if update_hooks[hook_id] == nil then
-                    update_order[#update_order + 1] = hook_id
-                end
-                update_hooks[hook_id] = fn
-                return true
+                return uml_internal.register_update_hook(hook_id, fn, owner_mod, interval_sec)
             end
             return false
+        end
+
+        function mod_obj:after(delay_sec, fn)
+            return uml_internal.schedule_timer(delay_sec, fn, false, owner_mod)
+        end
+
+        function mod_obj:every(interval_sec, fn)
+            return uml_internal.schedule_timer(interval_sec, fn, true, owner_mod)
+        end
+
+        function mod_obj:cancel_timer(timer_id)
+            return uml_internal.cancel_timer(timer_id)
+        end
+
+        function mod_obj:hook(target_table, method_name, hook_fn)
+            return uml_internal.hook_function(target_table, method_name, hook_fn, owner_mod)
+        end
+
+        function mod_obj:unhook(target_table, method_name, hook_fn)
+            return uml_internal.unhook_function(target_table, method_name, hook_fn or owner_mod)
         end
 
         function mod_obj:on_shutdown(fn)
             if type(fn) == "function" then
                 local hook_id = "uml_shut_" .. tostring(name)
-                if shutdown_hooks[hook_id] == nil then
-                    shutdown_order[#shutdown_order + 1] = hook_id
-                end
-                shutdown_hooks[hook_id] = fn
-                return true
+                return uml_internal.register_shutdown_hook(hook_id, fn, owner_mod)
             end
             return false
         end
 
-        function mod_obj:bind_key(key_name, callback, trigger_mode)
-            if type(key_name) ~= "string" or key_name == "" or type(callback) ~= "function" then
-                return false
+        function mod_obj:bind_key(key_name, callback, trigger_mode, opts)
+            local ok, bind_id = uml_internal.register_key_callback(name, self, owner_mod, key_name, callback, trigger_mode, opts)
+            return ok, bind_id
+        end
+
+        function mod_obj:is_key_down(id_or_key, allow_in_menu)
+            return uml_internal.poll_id_or_key(name, id_or_key, allow_in_menu, "down")
+        end
+
+        function mod_obj:consume_key_press(id_or_key, allow_in_menu)
+            return uml_internal.poll_id_or_key(name, id_or_key, allow_in_menu, "consume")
+        end
+
+        function mod_obj:register_compact_menu(compact_spec)
+            return uml_internal.register_compact_shortcut(name, compact_spec, owner_mod)
+        end
+
+        function mod_obj:open_menu(opts)
+            if type(opts) == "string" then
+                return uml_internal.open_menu(opts)
             end
-            local bind_id = name .. ".key_" .. key_name:lower():gsub("%s+", "_")
-            local mbm = rawget(_G, "ModBindingsMenu")
-            if mbm and type(mbm.register_binding) == "function" then
-                pcall(mbm.register_binding, bind_id, name .. " (" .. key_name:upper() .. ")", key_name:lower(), {
-                    default = key_name:lower(),
-                    category = name
-                })
+            return uml_internal.open_menu(name, opts)
+        end
+
+        function mod_obj:close_menu()
+            return uml_internal.close_menu()
+        end
+
+        function mod_obj:toggle_menu(opts)
+            if type(opts) == "string" then
+                return uml_internal.toggle_menu(opts)
             end
-            uml_key_bindings[#uml_key_bindings + 1] = {
-                id = bind_id,
-                key = key_name:lower(),
-                cb = callback,
-                mode = (type(trigger_mode) == "string" and trigger_mode:lower()) or "press",
-                mod = self
-            }
-            return true
+            return uml_internal.toggle_menu(name, opts)
+        end
+
+        function mod_obj:is_menu_open()
+            return uml_internal.is_menu_open()
+        end
+
+        function mod_obj:get_menu_state()
+            return uml_internal.get_menu_state()
         end
 
         function mod_obj:option(id, opt_spec)
-            if type(id) ~= "string" or id == "" then return false end
+            local _, full_id = resolve_opt_id(id)
+            if not full_id then return false end
             opt_spec = type(opt_spec) == "table" and opt_spec or {}
             opt_spec.mod = opt_spec.mod or name
-            local full_id = id:find(".", 1, true) and id or (name .. "." .. id)
+            opt_spec.owner_mod = opt_spec.owner_mod or owner_mod
             local mom = rawget(_G, "ModOptionsMenu")
             if mom and type(mom.register_option) == "function" then
                 return mom.register_option(full_id, opt_spec)
@@ -3953,25 +6388,63 @@ uml_api = {
         end
         mod_obj.register_option = mod_obj.option
 
-        function mod_obj:get(id)
-            if type(id) ~= "string" or id == "" then return nil end
+        function mod_obj:get(id, default_val)
+            local target_id = resolve_opt_id(id)
+            if not target_id then return default_val end
             local mom = rawget(_G, "ModOptionsMenu")
-            if not mom or type(mom.get) ~= "function" then return nil end
-            local full_id = id:find(".", 1, true) and id or (name .. "." .. id)
-            local v = mom.get(full_id)
+            if not mom or type(mom.get) ~= "function" then return default_val end
+            local v = mom.get(target_id)
             if v ~= nil then return v end
-            return mom.get(id)
+            if target_id ~= id then
+                local v2 = mom.get(id)
+                if v2 ~= nil then return v2 end
+            end
+            return default_val
         end
+        mod_obj.load_data = mod_obj.get
 
         function mod_obj:set(id, val)
-            if type(id) ~= "string" or id == "" then return false end
+            local target_id = resolve_opt_id(id)
+            if not target_id then return false end
             local mom = rawget(_G, "ModOptionsMenu")
             if not mom or type(mom.set) ~= "function" then return false end
-            local full_id = id:find(".", 1, true) and id or (name .. "." .. id)
-            if mom.registered and mom.registered[full_id] then
-                return mom.set(full_id, val)
+            return mom.set(target_id, val)
+        end
+        mod_obj.save_data = mod_obj.set
+
+        function mod_obj:on_change(id, cb)
+            local target_id = resolve_opt_id(id)
+            if not target_id or type(cb) ~= "function" then return false end
+            local mom = rawget(_G, "ModOptionsMenu")
+            if not mom or type(mom.on_change) ~= "function" then return false end
+            local ok = mom.on_change(target_id, cb)
+            if ok and owner_mod then
+                uml_internal.mom_cb_owners[cb] = owner_mod
             end
-            return mom.set(id, val)
+            return ok
+        end
+
+        function mod_obj:trigger(id, ...)
+            local target_id = resolve_opt_id(id)
+            if not target_id then return false end
+            local mom = rawget(_G, "ModOptionsMenu")
+            if not mom or type(mom.trigger) ~= "function" then return false end
+            return mom.trigger(target_id, ...)
+        end
+
+        function mod_obj:reset_option(id)
+            local target_id = resolve_opt_id(id)
+            if not target_id then return false end
+            local mom = rawget(_G, "ModOptionsMenu")
+            if not mom or type(mom.reset_option) ~= "function" then return false end
+            return mom.reset_option(target_id)
+        end
+
+        function mod_obj:register_translations(strings_by_locale, default_lang)
+            if type(strings_by_locale) == "table" and type(strings_by_locale.strings) == "table" then
+                return uml_api.register_translations(strings_by_locale.id or name, strings_by_locale.strings, strings_by_locale.default or default_lang)
+            end
+            return uml_api.register_translations(name, strings_by_locale, default_lang)
         end
 
         function mod_obj:on(evt, cb)
@@ -4031,6 +6504,149 @@ uml_api = {
             return clean_display_text(clean_k, "?")
         end
 
+        -- Per-mod scoped 7-domain views (preventing cross-mod collisions & keeping owner attribution)
+        local mod_config = {
+            register = function(id, opt_spec) return mod_obj:option(id, opt_spec) end,
+            get = function(id, default_val) return mod_obj:get(id, default_val) end,
+            set = function(id, val) return mod_obj:set(id, val) end,
+            on_change = function(id, cb) return mod_obj:on_change(id, cb) end,
+            trigger = function(id, ...) return mod_obj:trigger(id, ...) end,
+            reset_option = function(id) return mod_obj:reset_option(id) end,
+            reset = function()
+                local mom = rawget(_G, "ModOptionsMenu")
+                if not mom or type(mom.registered) ~= "table" or type(mom.reset_option) ~= "function" then
+                    return false
+                end
+                local prefix = name .. "."
+                for opt_id, opt_s in pairs(mom.registered) do
+                    if type(opt_s) == "table" and (opt_s.mod == name or opt_s.owner_mod == owner_mod or opt_id:sub(1, #prefix) == prefix) then
+                        mom.reset_option(opt_id)
+                    end
+                end
+                return true
+            end
+        }
+        mod_config.option = mod_config.register
+        mod_config.register_option = mod_config.register
+        mod_config.load_data = mod_config.get
+        mod_config.save_data = mod_config.set
+        mod_obj.config = uml_internal.wrap_domain_colon_safe(mod_config)
+
+        local mod_input = {
+            bind = function(key_name, callback, trigger_mode, opts)
+                return mod_obj:bind_key(key_name, callback, trigger_mode, opts)
+            end,
+            get_binding = function(id) return uml_internal.input_api.get_binding(resolve_bind_id(id)) end,
+            set_binding = function(id, key) return uml_internal.input_api.set_binding(resolve_bind_id(id), key) end,
+            reset_binding = function(id) return uml_internal.input_api.reset_binding(resolve_bind_id(id)) end,
+            is_down = function(id_or_key, allow_in_menu)
+                return uml_internal.poll_id_or_key(name, id_or_key, allow_in_menu, "down")
+            end,
+            is_pressed = function(id_or_key, allow_in_menu)
+                return uml_internal.poll_id_or_key(name, id_or_key, allow_in_menu, "press")
+            end,
+            consume_press = function(id_or_key, allow_in_menu)
+                return uml_internal.poll_id_or_key(name, id_or_key, allow_in_menu, "consume")
+            end,
+            is_blocked = uml_internal.is_input_blocked,
+            is_chat_open = uml_internal.is_chat_open,
+            is_window_focused = uml_internal.is_window_focused
+        }
+        mod_input.bind_key = mod_input.bind
+        mod_input.is_key_down = mod_input.is_down
+        mod_input.consume_key_press = mod_input.consume_press
+        mod_input.is_input_blocked = mod_input.is_blocked
+        mod_input.is_chat_active = mod_input.is_chat_open
+        mod_obj.input = uml_internal.wrap_domain_colon_safe(mod_input)
+
+        local mod_ui = {}
+        for k, v in pairs(uml_internal.menu_api) do
+            mod_ui[k] = v
+        end
+        mod_ui.open = function(opts_or_mod, extra_opts)
+            if type(opts_or_mod) == "string" then
+                return uml_internal.open_menu(opts_or_mod, extra_opts)
+            end
+            return mod_obj:open_menu(opts_or_mod)
+        end
+        mod_ui.toggle = function(opts_or_mod, extra_opts)
+            if type(opts_or_mod) == "string" then
+                return uml_internal.toggle_menu(opts_or_mod, extra_opts)
+            end
+            return mod_obj:toggle_menu(opts_or_mod)
+        end
+        mod_ui.select_mod = function(mod_name) return uml_internal.select_mod(mod_name or name) end
+        mod_ui.register_compact = function(compact_spec) return mod_obj:register_compact_menu(compact_spec) end
+        mod_ui.register_compact_shortcut = mod_ui.register_compact
+        mod_ui.notify = function(msg, duration_seconds) return mod_obj:notify(msg, duration_seconds) end
+        mod_ui.on_change = function(cb)
+            local unsub = uml_internal.on_menu_change(cb)
+            if unsub and owner_mod and type(cb) == "function" then
+                uml_internal.menu_listener_owners[cb] = owner_mod
+            end
+            return unsub
+        end
+        uml_internal.wrap_domain_colon_safe(mod_ui)
+        mod_obj.ui = mod_ui
+        mod_obj.menu = mod_ui
+        mod_obj.hud = mod_ui
+
+        local mod_hooks = {
+            on_init = function(fn) return mod_obj:on_init(fn) end,
+            on_update = function(id_or_fn, fn_or_interval, interval_sec)
+                if type(id_or_fn) == "function" then
+                    return mod_obj:on_update(id_or_fn, fn_or_interval)
+                elseif type(id_or_fn) == "string" and id_or_fn ~= "" then
+                    local hid = (id_or_fn:find(".", 1, true) or id_or_fn:find(":", 1, true)) and id_or_fn or (name .. ":" .. id_or_fn)
+                    return uml_internal.register_update_hook(hid, fn_or_interval, owner_mod, interval_sec)
+                end
+                return false
+            end,
+            on_shutdown = function(id_or_fn, fn)
+                if type(id_or_fn) == "function" then
+                    return mod_obj:on_shutdown(id_or_fn)
+                elseif type(id_or_fn) == "string" and id_or_fn ~= "" then
+                    local sid = (id_or_fn:find(".", 1, true) or id_or_fn:find(":", 1, true)) and id_or_fn or (name .. ":" .. id_or_fn)
+                    return uml_internal.register_shutdown_hook(sid, fn, owner_mod)
+                end
+                return false
+            end,
+            after = function(delay_sec, fn) return mod_obj:after(delay_sec, fn) end,
+            every = function(interval_sec, fn) return mod_obj:every(interval_sec, fn) end,
+            cancel_timer = uml_internal.cancel_timer,
+            hook = function(target_table, method_name, hook_fn) return mod_obj:hook(target_table, method_name, hook_fn) end,
+            unhook = function(target_table, method_name, hook_fn) return mod_obj:unhook(target_table, method_name, hook_fn) end,
+            on = function(evt, cb) return mod_obj:on(evt, cb) end,
+            emit = function(evt, ...) return mod_obj:emit(evt, ...) end
+        }
+        mod_obj.hooks = uml_internal.wrap_domain_colon_safe(mod_hooks)
+
+        local mod_locales = {}
+        for i = 1, #UML_OFFICIAL_LOCALES do
+            mod_locales[i] = UML_OFFICIAL_LOCALES[i]
+        end
+        mod_locales.list = mod_locales
+        mod_locales.get = uml_api.get_language
+        mod_locales.get_language = uml_api.get_language
+        mod_locales.set = uml_api.set_language
+        mod_locales.set_language = uml_api.set_language
+        mod_locales.auto_detect = uml_api.auto_detect_language
+        mod_locales.auto_detect_language = uml_api.auto_detect_language
+        mod_locales.sanitize = uml_api.sanitize_text
+        mod_locales.sanitize_text = uml_api.sanitize_text
+        mod_locales.transliterate = uml_api.transliterate
+        mod_locales.register = function(strings_by_locale, default_lang)
+            return mod_obj:register_translations(strings_by_locale, default_lang)
+        end
+        mod_locales.register_translations = mod_locales.register
+        mod_locales.translate = function(key, translations_or_fallback)
+            return mod_obj:translate(key, translations_or_fallback)
+        end
+        uml_internal.wrap_domain_colon_safe(mod_locales)
+        mod_obj.locales = mod_locales
+        mod_obj.i18n = mod_locales
+
+        if type(spec.compact_menu) == "table" then mod_obj:register_compact_menu(spec.compact_menu) end
         if type(spec.on_init) == "function" then mod_obj:on_init(spec.on_init) end
         if type(spec.on_update) == "function" then mod_obj:on_update(spec.on_update) end
         if type(spec.on_shutdown) == "function" then mod_obj:on_shutdown(spec.on_shutdown) end
@@ -4051,24 +6667,70 @@ uml_api = {
     register_setting = function(id, spec)
         return chef_api.options.register(id, spec)
     end,
-    get_setting = function(id)
-        return chef_api.options.get(id)
+    get_setting = function(id, default_val)
+        local v = chef_api.options.get(id)
+        if v ~= nil then return v end
+        return default_val
     end,
     set_setting = function(id, val)
         return chef_api.options.set(id, val)
     end,
-    bind_key = function(key_name, callback, trigger_mode)
-        if type(key_name) ~= "string" or type(callback) ~= "function" then return false end
-        local bind_id = "uml.key_" .. key_name:lower():gsub("%s+", "_") .. "_" .. tostring(#uml_key_bindings + 1)
-        uml_key_bindings[#uml_key_bindings + 1] = {
-            id = bind_id,
-            key = key_name:lower(),
-            cb = callback,
-            mode = (type(trigger_mode) == "string" and trigger_mode:lower()) or "press",
-            mod = uml_api
-        }
-        return true
+    load_data = function(id, default_val)
+        local mom = rawget(_G, "ModOptionsMenu")
+        if mom and type(mom.get) == "function" then
+            return mom.get(id, default_val)
+        end
+        return default_val
     end,
+    save_data = function(id, val)
+        local mom = rawget(_G, "ModOptionsMenu")
+        if mom and type(mom.set) == "function" then
+            return mom.set(id, val)
+        end
+        return false
+    end,
+    after = function(delay_sec, fn)
+        return uml_internal.schedule_timer(delay_sec, fn, false)
+    end,
+    every = function(interval_sec, fn)
+        return uml_internal.schedule_timer(interval_sec, fn, true)
+    end,
+    cancel_timer = uml_internal.cancel_timer,
+    hook = function(target_table, method_name, hook_fn)
+        return uml_internal.hook_function(target_table, method_name, hook_fn)
+    end,
+    unhook = function(target_table, method_name, hook_fn)
+        return uml_internal.unhook_function(target_table, method_name, hook_fn)
+    end,
+    bind_key = function(key_name, callback, trigger_mode, opts)
+        local ok, bind_id = uml_internal.register_key_callback(nil, uml_api, uml_internal.current_mod_owner(), key_name, callback, trigger_mode, opts)
+        return ok, bind_id
+    end,
+    is_key_down = function(id_or_key, allow_in_menu)
+        return uml_internal.poll_id_or_key(nil, id_or_key, allow_in_menu, "down")
+    end,
+    consume_key_press = function(id_or_key, allow_in_menu)
+        return uml_internal.poll_id_or_key(nil, id_or_key, allow_in_menu, "consume")
+    end,
+    menu = uml_internal.menu_api,
+    ui = uml_internal.menu_api,
+    hud = uml_internal.menu_api,
+    is_menu_open = uml_internal.is_menu_open,
+    is_fullscreen_menu_open = uml_internal.is_fullscreen_menu_open,
+    is_compact_menu_open = uml_internal.is_compact_menu_open,
+    is_capturing_key = uml_internal.is_capturing_key,
+    get_capture_id = uml_internal.get_capture_id,
+    is_chat_active = uml_internal.is_chat_open,
+    is_input_blocked = uml_internal.is_input_blocked,
+    get_menu_state = uml_internal.get_menu_state,
+    open_menu = uml_internal.open_menu,
+    close_menu = uml_internal.close_menu,
+    toggle_menu = uml_internal.toggle_menu,
+    select_mod = uml_internal.select_mod,
+    set_external_open = uml_internal.set_external_menu_open,
+    on_menu_change = uml_internal.on_menu_change,
+    off_menu_change = uml_internal.off_menu_change,
+    register_compact_menu = uml_internal.register_compact_shortcut,
     locales = UML_OFFICIAL_LOCALES,
     auto_detect_language = function()
         local loc, src = auto_detect_game_locale()
@@ -4086,6 +6748,11 @@ uml_api = {
         return loc.tag, loc.game_code
     end,
     register_translations = function(pack_id, strings_by_locale, default_lang)
+        if type(pack_id) == "table" and strings_by_locale == nil then
+            default_lang = pack_id.default or pack_id.default_lang
+            strings_by_locale = pack_id.strings or pack_id.translations or pack_id
+            pack_id = pack_id.id or pack_id.mod or pack_id.name or uml_internal.current_mod_owner()
+        end
         if type(pack_id) ~= "string" or pack_id == "" or type(strings_by_locale) ~= "table" then
             return nil
         end
@@ -4119,6 +6786,29 @@ uml_api = {
     error_log = _G.uml_error_log,
     get_error_log = function() return _G.uml_error_log end
 }
+UML_OFFICIAL_LOCALES.list = UML_OFFICIAL_LOCALES
+UML_OFFICIAL_LOCALES.get = uml_api.get_language
+UML_OFFICIAL_LOCALES.get_language = uml_api.get_language
+UML_OFFICIAL_LOCALES.set = uml_api.set_language
+UML_OFFICIAL_LOCALES.set_language = uml_api.set_language
+UML_OFFICIAL_LOCALES.auto_detect = uml_api.auto_detect_language
+UML_OFFICIAL_LOCALES.auto_detect_language = uml_api.auto_detect_language
+UML_OFFICIAL_LOCALES.register = uml_api.register_translations
+UML_OFFICIAL_LOCALES.register_translations = uml_api.register_translations
+UML_OFFICIAL_LOCALES.sanitize = uml_api.sanitize_text
+UML_OFFICIAL_LOCALES.sanitize_text = uml_api.sanitize_text
+UML_OFFICIAL_LOCALES.transliterate = uml_api.transliterate
+UML_OFFICIAL_LOCALES.translate = function(mod_or_key, key_or_fallback, fallback)
+    if type(mod_or_key) == "string" and uml_registered_mods[mod_or_key] and key_or_fallback ~= nil then
+        return uml_registered_mods[mod_or_key]:translate(key_or_fallback, fallback)
+    end
+    local owner = uml_internal.current_mod_owner()
+    if owner and uml_registered_mods[owner] then
+        return uml_registered_mods[owner]:translate(mod_or_key, key_or_fallback)
+    end
+    return clean_display_text(key_or_fallback or mod_or_key, "?")
+end
+uml_internal.wrap_domain_colon_safe(UML_OFFICIAL_LOCALES)
 _G.UML = uml_api
 _G.UniversalModLoader = uml_api
 package.preload["UML"] = function() return uml_api end
@@ -4144,7 +6834,7 @@ local function safe_run_with_watchdog(fn, timeout_seconds, ...)
 
     local function hook()
         check_counter = check_counter + 1
-        if check_counter % 250 == 0 then
+        if check_counter % 25 == 0 then
             if (os.clock() - start_time) > timeout_seconds then
                 debug.sethook()
                 error("WATCHDOG_HANG_TIMEOUT: Script exceeded execution threshold (" .. tostring(timeout_seconds) .. "s)")
@@ -4152,9 +6842,14 @@ local function safe_run_with_watchdog(fn, timeout_seconds, ...)
         end
     end
 
-    debug.sethook(hook, "", 100)
+    local prev_hook, prev_mask, prev_count = debug.gethook()
+    debug.sethook(hook, "", 5000)
     local ok, res = pcall(fn, ...)
-    debug.sethook()
+    if prev_hook then
+        debug.sethook(prev_hook, prev_mask or "", prev_count or 0)
+    else
+        debug.sethook()
+    end
     return ok, res
 end
 
@@ -4240,49 +6935,115 @@ end
 
 local function unregister_mod_hooks(mod_name)
     if type(mod_name) ~= "string" or mod_name == "" then return end
+    local aliases = { [mod_name] = true }
+    for reg_name, mobj in pairs(uml_registered_mods) do
+        if reg_name == mod_name or (type(mobj) == "table" and (mobj._owner_mod == mod_name or mobj.name == mod_name)) then
+            aliases[reg_name] = true
+        end
+    end
+    local function matches_id_or_owner(explicit_owner, id_str)
+        if explicit_owner and aliases[explicit_owner] then
+            return true
+        end
+        if type(id_str) ~= "string" then
+            return false
+        end
+        for a in pairs(aliases) do
+            local alen = #a
+            if id_str == a
+                or id_str:sub(1, alen + 1) == (a .. ".")
+                or id_str:sub(1, alen + 1) == (a .. ":")
+                or id_str:sub(1, alen + 5) == ("raw:" .. a .. ":")
+                or id_str:sub(1, alen + 5) == ("mbm:" .. a .. ".")
+                or id_str:sub(1, alen + 5) == ("mbm:" .. a .. ":")
+                or id_str:sub(1, alen + 9) == ("compact:" .. a .. ".")
+                or id_str:sub(1, alen + 9) == ("compact:" .. a .. ":") then
+                return true
+            end
+        end
+        return false
+    end
     local id_prefix = mod_name .. ":"
     local uml_prefix = "uml_mod_" .. mod_name
     local rat_id = mod_name .. "_rats_update"
     local chef_id = mod_name .. "_chef_update"
+    local function matches_update_id(k)
+        return k == mod_name or k == uml_prefix or k == rat_id or k == chef_id
+            or k:sub(1, #id_prefix) == id_prefix
+            or aliases[uml_internal.update_hook_owners[k]]
+    end
     for k in pairs(update_hooks) do
-        if k == mod_name or k == uml_prefix or k == rat_id or k == chef_id or k:sub(1, #id_prefix) == id_prefix then
+        if matches_update_id(k) then
             update_hooks[k] = nil
+            update_hook_errors[k] = nil
+            uml_internal.update_hook_owners[k] = nil
         end
     end
     for i = #update_order, 1, -1 do
         local k = update_order[i]
-        if k == mod_name or k == uml_prefix or k == rat_id or k == chef_id or k:sub(1, #id_prefix) == id_prefix then
+        if matches_update_id(k) then
             table.remove(update_order, i)
+            uml_internal.update_order_set[k] = nil
+            update_hook_errors[k] = nil
+            uml_internal.update_hook_owners[k] = nil
         end
     end
     local shut_prefix = "uml_shut_" .. mod_name
     local chef_shut = mod_name .. "_chef_shut"
+    local function matches_shut_id(k)
+        return k == mod_name or k == shut_prefix or k == chef_shut
+            or k:sub(1, #id_prefix) == id_prefix
+            or aliases[uml_internal.shutdown_hook_owners[k]]
+    end
     for k in pairs(shutdown_hooks) do
-        if k == mod_name or k == shut_prefix or k == chef_shut or k:sub(1, #id_prefix) == id_prefix then
+        if matches_shut_id(k) then
             shutdown_hooks[k] = nil
+            uml_internal.shutdown_hook_owners[k] = nil
         end
     end
     for i = #shutdown_order, 1, -1 do
         local k = shutdown_order[i]
-        if k == mod_name or k == shut_prefix or k == chef_shut or k:sub(1, #id_prefix) == id_prefix then
+        if matches_shut_id(k) then
             table.remove(shutdown_order, i)
+            uml_internal.shutdown_order_set[k] = nil
+            uml_internal.shutdown_hook_owners[k] = nil
         end
     end
     local bml = rawget(_G, "BootModLoader")
     if bml and type(bml.hooks) == "table" then
         for i = #bml.hooks, 1, -1 do
-            if bml.hooks[i] and bml.hooks[i].mod == mod_name then
+            local entry = bml.hooks[i]
+            if entry and aliases[entry.mod] then
+                local tlist = entry.target and rawget(bml.hooks, entry.target)
+                if type(tlist) == "table" then
+                    for j = #tlist, 1, -1 do
+                        if tlist[j] == entry.fn then
+                            table.remove(tlist, j)
+                        end
+                    end
+                end
                 table.remove(bml.hooks, i)
             end
         end
     end
-    local rt = rawget(_G, "hd2rt")
-    if rt and type(rt.events) == "table" then
-        for evt, list in pairs(rt.events) do
+    for evt, list in pairs(hd2rt_listeners) do
+        if type(list) == "table" then
+            for i = #list, 1, -1 do
+                local it = list[i]
+                if type(it) == "table" and aliases[it.mod] then
+                    table.remove(list, i)
+                end
+            end
+        end
+    end
+    local rat = rawget(_G, "RatsSharedLoader")
+    if rat and type(rat.hooks) == "table" then
+        for evt, list in pairs(rat.hooks) do
             if type(list) == "table" then
                 for i = #list, 1, -1 do
-                    local it = list[i]
-                    if type(it) == "table" and it.mod == mod_name then
+                    local fn = list[i]
+                    if aliases[uml_internal.rat_hook_owners[fn]] then
+                        uml_internal.rat_hook_owners[fn] = nil
                         table.remove(list, i)
                     end
                 end
@@ -4291,9 +7052,101 @@ local function unregister_mod_hooks(mod_name)
     end
     for i = #uml_key_bindings, 1, -1 do
         local kb = uml_key_bindings[i]
-        if kb and (kb.mod == mod_name or (type(kb.id) == "string" and kb.id:sub(1, #id_prefix) == id_prefix)) then
+        if kb and (
+            aliases[kb.owner_mod]
+            or aliases[kb.mod]
+            or (type(kb.mod) == "table" and (aliases[kb.mod._owner_mod] or aliases[kb.mod.name]))
+            or matches_id_or_owner(kb.owner_mod, kb.id)
+        ) then
+            uml_key_prev_down[kb.id] = nil
+            uml_internal.key_blocked_latch[kb.id] = nil
+            uml_internal.poll_edge_state["mbm:" .. tostring(kb.id)] = nil
             table.remove(uml_key_bindings, i)
         end
+    end
+    local mbm = rawget(_G, "ModBindingsMenu")
+    if mbm and type(mbm.bindings) == "table" then
+        for id, rec in pairs(mbm.bindings) do
+            if matches_id_or_owner(type(rec) == "table" and rec.owner_mod or nil, id) then
+                uml_key_prev_down[id] = nil
+                uml_internal.key_blocked_latch[id] = nil
+                uml_internal.poll_edge_state["mbm:" .. tostring(id)] = nil
+            end
+        end
+    end
+    local cs_list = uml_internal.compact_shortcuts
+    for i = #cs_list, 1, -1 do
+        local cs = cs_list[i]
+        if cs and matches_id_or_owner(cs.owner_mod or cs.mod_name, cs.bind_id) then
+            uml_internal.poll_edge_state["compact:" .. tostring(cs.bind_id)] = nil
+            uml_internal.key_blocked_latch[cs.bind_id] = nil
+            uml_key_prev_down[cs.bind_id] = nil
+            table.remove(cs_list, i)
+        end
+    end
+    local ml_list = uml_internal.menu_listeners
+    for i = #ml_list, 1, -1 do
+        local cb = ml_list[i]
+        if aliases[uml_internal.menu_listener_owners[cb]] then
+            uml_internal.menu_listener_owners[cb] = nil
+            uml_internal.menu_listener_active[cb] = nil
+            table.remove(ml_list, i)
+        end
+    end
+    local ext_cleared = false
+    local ext_keys = {}
+    for k in pairs(uml_internal.external_menus) do ext_keys[k] = true end
+    for k in pairs(uml_internal.external_menu_owners) do ext_keys[k] = true end
+    for k in pairs(ext_keys) do
+        if matches_id_or_owner(uml_internal.external_menu_owners[k], k) then
+            if uml_internal.external_menus[k] == true then
+                ext_cleared = true
+            end
+            uml_internal.external_menus[k] = nil
+            uml_internal.external_menu_owners[k] = nil
+        end
+    end
+    for ek, st in pairs(uml_internal.poll_edge_state) do
+        if matches_id_or_owner(type(st) == "table" and st.owner_mod or nil, ek) then
+            uml_internal.poll_edge_state[ek] = nil
+        end
+    end
+    local mom = rawget(_G, "ModOptionsMenu")
+    if mom and type(mom.change_callbacks) == "table" then
+        for opt_id, cbs in pairs(mom.change_callbacks) do
+            if type(cbs) == "table" then
+                for i = #cbs, 1, -1 do
+                    local cb = cbs[i]
+                    if aliases[uml_internal.mom_cb_owners[cb]] then
+                        uml_internal.mom_cb_owners[cb] = nil
+                        table.remove(cbs, i)
+                    end
+                end
+            end
+        end
+    end
+    for tbl, by_tbl in pairs(uml_internal.function_hooks) do
+        if type(by_tbl) == "table" then
+            for mname, slot in pairs(by_tbl) do
+                if type(slot) == "table" and type(slot.entries) == "table" then
+                    for i = #slot.entries, 1, -1 do
+                        local e = slot.entries[i]
+                        if e and aliases[e.owner] then
+                            table.remove(slot.entries, i)
+                        end
+                    end
+                    if #slot.entries == 0 then
+                        if rawget(tbl, mname) == slot.wrapper then
+                            tbl[mname] = (slot.orig ~= noop) and slot.orig or nil
+                        end
+                        by_tbl[mname] = nil
+                    end
+                end
+            end
+        end
+    end
+    if ext_cleared then
+        uml_internal.notify_menu_listeners()
     end
 end
 
@@ -4305,6 +7158,7 @@ trigger_loose_hot_reload = function()
         unregister_mod_hooks(mod_name)
         package.loaded[mod_name] = nil
         local chunk = nil
+        local compile_err = nil
         local loose_path = find_loose_file(mod_name)
         if loose_path then
             local f = io.open(loose_path, "rb")
@@ -4313,12 +7167,18 @@ trigger_loose_hot_reload = function()
                 f:close()
                 if content then
                     if content:sub(1, 3) == "\239\187\191" then content = content:sub(4) end
-                    local l_fn = loadstring(content, "@" .. loose_path)
-                    if l_fn then chunk = l_fn end
+                    local l_fn, l_err = loadstring(content, "@" .. loose_path)
+                    if l_fn then
+                        chunk = l_fn
+                    else
+                        compile_err = l_err
+                        record_uml_error("hot_reload:" .. tostring(mod_name), l_err)
+                        log_write(string.format("[HotReload] Syntax error compiling '%s': %s", loose_path, tostring(l_err)))
+                    end
                 end
             end
         end
-        if not chunk then
+        if not chunk and not compile_err then
             for _, loader in ipairs(package.loaders or {}) do
                 local ok, fn = pcall(loader, mod_name)
                 if ok and type(fn) == "function" then
@@ -4328,17 +7188,25 @@ trigger_loose_hot_reload = function()
             end
         end
         if chunk then
+            local prev_active = active_loading_mod_name
             active_loading_mod_name = mod_name
             local mod_chef = create_chef_mod_context(mod_name)
-            local ok, res = safe_run_with_watchdog(chunk, 3.0, mod_chef, mod_name)
-            active_loading_mod_name = nil
+            local ok, res = safe_run_with_watchdog(chunk, 8.0, mod_chef, mod_name)
+            active_loading_mod_name = prev_active
             if ok then
                 package.loaded[mod_name] = res or true
+                loaded_modules[mod_name] = "loaded (reloaded)"
                 reloaded_count = reloaded_count + 1
+            else
+                local err_msg = tostring(res):gsub("[\r\n]+", " ")
+                loaded_modules[mod_name] = "failed: " .. err_msg
+                record_uml_error("hot_reload:" .. tostring(mod_name), err_msg)
+                log_write(string.format("[HotReload] Runtime error reloading '%s': %s", mod_name, err_msg))
             end
         end
     end
     log_write(string.format("[HotReload] Successfully reloaded %d loose mods.", reloaded_count))
+    return reloaded_count
 end
 
 local candidate_modules = {
@@ -4550,7 +7418,7 @@ pcall(function()
                     local table_start = 72 + 32 * types
                     if table_start < file_size then
                         local max_rows = math.floor((file_size - table_start) / 80)
-                        count = math.min(count, math.max(0, max_rows), 8192)
+                        count = math.min(count, math.max(0, max_rows), 250000)
                     else
                         count = 0
                     end
@@ -4558,7 +7426,7 @@ pcall(function()
                         f:seek("set", table_start + index * 80)
                         local row = f:read(80)
                         if row and #row == 80 and row:sub(9, 16) == lua_type then
-                            local off = u32(row, 16)
+                            local off = u32(row, 16) + u32(row, 20) * 4294967296
                             local len = u32(row, 56)
                             local res_key_bytes = row:sub(1, 8)
                             local key_l = u32(row, 0)
@@ -4595,7 +7463,7 @@ pcall(function()
                                             if script_content:sub(1, 3) == "\239\187\191" then
                                                 script_content = script_content:sub(4)
                                             end
-                                            local prefix = script_content:sub(1, 384)
+                                            local prefix = script_content:sub(1, 2048)
                                             local d_name = prefix:match("%-%-%s*HD2%-Addon:%s*([^\r\n]+)")
                                                 or prefix:match("%-%-%s*HD2%-Boot:%s*([^\r\n]+)")
                                                 or prefix:match("%-%-%s*HD2%-Mod:%s*([^\r\n]+)")
@@ -4636,10 +7504,11 @@ pcall(function()
                                                 local chunk, c_err = loadstring(script_content, "@" .. canon_name)
                                                 if chunk then
                                                     local preload_fn = function(...)
+                                                        local prev_active = active_loading_mod_name
                                                         active_loading_mod_name = canon_name
                                                         local mod_chef = create_chef_mod_context(canon_name)
-                                                        local ok, res = safe_run_with_watchdog(chunk, 3.0, mod_chef, canon_name)
-                                                        active_loading_mod_name = nil
+                                                        local ok, res = safe_run_with_watchdog(chunk, 8.0, mod_chef, canon_name)
+                                                        active_loading_mod_name = prev_active
                                                         if ok then
                                                             return res or true
                                                         else
@@ -4813,39 +7682,42 @@ for _, mod_name in ipairs(candidate_modules) do
                     end
                 end
 
-                local ok, res
-                active_loading_mod_name = mod_name
-                local mod_chef = create_chef_mod_context(mod_name)
-                if chunk then
-                    -- Subsystem 4: True CSL Vararg Parameter Injection (chunk(mod_chef, mod_name))
-                    ok, res = safe_run_with_watchdog(chunk, 3.0, mod_chef, mod_name)
-                else
-                    ok, res = pcall(require, mod_name)
-                end
-                active_loading_mod_name = nil
+                do
+                    local ok, res
+                    local prev_active = active_loading_mod_name
+                    active_loading_mod_name = mod_name
+                    local mod_chef = create_chef_mod_context(mod_name)
+                    if chunk then
+                        -- Subsystem 4: True CSL Vararg Parameter Injection (chunk(mod_chef, mod_name))
+                        ok, res = safe_run_with_watchdog(chunk, 8.0, mod_chef, mod_name)
+                    else
+                        ok, res = pcall(require, mod_name)
+                    end
+                    active_loading_mod_name = prev_active
 
-                clear_active_sentinel()
+                    clear_active_sentinel()
 
-                if ok then
-                    local ret_val = res or true
-                    package.loaded[mod_name] = ret_val
-                    if loose_path then
-                        executed_loose_paths[loose_path] = ret_val
+                    if ok then
+                        local ret_val = res or true
+                        package.loaded[mod_name] = ret_val
+                        if loose_path then
+                            executed_loose_paths[loose_path] = ret_val
+                        end
+                        if mod_res_bytes then
+                            executed_patch_resources[mod_res_bytes] = ret_val
+                        end
+                        if r_bytes then
+                            executed_patch_resources[r_bytes] = ret_val
+                        end
+                        loaded_modules[mod_name] = "loaded"
+                        loaded_count = loaded_count + 1
+                        log_write("Loaded mod: " .. mod_name .. (loose_path and (" (loose: " .. loose_path .. ")") or (patch_discovered_mods[mod_name] and " (archive patch)" or "")))
+                    else
+                        local err_msg = tostring(res):gsub("[\r\n]+", " ")
+                        loaded_modules[mod_name] = "failed: " .. err_msg
+                        failed_count = failed_count + 1
+                        log_write("Failed loading " .. mod_name .. ": " .. err_msg)
                     end
-                    if mod_res_bytes then
-                        executed_patch_resources[mod_res_bytes] = ret_val
-                    end
-                    if r_bytes then
-                        executed_patch_resources[r_bytes] = ret_val
-                    end
-                    loaded_modules[mod_name] = "loaded"
-                    loaded_count = loaded_count + 1
-                    log_write("Loaded mod: " .. mod_name .. (loose_path and (" (loose: " .. loose_path .. ")") or (patch_discovered_mods[mod_name] and " (archive patch)" or "")))
-                else
-                    local err_msg = tostring(res):gsub("[\r\n]+", " ")
-                    loaded_modules[mod_name] = "failed: " .. err_msg
-                    failed_count = failed_count + 1
-                    log_write("Failed loading " .. mod_name .. ": " .. err_msg)
                 end
             end
         else
@@ -4860,7 +7732,8 @@ log_write(string.format("Startup finished: %d loaded, %d failed, %d not installe
 -- Run after_startup callbacks
 local ran_cb, failed_cb = 0, 0
 for _, cb in ipairs(after_startup_queue) do
-    local ok, err = pcall(cb)
+    local ok, err = uml_internal.call_with_owner(uml_internal.after_startup_owners[cb], cb)
+    uml_internal.after_startup_owners[cb] = nil
     if ok then
         ran_cb = ran_cb + 1
     else
@@ -5091,7 +7964,7 @@ pcall(function()
         local res_path = appdata .. "/UniversalModLoader/in_game_test_results.json"
         local f_res = io.open(res_path, "w")
         if f_res then
-            f_res:write(string.format('{\n  "status": "PASSED",\n  "version": "2.0.3",\n  "apis": true,\n  "f9_menu": true,\n  "options": true,\n  "loaded_count": %d,\n  "failed_count": %d\n}\n', loaded_count, failed_count))
+            f_res:write(string.format('{\n  "status": "PASSED",\n  "version": "2.0.4",\n  "apis": true,\n  "f9_menu": true,\n  "options": true,\n  "loaded_count": %d,\n  "failed_count": %d\n}\n', loaded_count, failed_count))
             f_res:close()
             log_write("[TEST_MODE] In-Game Test Diagnostics Written to " .. tostring(res_path))
         end

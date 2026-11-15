@@ -1,6 +1,14 @@
-# Universal Mod Loader (UML) v2.0.0 — Modding API Reference
+# Universal Mod Loader (UML) v2.0.4 — Modding API Reference
 
-Universal Mod Loader v2.0.0 introduces a modern, native Lua modding framework designed specifically for Helldivers 2 mod developers. It provides crash-resilient hooks, an automatic F9 settings menu integration, rebindable hotkeys with chat guard protection, in-game toast notifications, 14-locale localization, and an inter-mod event bus.
+Universal Mod Loader v2.0.4 provides a unified, crash-resilient Lua modding framework for Helldivers 2 mod developers. UML is built on **7 Foundational Domain APIs** (`UML.config`, `UML.input`, `UML.ui`, `UML.hooks`, `UML.locales` / `UML.i18n`, `UML.audio`, and `UML.engine`), all accessible either directly as domain namespaces or through the scoped `mod = UML.register(...)` handle:
+
+1. **`UML.config`** — Options, Action Buttons (`type = "button"`), and Structured JSON Persistence (`get`/`set`/`on_change`/`trigger`/`save_data`/`load_data`)
+2. **`UML.input`** — Keybindings, Menu-Allowed Hotkeys (`allow_in_menu = true`), Rising-Edge Polling (`is_down`/`is_pressed`/`consume_press`), and Chat/Focus/Menu Guards
+3. **`UML.ui`** (alias `UML.menu`, `UML.hud`) — F9 Full Menu, Single-Mod Compact Menus, Menu State Listeners, Toast Notifications, and 2D Screen HUD Drawing (`screen_size`/`scale`/`color`/`rect`/`text`)
+4. **`UML.hooks`** — Lifecycle (`on_init`/`on_update`/`on_shutdown`), Throttled Updates & Timers (`after`/`every`/`cancel_timer`), Managed Function Detours (`hook`/`unhook`), and Inter-Mod Event Bus (`on`/`emit`)
+5. **`UML.locales`** (alias `UML.i18n`) — 14-Locale Auto-Detection, Translation Packs, and UTF-8 / Cyrillic / CJK Sanitization
+6. **`UML.audio`** — Crash-Guarded Wwise Audio Playback (`play`/`stop`/`is_playing`/`set_parameter`)
+7. **`UML.engine`** — Safe Stingray 3D World, Unit Queries (`unit_alive`/`unit_position`), 3D-to-2D `world_to_screen`, Physics `raycast`, and Frame-Safe `vec3`/`box_vec3`
 
 ---
 
@@ -117,33 +125,87 @@ Registers a configurable setting into the F9 Mod Settings Menu and saves it to `
         description = "Select your preferred aiming reticle."
     })
     ```
+  * **Button / Action (One-Shot Menu Trigger):**
+    ```lua
+    mod:option("reset_presets", {
+        label = "Reset Presets to Default",
+        type = "button",
+        button_text = "EXECUTE",
+        description = "Press Enter, Space, or Right Arrow in F9/Compact menu to run.",
+        on_click = function()
+            mod:set("saved_presets", {})
+            mod:notify("PRESETS RESET", 2.0)
+        end
+    })
+    ```
 
-#### `mod:get(option_id)`
-Retrieves the current persisted value of an option.
+#### `mod:get(option_or_data_id, default_value)` (alias: `mod:load_data`)
+Retrieves the current persisted value of an option or structured data key, returning `default_value` if unset.
 
-#### `mod:set(option_id, new_value)`
-Updates an option programmatically and immediately saves changes to disk.
+#### `mod:set(option_or_data_id, new_value)` (alias: `mod:save_data`)
+Updates an option or persists structured Lua tables (arrays and nested dictionaries) directly to `uml_mod_settings.json`. Keys set without `mod:option` (or registered with `hidden = true` / `type = "data"`) are persisted on disk without cluttering the F9 menu.
+```lua
+-- Persist arbitrary nested tables (loadouts, presets, arrays) with the same get/set API:
+mod:set("armor_presets", {
+    slot_1 = { helmet = "B-01", cape = "Foesmasher", tags = { "heavy", "gold" } }
+})
+local presets = mod:get("armor_presets", {})
+```
 
 #### `mod:on_change(option_id, callback)`
-Subscribes to live value changes for an option.
+Subscribes to live value changes for an option (can also be passed inline as `on_change = fn` inside `mod:option`).
 ```lua
 mod:on_change("hud_alpha", function(new_val)
     apply_alpha(new_val)
 end)
 ```
 
+#### `mod:trigger(option_id, ...)`
+Programmatically triggers a `type = "button"` option's `on_click` and `on_change` callbacks.
+
 ---
 
-### Keybindings & Input Polling
+### Keybindings, Menu-Allowed Hotkeys & Input Polling
 
-#### `mod:bind_key(action_id, default_key, callback)`
+#### `mod:bind_key(action_id, default_key, callback, opts)` (or `mod:bind_key(default_key, callback, mode, opts)`)
 Registers a rebindable hotkey in the F9 menu.
 * **Automatic Multiplayer Chat Guard:** UML automatically disables hotkeys while the in-game text chat box is open (`Enter`), preventing accidental triggers while typing.
 * **Window Focus Guard:** Hotkeys will not fire if the player is Alt-Tabbed out of Helldivers 2.
+* **Menu-Allowed Hotkeys (`allow_in_menu = true`):** Pass `{ allow_in_menu = true }` when a hotkey should remain active while the F9 or compact menu is open (still blocked during active key-capture or chat).
 ```lua
 mod:bind_key("radar_pulse", "h", function()
     perform_radar_sweep()
+end, { allow_in_menu = false, description = "Trigger tactical radar sweep." })
+```
+
+#### `mod:is_key_down(action_id_or_key, allow_in_menu)` & `mod:consume_key_press(action_id_or_key, allow_in_menu)`
+Edge-safe polling helpers for custom update loops. `consume_key_press` consumes the rising edge for the current frame so multiple handlers do not double-trigger.
+
+---
+
+### Unified UI, Compact Menus & HUD Drawing (`UML.ui` / `mod.ui`)
+
+`UML.ui` (also aliased as `UML.menu`, `UML.hud`, and `mod.ui`) unifies menu state inspection, compact overlay menus, and crash-guarded 2D Stingray HUD drawing:
+
+```lua
+-- 1. Register a single-mod Compact Menu shortcut (layouts: 1=Right, 2=Left, 3=Center, 4=Full)
+mod:register_compact_menu({
+    key = "f10",
+    layout = 1,
+    layout_option_id = "TacticalScanner.menu_layout"
+})
+
+-- 2. Inspect or control menu state
+local state = mod.ui.get_state() -- { open, fullscreen, compact, layout, mod_name, option_id, capture, chat_open, ... }
+mod.ui.on_change(function(st)
+    -- React to menu open/close, compact toggle, or selection changes
 end)
+
+-- 3. Draw resolution-scaled HUD rectangles & sanitized text across active Stingray worlds
+local w, h = mod.ui.screen_size()
+local px = mod.ui.scale()
+mod.ui.rect(40, h - 120, 260, 44, mod.ui.color(220, 16, 22, 32), 900)
+mod.ui.text("SCANNER ACTIVE", 54, h - 106, px, mod.ui.color(255, 255, 215, 55), 910)
 ```
 
 ---
@@ -161,14 +223,25 @@ mod:notify("SENTRY OVERCLOCK ACTIVATED", 3.0)
 
 ---
 
-### Lifecycle Hooks & Circuit Breaker
+### Lifecycle Hooks, Timers, Function Detours & Circuit Breaker
 
 #### `mod:on_init(callback)`
 Fires once after all mods and game engine subsystems have initialized.
 
-#### `mod:on_update(callback)`
-Fires every engine frame with delta time `dt`.
-* **Automated Circuit Breaker:** If your update code encounters 10 consecutive syntax or runtime errors, UML isolates and pauses your hook while logging diagnostics to `UniversalModLoader.log`, preventing the entire game process from crashing.
+#### `mod:on_update(callback, interval_seconds)`
+Fires every engine frame with delta time `dt`—or, when `interval_seconds` is provided (e.g. `mod:on_update(fn, 0.25)`), throttles execution to run every `interval_seconds`.
+* **Automated Circuit Breaker:** If your update code encounters 10 consecutive runtime errors, UML isolates and pauses your hook while logging diagnostics to `UniversalModLoader.log`, preventing the game process from crashing.
+
+#### `mod:after(delay_seconds, callback)` & `mod:every(interval_seconds, callback)`
+Schedules a one-shot delayed callback or repeating timer inside UML's update loop (returns `timer_id`, cancellable via `mod:cancel_timer(timer_id)`). Timers are automatically cleaned up on `Ctrl+F5` hot-reload.
+
+#### `mod:hook(target_table, method_name, wrapper_fn)` & `mod:unhook(target_table, method_name, wrapper_fn)`
+Safely detours `target_table[method_name]` in a managed multi-mod hook chain without clobbering other mods. `wrapper_fn(orig_fn, ...)` receives the next/original function as its first argument. If a hook errors, UML logs the error and automatically falls back to calling `orig_fn(...)`. All hooks owned by a mod are automatically restored on `Ctrl+F5` hot-reload.
+```lua
+mod:hook(TargetSystem, "apply_damage", function(orig, self, amount, ...)
+    return orig(self, amount * 1.25, ...)
+end)
+```
 
 #### `mod:on_shutdown(callback)`
 Fires during engine shutdown or live reload cleanup.

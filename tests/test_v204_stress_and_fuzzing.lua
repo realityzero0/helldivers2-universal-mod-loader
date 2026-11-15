@@ -756,7 +756,7 @@ local function run_battery()
                     local types, count = u32(hdr, 4), u32(hdr, 8)
                     local table_start = 72 + 32 * types
                     local max_possible = math.max(0, math.floor((file_size - table_start) / 80))
-                    local clamped_count = math.min(count, max_possible, 8192)
+                    local clamped_count = math.min(count, max_possible, 250000)
                     assert(clamped_count == 0, "Truncated file count clamped to 0")
                 end
                 f_in:close()
