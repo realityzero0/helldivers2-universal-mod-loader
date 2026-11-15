@@ -20,7 +20,7 @@
    * Restored and verified full backward compatibility with Uniformity `connect_native()` closure-upvalue detection.
 
 3. **Standalone Optimized `thumbnail.png`**
-   * Replaced the legacy CowboyBingus thumbnail asset with a clean, custom `512x512` optimized `Universal Mod Loader` tile (`~48 KB`), keeping the full release archive at `~114 KB`.
+   * Added a clean, custom `512x512` optimized `Universal Mod Loader` tile (`~48 KB`), keeping the full release archive compact (`~119 KB`).
 
 ---
 
