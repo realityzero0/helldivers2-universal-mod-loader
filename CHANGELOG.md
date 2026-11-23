@@ -1,5 +1,29 @@
 # Changelog — Helldivers 2 Universal Mod Loader
 
+## [2.0.5] - Full Chef Shared Loader v1.5.3 Host, Helmet Headlamp 1.6.0 & Mod Compatibility Suite
+
+### Mod Compatibility & Runtime Enhancements
+1. **Complete Chef Shared Loader API v3 / v1.5.3 Host (`chef.*`)**
+   * Implemented the full Chef Shared Loader v1.5.3 host surface (`time`, `call`, `call_kind`, `fn_of`, `world`, `world_id`, `in_mission`, `watch`, `units_near`, `camera`, `unit_alive`, `unit_kind`, `unit_node`, `unit_position`, `unit_rotation`, `setting`, `key_known`, `key_down`, `key_pressed`, `mouse_down`, `mouse_pressed`, `wheel`, `mouse_delta`, `hold_mouse`, `peer_id`, `menu_open`, `notify`, `mods`, `read_file`, `save_table`, `load_table`, `save`, `load`, `screen`, `color`, `rect`, `triangle`, `arc`, `ring`, `circle`, `bitmap`, `bitmap_uv`, `world_to_screen`, `line`, `ray_box`, `spawn`, `text`, `text_width`, `own_log`, `has`, `title`, `bind`, and `TOP = 2000`).
+   * Automatically adopts returned `M.update` / `M.shutdown` module hooks, binds `chef` into each mod's chunk environment (`setfenv`), absorbs `-- HD2-Options: <mod>` mod-manager option patches into `chef.options`, and registers the `"chef-shared-loader"` prerequisite alias.
+   * Verified in-game compatibility with **HUDdle 0.8.4 (no helper)** (`mods/rosensterner/minimal_hud`) alongside **Reticle Ammo HUD 2.1.6** (`mods/reticle_ammo/hud`), **First Person**, **Optic Preview**, **Sentry Animation Probe**, **Treasure Radar**, **Match Colors**, **Weapon Colors**, and **ZombiePack Headlamp**.
+2. **Chef UI Rendering, 3D World Overlays & Performance Fixes**
+   * **Per-Texture GUI Material Binding (`chef.bitmap_uv` / `chef.bitmap`):** Binds mod textures onto Chef's UI material (`e2d6ed90906c1e8b` / slot `3aa8b87e00000000`) via dedicated per-texture `ScreenGui` handles so icon atlases and stratagem sprites render cleanly instead of white squares.
+   * **3D Lines, Decals & Projection:** Updated `fn_of` to accept callable Stingray tables (`__call`, e.g., `Vector3` / `Vector2`); fixed `chef.line` + `post_step` (`LineObject.reset` before `add_line`, dispatch after mod updates, auto-clear on idle frames); hardened `chef.spawn` with `Quaternion.identity` fallback and `World.time` reset cleanup; added behind-camera culling to `chef.world_to_screen`; and fixed `chef.camera()` basis/yaw/fov, `chef.unit_rotation()`, `chef.arc`, `chef.ray_box()`, and `chef.text` 5x7 scaling + missing `~` / punctuation glyphs.
+   * **FPS & Stutter Elimination:** Added weak per-unit caches for `Unit.debug_name` / `unit_kind`, shared world scans across `chef.watch` handles, and deferred settings disk writes during active mod update hooks.
+3. **Alt-Tab, Focus-Loss & Display Reset Recovery**
+   * Automatically destroys and recreates `ScreenGui`s (`H.gui`, `H.tex_guis`, and `uml_world_guis`) on live worlds when window focus returns after Alt-Tabbing or leaving the game screen, when `Gui.resolution()` recovers from minimize (`0x0`) or changes, or if any `Gui` / `Material.set_texture` / `LineObject` call errors.
+   * Added a `Window.has_focus(Window.get_main_window())` fallback and clamped out-of-range / `NaN` `dt` spikes (`> 0.5 s`) before invoking Chef `update(dt)` hooks.
+4. **Helmet Headlamp 1.6.0 (`mods/patpatpatrick/helmet_headlamp`) Fixes**
+   * Preserves `L` (`Toggle Headlamp`) and `N` (`Switch Headlamp Mode`) across game restarts and F9 live keybind updates without writing `mbm_imported=headlamp_toggle` or `=off` into `helmet_headlamp_debug_settings.txt` (and automatically heals existing config files on boot).
+   * Enables Helmet Headlamp 1.6.0's pure-Lua wrist-animation chat guard (`__hh_chat_animation()`) when native memory reading is unavailable under post-7.2.0 EAC.
+5. **CowboyBingus v19 & LuaJIT Forward-`goto` to Lua 5.1 Sanitizer**
+   * Bumped `CowboyBingusModLoader.version = 19` and added `CowboyBingusModLoader.log_directory` (resolving initialization for **Warbond Desk 0.9.21**, **Vehicle Specified Seat Switch 0.4.5**, and **SEAF Artillery Loadout 2.0.0**).
+   * Added a line-preserving `if <cond> then goto <label> end ... ::<label>::` sanitizer in `loadstring` so LuaJIT forward-`goto` scripts compile cleanly under Helldivers 2's vanilla Lua 5.1 VM.
+   * Added a clear startup log diagnostic listing any pre-7.2.0 mods that rely on native process memory (`ffi` / `ReadProcessMemory`) blocked by Easy Anti-Cheat.
+
+---
+
 ## [2.0.4] - 7 Foundational Domain APIs, Libra Menu & Keybind API & Standalone Thumbnail
 
 ### Highlights & Developer Platform Additions

@@ -70,18 +70,27 @@ body:
     attributes:
       label: Universal Mod Loader Version
       description: The version of Universal Mod Loader installed.
-      placeholder: "e.g. v2.0.0"
+      placeholder: "e.g. v2.0.5"
     validations:
       required: true
 
   - type: textarea
+    id: media_proof
+    attributes:
+      label: Screenshots or Short Video (Highly Recommended)
+      description: |
+        Drag and drop an in-game screenshot or short video clip (`.png`, `.jpg`, `.mp4`, `.gif`) showing the mod working in-game (or showing what happens if a post-EAC mod isn't working properly).
+      placeholder: "Drag & drop images or short video clips here, or paste a link..."
+    validations:
+      required: false
+
+  - type: textarea
     id: log_excerpt
     attributes:
-      label: Loader Log Excerpt
+      label: UniversalModLoader.log Excerpt
       description: |
-        Paste the relevant lines from `%LOCALAPPDATA%\CowboyBingus\Helldivers2\Logs\BingusSharedLoader.log`.
-        Look for lines containing `[UniversalLoader]` or `[ChefMod]`.
-      placeholder: "[UniversalLoader] Loaded mod: mods/author/mod_1..."
+        Paste or attach `%APPDATA%\Arrowhead\Helldivers2\UniversalModLoader.log` (especially important if a post-EAC mod failed to load or had an issue).
+      placeholder: "[UniversalLoader] Loaded mod: mods/author/mod_name..."
     validations:
       required: false
 
@@ -89,6 +98,6 @@ body:
     id: additional_notes
     attributes:
       label: Detailed Observations & Steps
-      description: Describe what you observed in-game (drop pod sequences, F9 menu settings, mission extractions).
+      description: Describe what you tested in-game (F9 menu options, keybinds, HUD elements, mission behavior).
     validations:
       required: false

@@ -1,4 +1,4 @@
--- Universal Mod Loader v2.0.4 for Helldivers 2 (Steam Builds 25988413 / 26088801 / 26251122+ / Lua 5.1)
+-- Universal Mod Loader v2.0.5 for Helldivers 2 (Steam Builds 25988413 / 26088801 / 26251122+ / Lua 5.1)
 -- Replaces engine boot resource 0xF476DF93691895FA in bundle 9ba626afa44a3aa3
 -- Unifies All Helldivers 2 Modding Standards:
 --   1. Bingus Shared Loader (CowboyBingus / v17 / v20 / v21 / API 1 + BingusRuntime v1)
@@ -196,7 +196,7 @@ local function open_log()
         if f then
             log_handle = f
             active_log_path = path
-            f:write(string.format("\n--- Universal Mod Loader v2.0.4 Booted at %s ---\n", os.date and os.date("%Y-%m-%d %H:%M:%S") or "now"))
+            f:write(string.format("\n--- Universal Mod Loader v2.0.5 Booted at %s ---\n", os.date and os.date("%Y-%m-%d %H:%M:%S") or "now"))
             f:flush()
             return log_handle
         end
@@ -491,20 +491,20 @@ end
 set_active_uml_locale("auto")
 
 local UML_UI_STRINGS = {
-    ["en"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
-    ["en-GB"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
-    ["fr"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - SOUS-MENUS MODS", pane_mods = "[VOLET: LISTE MODS]", pane_opts = "[VOLET: OPTIONS]", mods = "MODS (%d)  [1-0 ACCES]", submenu = "SOUS-MENU: %s  |  ELEMENT %d/%d  |  PAGE %d/%d (%d/PG)", on = "< OUI >", off = "< NON >", desc_mod = "MOD SELECTIONNE: %s (%d OPTIONS) - APPUYEZ SUR DROITE, ESPACE OU 1-0 POUR MODIFIER LES OPTIONS. [-]/[=] POUR TAILLE UI." },
-    ["de"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - MOD-UNTERMENUS", pane_mods = "[BEREICH: MOD-LISTE]", pane_opts = "[BEREICH: OPTIONEN]", mods = "MODS (%d)  [1-0 WAHL]", submenu = "UNTERMENU: %s  |  EINTRAG %d/%d  |  SEITE %d/%d (%d/S.)", on = "< EIN >", off = "< AUS >", desc_mod = "AKTIVER MOD: %s (%d OPTIONEN) - RECHTS, LEERTASTE ODER 1-0 ZUM BEARBEITEN DRUCKEN. [-]/[=] FUR UI-SKALIERUNG." },
-    ["it"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - SOTTOMENU MOD", pane_mods = "[PANNELLO: MOD]", pane_opts = "[PANNELLO: OPZIONI]", mods = "MOD (%d)  [1-0 SALTA]", submenu = "SOTTOMENU: %s  |  VOCE %d/%d  |  PAG %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "MOD SELEZIONATA: %s (%d OPZIONI) - PREMI DESTRA, SPAZIO O 1-0 PER MODIFICARE LE OPZIONI. [-]/[=] SCALA UI." },
-    ["es"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  ELEMENTO %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PULSA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
-    ["es-419"]  = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  ELEMENTO %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PRESIONA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
-    ["pt-BR"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - SUBMENUS DE MODS", pane_mods = "[PAINEL: MODS]", pane_opts = "[PAINEL: OPCOES]", mods = "MODS (%d)  [1-0 ATALHO]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAG %d/%d (%d/PG)", on = "< LIG >", off = "< DES >", desc_mod = "MOD SELECIONADO: %s (%d OPCOES) - PRESSIONE DIREITA, ESPACO OU 1-0 PARA EDITAR OPCOES. [-]/[=] ESCALA UI." },
-    ["pl"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - PODMENU MODOW", pane_mods = "[PANEL: LISTA MODOW]", pane_opts = "[PANEL: OPCJE]", mods = "MODY (%d)  [1-0 SKOK]", submenu = "PODMENU: %s  |  POZYCJA %d/%d  |  STR %d/%d (%d/STR)", on = "< WL >", off = "< WYL >", desc_mod = "WYBRANY MOD: %s (%d OPCJI) - NACISNIJ PRAWO, SPACJE LUB 1-0 ABY EDYTOWAC OPCJE. [-]/[=] SKALA UI." },
-    ["ru"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - PODMENYU MODOV", pane_mods = "[PANEL: SPISOK MODOV]", pane_opts = "[PANEL: NASTROYKI]", mods = "MODY (%d)  [1-0 VYBOR]", submenu = "PODMENYU: %s  |  ELEMENT %d/%d  |  STR %d/%d (%d/STR)", on = "< VKL >", off = "< VYKL >", desc_mod = "VYBRAN MOD: %s (%d OPTSIY) - NAZHMITE VPRAVO, PROBEL ILI 1-0 DLYA NASTROYKI. [-]/[=] MASSHTAB UI." },
-    ["ja"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - MOD SUBMENUS (JA)", pane_mods = "[PANE: MOD ICHIRAN]", pane_opts = "[PANE: SETTEI]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  KOMOKU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SENTAKU MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
-    ["ko"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - MOD SUBMENUS (KO)", pane_mods = "[PANE: MOD MOKROK]", pane_opts = "[PANE: SEOLJEONG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  HANGMOK %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SEONTAEK MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
-    ["zh-Hans"] = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - MOD SUBMENUS (ZHS)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XIANGMU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
-    ["zh-Hant"] = { hdr = "UNIVERSAL MOD LOADER v2.0.4 - MOD SUBMENUS (ZHT)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XIANGMU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["en"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
+    ["en-GB"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
+    ["fr"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - SOUS-MENUS MODS", pane_mods = "[VOLET: LISTE MODS]", pane_opts = "[VOLET: OPTIONS]", mods = "MODS (%d)  [1-0 ACCES]", submenu = "SOUS-MENU: %s  |  ELEMENT %d/%d  |  PAGE %d/%d (%d/PG)", on = "< OUI >", off = "< NON >", desc_mod = "MOD SELECTIONNE: %s (%d OPTIONS) - APPUYEZ SUR DROITE, ESPACE OU 1-0 POUR MODIFIER LES OPTIONS. [-]/[=] POUR TAILLE UI." },
+    ["de"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - MOD-UNTERMENUS", pane_mods = "[BEREICH: MOD-LISTE]", pane_opts = "[BEREICH: OPTIONEN]", mods = "MODS (%d)  [1-0 WAHL]", submenu = "UNTERMENU: %s  |  EINTRAG %d/%d  |  SEITE %d/%d (%d/S.)", on = "< EIN >", off = "< AUS >", desc_mod = "AKTIVER MOD: %s (%d OPTIONEN) - RECHTS, LEERTASTE ODER 1-0 ZUM BEARBEITEN DRUCKEN. [-]/[=] FUR UI-SKALIERUNG." },
+    ["it"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - SOTTOMENU MOD", pane_mods = "[PANNELLO: MOD]", pane_opts = "[PANNELLO: OPZIONI]", mods = "MOD (%d)  [1-0 SALTA]", submenu = "SOTTOMENU: %s  |  VOCE %d/%d  |  PAG %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "MOD SELEZIONATA: %s (%d OPZIONI) - PREMI DESTRA, SPAZIO O 1-0 PER MODIFICARE LE OPZIONI. [-]/[=] SCALA UI." },
+    ["es"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  ELEMENTO %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PULSA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
+    ["es-419"]  = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  ELEMENTO %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PRESIONA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
+    ["pt-BR"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - SUBMENUS DE MODS", pane_mods = "[PAINEL: MODS]", pane_opts = "[PAINEL: OPCOES]", mods = "MODS (%d)  [1-0 ATALHO]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAG %d/%d (%d/PG)", on = "< LIG >", off = "< DES >", desc_mod = "MOD SELECIONADO: %s (%d OPCOES) - PRESSIONE DIREITA, ESPACO OU 1-0 PARA EDITAR OPCOES. [-]/[=] ESCALA UI." },
+    ["pl"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - PODMENU MODOW", pane_mods = "[PANEL: LISTA MODOW]", pane_opts = "[PANEL: OPCJE]", mods = "MODY (%d)  [1-0 SKOK]", submenu = "PODMENU: %s  |  POZYCJA %d/%d  |  STR %d/%d (%d/STR)", on = "< WL >", off = "< WYL >", desc_mod = "WYBRANY MOD: %s (%d OPCJI) - NACISNIJ PRAWO, SPACJE LUB 1-0 ABY EDYTOWAC OPCJE. [-]/[=] SKALA UI." },
+    ["ru"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - PODMENYU MODOV", pane_mods = "[PANEL: SPISOK MODOV]", pane_opts = "[PANEL: NASTROYKI]", mods = "MODY (%d)  [1-0 VYBOR]", submenu = "PODMENYU: %s  |  ELEMENT %d/%d  |  STR %d/%d (%d/STR)", on = "< VKL >", off = "< VYKL >", desc_mod = "VYBRAN MOD: %s (%d OPTSIY) - NAZHMITE VPRAVO, PROBEL ILI 1-0 DLYA NASTROYKI. [-]/[=] MASSHTAB UI." },
+    ["ja"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - MOD SUBMENUS (JA)", pane_mods = "[PANE: MOD ICHIRAN]", pane_opts = "[PANE: SETTEI]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  KOMOKU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SENTAKU MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["ko"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - MOD SUBMENUS (KO)", pane_mods = "[PANE: MOD MOKROK]", pane_opts = "[PANE: SEOLJEONG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  HANGMOK %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SEONTAEK MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["zh-Hans"] = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - MOD SUBMENUS (ZHS)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XIANGMU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["zh-Hant"] = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - MOD SUBMENUS (ZHT)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XIANGMU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
 }
 
 -- Unicode -> ASCII Transliteration Tables (Latin-1, Latin Extended-A, Cyrillic, Fullwidth, Punctuation)
@@ -939,7 +939,12 @@ local GLYPHS = {
   ['['] = '01110010000100001000010000100001110', [']'] = '01110000100001000010000100001001110',
   ['='] = '00000111110000011111000000000000000', ['_'] = '00000000000000000000000000000011111',
   ['|'] = '00100001000010000100001000010000100', ['#'] = '01010111110101001010111110101000000',
-  ['*'] = '00000001001010101110101010010000000',
+  ['*'] = '00000001001010101110101010010000000', ['~'] = '00000000000100110110000000000000000',
+  ['"'] = '01010010100101000000000000000000000', ['\\'] = '10000100000100000100001000001000001',
+  [';'] = '00000011000110000000011000010001000', ['@'] = '01110100011011110101101111000001110',
+  ['$'] = '00100011111010001110001011111000100', ['&'] = '01100100101010001000101011001001101',
+  ['^'] = '00100010101000100000000000000000000', ['{'] = '00110001000010001000001000010000110',
+  ['}'] = '01100001000010000010001000010001100', ['`'] = '01000001000000000000000000000000000',
 }
 
 local glyph_rects = {}
@@ -980,10 +985,11 @@ local function draw_pixel_text_on_gui(sr, g, x, y, str, px, col, layer)
     if not sr or not g or not col then return end
     x = tonumber(x) or 0
     y = tonumber(y) or 0
-    px = math.max(1, tonumber(px) or 1)
+    px = math.max(0.5, tonumber(px) or 1)
     local cx = x
     local V3, V2, R = sr.Vector3, sr.Vector2, sr.Gui.rect
     if not V3 or not V2 or not R then return end
+    local z = layer or 970
     local str_clean = sanitize_text(tostring(str or ""))
     for i = 1, #str_clean do
         local ch = str_clean:sub(i, i)
@@ -995,7 +1001,7 @@ local function draw_pixel_text_on_gui(sr, g, x, y, str, px, col, layer)
                     local rw = (r.w or 1) * px
                     local rh = (r.h or 1) * px
                     if rw > 0 and rh > 0 then
-                        pcall(R, g, V3(cx + (r.x or 0) * px, y + (r.y or 0) * px, layer or 970), V2(rw, rh), col)
+                        R(g, V3(cx + (r.x or 0) * px, y + (r.y or 0) * px, z), V2(rw, rh), col)
                     end
                 end
             end
@@ -1274,7 +1280,18 @@ end
 
 local function format_mod_title(s)
     if type(s) ~= "string" or s == "" then return "GENERAL MODS" end
+    if uml_internal.chef_custom_titles and type(uml_internal.chef_custom_titles[s]) == "string" and uml_internal.chef_custom_titles[s] ~= "" then
+        return uml_internal.chef_custom_titles[s]
+    end
     s = s:gsub("^@", ""):gsub("%.lua$", "")
+    do
+        -- a mod's entry file (mods/<mod>/main, init, core, core_1) is named by its folder
+        local base = s:match("([^/\\]+)$")
+        if base == "main" or base == "init" or base == "core" or base == "core_1" then
+            local parent = s:match("([^/\\]+)[/\\][^/\\]+$")
+            if parent and parent ~= "" and parent ~= "mods" then s = parent end
+        end
+    end
     s = s:gsub("^.*[/\\]", "")
     s = s:gsub("^[Mm][Oo][Dd]_", ""):gsub("^[Mm][Oo][Dd][Ss]_", "")
     local low = s:lower()
@@ -1899,6 +1916,12 @@ local function is_window_focused()
     local win = sr and (rawget(sr, "Window") or rawget(_G, "Window")) or rawget(_G, "Window")
     if type(win) == "table" and type(rawget(win, "has_focus")) == "function" then
         local ok, focused = pcall(win.has_focus)
+        if not ok and type(rawget(win, "get_main_window")) == "function" then
+            local ok_w, mw = pcall(win.get_main_window)
+            if ok_w and mw ~= nil then
+                ok, focused = pcall(win.has_focus, mw)
+            end
+        end
         if ok and focused == false then
             return false
         end
@@ -2009,12 +2032,14 @@ local function draw_in_game_menu()
             if uml_ui_open then
                 local ok_m, err_m = pcall(draw_menu_on_gui, sr, g, W, H, order, reg, vals)
                 if not ok_m then
+                    uml_world_guis[w] = nil
                     record_uml_error("draw_menu_on_gui", err_m)
                 end
             end
             if toasts then
                 local ok_t, err_t = pcall(draw_notifications_on_gui, sr, g, W, H, toasts)
                 if not ok_t then
+                    uml_world_guis[w] = nil
                     record_uml_error("draw_notifications", err_t)
                 end
             end
@@ -3893,6 +3918,11 @@ kernel32_stub.ReadProcessMemory = function(proc, addr_ptr, buf, size, done_ptr)
         return 1
     end
     local pe_src, base_addr = nil, nil
+    -- Helmet Headlamp 1.6.0 probes (base + 0x3C, 4) inside __hh_native_open(); returning 0 lets it use its pure-Lua 5.1 animation chat guard
+    if addr == (GAME_MOCK_BASE + 0x3C) and n == 4 then
+        if type(done_ptr) == "table" then done_ptr[0] = 0 end
+        return 0
+    end
     if addr >= GAME_MOCK_BASE and (addr + n) <= (GAME_MOCK_BASE + #GAME_PE_BYTES) then
         pe_src, base_addr = GAME_PE_BYTES, GAME_MOCK_BASE
     elseif addr >= EXE_MOCK_BASE and (addr + n) <= (EXE_MOCK_BASE + #EXE_PE_BYTES) then
@@ -3921,7 +3951,12 @@ kernel32_stub.GetCurrentProcess = function() return make_mock_pointer(1) end
 kernel32_stub.GetFileSizeEx = function() return 0 end
 
 local ffi_stub = {
-    cdef = function() end,
+    cdef = function()
+        local owner = uml_internal.current_mod_owner()
+        if owner and owner ~= "mods/patpatpatrick/helmet_headlamp" then
+            uml_internal.ffi_users[owner] = true
+        end
+    end,
     load = function(lib)
         return setmetatable({}, {
             __index = function(_, key)
@@ -3977,11 +4012,15 @@ local ffi_stub = {
     })
 }
 local ok_native_ffi, native_ffi = pcall(require, "ffi")
+uml_internal.ffi_users = uml_internal.ffi_users or {}
+uml_internal.inert_ffi_mods = {}
 if ok_native_ffi and type(native_ffi) == "table" then
+    uml_internal.ffi_is_stub = false
     _G.ffi = native_ffi
     package.preload["ffi"] = function() return native_ffi end
     package.loaded["ffi"] = native_ffi
 else
+    uml_internal.ffi_is_stub = true
     _G.ffi = ffi_stub
     package.preload["ffi"] = function() return ffi_stub end
     package.loaded["ffi"] = ffi_stub
@@ -4115,8 +4154,9 @@ local startup_finished = false
 local loader_state = {
     api = 1,
     api_version = 1,
-    version = 17,
+    version = 19,
     revision = "loader-v1.0.1-universal",
+    log_directory = ((os.getenv and os.getenv("APPDATA")) or ".") .. "\\Arrowhead\\Helldivers2",
     modules = loaded_modules,
     capabilities = {
         api = 1,
@@ -4132,6 +4172,9 @@ local loader_state = {
     open_log = function(filename)
         local localapp = os.getenv and os.getenv("LOCALAPPDATA")
         local roam = os.getenv and os.getenv("APPDATA")
+        if roam and roam ~= "" then
+            rawset(_G.CowboyBingusModLoader or {}, "log_directory", roam .. "\\Arrowhead\\Helldivers2")
+        end
         if filename then
             local candidates = {
                 (roam or ".") .. "/Arrowhead/Helldivers2/" .. filename,
@@ -4269,12 +4312,1142 @@ package.loaded["hd2rt"] = hd2rt
 package.loaded["hd2runtime"] = hd2rt
 package.loaded["HD2Runtime"] = hd2rt
 
--- 4. Chef Shared Loader Emulation (API Levels 1, 2, 3)
+-- 4. Chef Shared Loader Emulation (API Levels 1, 2, 3+)
+uml_internal.chef_custom_titles = uml_internal.chef_custom_titles or {}
+uml_internal.chef_contexts_by_mod = uml_internal.chef_contexts_by_mod or {}
+uml_internal.chef_mod_opt_ids = uml_internal.chef_mod_opt_ids or {}
+
+do
+    if type(table) == "table" then
+        if rawget(table, "unpack") == nil and type(unpack) == "function" then
+            table.unpack = unpack
+        end
+        if rawget(table, "new") == nil then
+            table.new = function() return {} end
+        end
+        if rawget(table, "clear") == nil then
+            table.clear = function(t)
+                if type(t) ~= "table" then return end
+                local k = next(t)
+                while k ~= nil do
+                    t[k] = nil
+                    k = next(t, k)
+                end
+            end
+        end
+    end
+    if type(loadstring) == "function" and not uml_internal.raw_loadstring then
+        local raw_ls = loadstring
+        uml_internal.raw_loadstring = raw_ls
+        loadstring = function(chunk, chunkname)
+            local fn, err = raw_ls(chunk, chunkname)
+            if not fn and type(chunk) == "string" and chunk:find("goto", 1, true) and chunk:find("::", 1, true) then
+                local rewritten, count = chunk:gsub("([ \t]*)if%s+([^\r\n]-)%s+then%s+goto%s+([%a_][%w_]*)%s+end(.-)\r?\n([ \t]*)::%3::", function(ind1, cond, lbl, body, ind2)
+                    if not body:find("goto%s+" .. lbl) and not body:find("::" .. lbl .. "::") then
+                        return ind1 .. "if not (" .. cond .. ") then" .. body .. "\n" .. ind2 .. "end"
+                    end
+                end)
+                if count and count > 0 then
+                    local fn2, err2 = raw_ls(rewritten, chunkname)
+                    if fn2 then return fn2 end
+                end
+            end
+            return fn, err
+        end
+        rawset(_G, "loadstring", loadstring)
+    end
+    if rawget(_G, "load") == nil and type(loadstring) == "function" then
+        rawset(_G, "load", function(chunk, chunkname, mode, env)
+            if type(chunk) == "function" then
+                local parts = {}
+                while true do
+                    local piece = chunk()
+                    if piece == nil or piece == "" then break end
+                    if type(piece) ~= "string" then
+                        return nil, "reader function must return a string"
+                    end
+                    parts[#parts + 1] = piece
+                end
+                chunk = table.concat(parts)
+            end
+            if type(chunk) ~= "string" then
+                return nil, "bad argument #1 to 'load' (string or function expected)"
+            end
+            if mode == "b" then
+                return nil, "attempt to load a text chunk (mode is 'b')"
+            end
+            if chunk:byte(1) == 27 then
+                return nil, "binary chunks are not supported by this loader"
+            end
+            local fn, err = loadstring(chunk, chunkname)
+            if fn and env ~= nil and type(setfenv) == "function" then
+                pcall(setfenv, fn, env)
+            end
+            return fn, err
+        end)
+    end
+end
+
 local chef_shared_state = {}
 local chef_api
 local create_chef_mod_context
 local wrap_spec
 local make_options_table
+
+-- 4b. Chef Shared Loader host helpers (api 3).
+-- Chef-hosted mods are handed a `chef` table of engine helpers and return their per-frame hooks (M.update / M.shutdown)
+-- for the loader to call. The semantics below follow the engine-only reimplementation of Chef Shared Loader's helpers
+-- that ships inside Reticle Ammo HUD 2 (mods/reticle_ammo/hud, "own helpers" host): crash-guarded engine calls by name,
+-- a clock, the main world and its id, mission detection, unit watches, the camera, keyboard/mouse by engine names,
+-- saved tables, and an immediate screen GUI in the UI world.
+function uml_internal.build_chef_host()
+    local H = {
+        clock = 0, frame = 0, wid = 0, main = nil, since = 0, wtime = -1, mission = false, units_at = -100,
+        fn_cache = {}, keys = {}, watches = {}, watched_kinds = {}, kind_units = {}, kind_gen = 0,
+        debug_names = setmetatable({}, { __mode = "k" }), unit_kinds = setmetatable({}, { __mode = "k" }),
+        shared_scan = nil, next_shared_scan = 0,
+        gui = nil, gui_world = nil, gui_ui = false, worlds = 0, next_try = 0, frame_gui = false, frame_gui_at = -1,
+        tex_guis = {}, tex_gui_world = nil, tex_gui_count = 0,
+        line_obj = nil, line_world = nil, line_dirty = false, line_shown = false, line_reset_frame = -1,
+        spawned_units = {},
+        cam = { unit = nil, cam = nil, list = nil, i = 0, retry = 0, frame = -1, data = nil, wid = -1 }
+    }
+    local fmt = string.format
+
+    local function engine() local sr = rawget(_G, "stingray") if type(sr) == "table" then return sr end return nil end
+    local function field(tab, k)
+        local tt = type(tab)
+        if tt == "table" then return tab[k] end
+        if tt == "userdata" then
+            local ok, v = pcall(function() return tab[k] end)
+            if ok then return v end
+        end
+        return nil
+    end
+    local function is_callable(v)
+        local tv = type(v)
+        if tv == "function" then return true end
+        if tv == "table" or tv == "userdata" then
+            local ok, mt = pcall(getmetatable, v)
+            if ok then
+                if type(mt) == "table" then return mt.__call ~= nil end
+                if mt ~= nil then
+                    local okd, dmt = pcall(function()
+                        local dbg = rawget(_G, "debug")
+                        return type(dbg) == "table" and type(dbg.getmetatable) == "function" and dbg.getmetatable(v) or nil
+                    end)
+                    if okd and type(dmt) == "table" then return dmt.__call ~= nil end
+                    return true
+                end
+            end
+        end
+        return false
+    end
+    -- engine calls by name: 'Table.function' (or a global such as 'Vector3'), resolved on stingray first
+    local function fn_of(name)
+        if type(name) ~= "string" or name == "" then return false end
+        local f = H.fn_cache[name]
+        if f then return f end
+        local sr = engine()
+        local t, k = name:match("^([%w_]+)%.([%w_]+)$")
+        if t then
+            local tab = sr and field(sr, t)
+            if tab == nil then tab = rawget(_G, t) end
+            f = field(tab, k)
+        else
+            f = sr and field(sr, name)
+            if f == nil then f = rawget(_G, name) end
+        end
+        if not is_callable(f) then return false end
+        H.fn_cache[name] = f
+        return f
+    end
+    H.fn_of = fn_of
+    local function ret(ok, ...)
+        if ok then return ... end
+        return nil, tostring((...))
+    end
+    function H.call(name, ...)
+        if name == "Unit.debug_name" then
+            local u = ...
+            if u ~= nil then
+                local cached = H.debug_names[u]
+                if cached ~= nil then return cached end
+                local f = fn_of(name)
+                if not f then return nil, "missing" end
+                local ok, res = pcall(f, ...)
+                if not ok then return nil, tostring(res) end
+                if type(res) == "string" then H.debug_names[u] = res end
+                return res
+            end
+        end
+        local f = fn_of(name)
+        if not f then return nil, "missing" end
+        return ret(pcall(f, ...))
+    end
+
+    -- files: the game's settings folder, the game folder from package.path
+    local DIR = "."
+    do
+        local ok, appdata = pcall(os.getenv, "APPDATA")
+        if ok and type(appdata) == "string" and appdata ~= "" then DIR = appdata .. "\\Arrowhead\\Helldivers2" end
+    end
+    local SEP = "\\"
+    local ROOT
+    do
+        local pkg = rawget(_G, "package")
+        local path = type(pkg) == "table" and type(pkg.path) == "string" and pkg.path or ""
+        for entry in path:gmatch("[^;]+") do
+            local root = entry:match("^(.-)[\\/][Bb][Ii][Nn][\\/][Ll][Uu][Aa][\\/]%?%.lua$")
+            if root and root ~= "" and root ~= "." then ROOT = root break end
+        end
+    end
+    H.log_directory, H.game_root, H.sep = DIR, ROOT, SEP
+
+    function H.read_file(path, limit)
+        local ok, f = pcall(io.open, path, "rb")
+        if not ok or not f then return nil end
+        local okr, text = pcall(f.read, f, limit or "*a")
+        pcall(f.close, f)
+        if okr and type(text) == "string" then return text end
+        return nil
+    end
+    local function ser(v, depth)
+        local t = type(v)
+        if t == "string" then return fmt("%q", v) end
+        if t == "number" then return (v == v and v > -1e300 and v < 1e300) and fmt("%.17g", v) or "0" end
+        if t == "boolean" then return tostring(v) end
+        if t == "table" and depth < 16 then
+            local parts = {}
+            for k, x in pairs(v) do
+                if (type(k) == "string" or type(k) == "number") and type(x) ~= "function" then
+                    parts[#parts + 1] = "[" .. ser(k, depth + 1) .. "]=" .. ser(x, depth + 1)
+                end
+            end
+            table.sort(parts)
+            return "{" .. table.concat(parts, ",\n") .. "}"
+        end
+        return "nil"
+    end
+    local function table_path(owner, name)
+        local cur_dir = DIR
+        local ok_a, appdata = pcall(os.getenv, "APPDATA")
+        if ok_a and type(appdata) == "string" and appdata ~= "" then
+            cur_dir = appdata .. SEP .. "Arrowhead" .. SEP .. "Helldivers2"
+        end
+        local stem = tostring(owner or "chef"):gsub("^.*[/\\]", ""):gsub("[^%w_%-]", "_")
+        local nm = (type(name) == "string" and name ~= "") and name or "state"
+        return cur_dir .. SEP .. "chef_" .. stem .. "_" .. tostring(nm):gsub("[^%w_%-]", "_") .. ".lua"
+    end
+    function H.save_table(owner, name, t)
+        if type(name) == "table" and t == nil then
+            t, name = name, "state"
+        end
+        local ok, f = pcall(io.open, table_path(owner, name), "w")
+        if not ok or not f then return false, "cannot write" end
+        local okw, err = pcall(function() f:write("return " .. ser(t, 0) .. "\n"); f:close() end)
+        return okw, err
+    end
+    function H.load_table(owner, name)
+        local text = H.read_file(table_path(owner, name))
+        if not text then return nil, "no such file" end
+        local chunk, err = loadstring(text, "=table")
+        if not chunk then return nil, err end
+        setfenv(chunk, {})
+        local okc, t = pcall(chunk)
+        if okc and type(t) == "table" then return t end
+        return nil, "not a table"
+    end
+
+    -- the main world, its id (a new one or the same one restarted), a mission by its size (a main world of over
+    -- 5,000 units), stepped once a frame by the loader before any mod runs
+    local function xyz(v)
+        if v == nil then return nil end
+        local x, y, z = H.call("Vector3.to_elements", v)
+        if type(x) == "number" then return x, y, z end
+        if type(v) == "table" and type(v.x) == "number" then return v.x, v.y, v.z end
+        return nil
+    end
+    H.xyz = xyz
+    function H.world() if H.main and H.clock - H.since >= 3 then return H.main end return nil end
+    function H.world_id() return H.wid end
+    function H.in_mission() return H.main ~= nil and H.clock - H.since >= 3 and H.mission end
+    function H.time() return H.clock end
+    function H.unit_alive(u) return u ~= nil and H.call("Unit.alive", u) == true end
+    local function resolve_unit_kind(u)
+        if u == nil then return nil end
+        local k = H.unit_kinds[u]
+        if k ~= nil then return k or nil end
+        if not H.unit_alive(u) then return nil end
+        local n = H.call("Unit.debug_name", u)
+        local m = type(n) == "string" and n:match("#ID%[(%x+)%]")
+        k = m and m:lower() or false
+        H.unit_kinds[u] = k
+        return k or nil
+    end
+    function H.unit_kind(u)
+        if not H.unit_alive(u) then return nil end
+        return resolve_unit_kind(u)
+    end
+    function H.unit_node(u, name)
+        if not H.unit_alive(u) or type(name) ~= "string" then return nil end
+        if H.call("Unit.has_node", u, name) == true then
+            return H.call("Unit.node", u, name)
+        end
+        return nil
+    end
+    function H.unit_position(u, node)
+        if not H.unit_alive(u) then return nil end
+        return xyz((H.call("Unit.world_position", u, tonumber(node) or 1)))
+    end
+    function H.unit_rotation(u, node)
+        if not H.unit_alive(u) then return nil end
+        local q = H.call("Unit.world_rotation", u, tonumber(node) or 1)
+        if q == nil then return nil end
+        local fwd = H.call("Quaternion.forward", q)
+        local fx, fy, fz
+        if fwd ~= nil then
+            fx, fy, fz = xyz(fwd)
+        else
+            fx, fy, fz = xyz(q)
+        end
+        if type(fx) == "number" and type(fy) == "number" then
+            return fx, fy, fz, math.atan2(fy, fx)
+        end
+        return nil
+    end
+
+    -- units of given resources (64-bit ids as hex) in the main world: World.units_by_resource (always with a fresh
+    -- IdString64 temporary, never cached across frames), and when needed in a mission, a single shared background
+    -- world scan cached per unit so multiple watches never duplicate World.units / Unit.debug_name passes.
+    local function place(u, k, items)
+        if H.unit_alive(u) then
+            local x, y, z = xyz((H.call("Unit.world_position", u, 1)))
+            if x then items[#items + 1] = { unit = u, kind = k, x = x, y = y, z = z } end
+        end
+    end
+    local function by_resource(w, main)
+        local items, ok = {}, true
+        for k in pairs(w.kinds) do
+            local id = H.call("IdString64.from_hex", k)
+            local us = id and H.call("World.units_by_resource", main, id)
+            if type(us) == "table" then
+                for i = 1, #us do place(us[i], k, items) end
+            else
+                ok = false
+            end
+        end
+        return items, ok
+    end
+    local function from_shared_kinds(w)
+        local items = {}
+        local ku = H.kind_units
+        for k in pairs(w.kinds) do
+            local list = ku[k]
+            if list then
+                for i = 1, #list do place(list[i], k, items) end
+            end
+        end
+        return items
+    end
+    local function step_shared_scan(main)
+        local S = H.shared_scan
+        if not S then return false end
+        if not S.list then
+            local units = H.call("World.units", main)
+            if type(units) ~= "table" then H.shared_scan = nil return false end
+            S.list, S.i, S.by_kind = units, 0, {}
+        end
+        local last = math.min(#S.list, S.i + 400)
+        local wk = H.watched_kinds
+        local by_kind = S.by_kind
+        for i = S.i + 1, last do
+            local u = S.list[i]
+            local k = resolve_unit_kind(u)
+            if k and wk[k] then
+                local bucket = by_kind[k]
+                if not bucket then bucket = {} by_kind[k] = bucket end
+                bucket[#bucket + 1] = u
+            end
+        end
+        S.i = last
+        if last >= #S.list then
+            H.kind_units = by_kind
+            H.kind_gen = H.kind_gen + 1
+            H.shared_scan = nil
+            H.next_shared_scan = H.clock + 2.0
+            return true
+        end
+        return false
+    end
+    function H.watch(kinds, every)
+        local norm = {}
+        if type(kinds) == "table" then
+            for k, v in pairs(kinds) do
+                local key = (type(k) == "string" and v ~= false) and k or (type(v) == "string" and v) or nil
+                if key then
+                    local clean = key:lower():gsub("^0x", "")
+                    norm[clean] = true
+                    H.watched_kinds[clean] = true
+                end
+            end
+        elseif type(kinds) == "string" then
+            local clean = kinds:lower():gsub("^0x", "")
+            norm[clean] = true
+            H.watched_kinds[clean] = true
+        end
+        local w = { kinds = norm, every = tonumber(every) or 2, next = 0, items = {}, generation = 0, paused = false }
+        w.pause = function() w.paused = true end
+        w.resume = function() w.paused = false end
+        H.watches[#H.watches + 1] = w
+        return w
+    end
+    function H.units_near(x, y, z, r, w)
+        if type(x) ~= "number" or type(y) ~= "number" or type(z) ~= "number" or type(r) ~= "number" then return {} end
+        local items = type(w) == "table" and w.items
+        if type(items) ~= "table" then return {} end
+        local r2 = r * r
+        local out = {}
+        for i = 1, #items do
+            local it = items[i]
+            if type(it) == "table" and type(it.x) == "number" then
+                local dx, dy, dz = it.x - x, it.y - y, it.z - z
+                if dx * dx + dy * dy + dz * dz <= r2 then
+                    out[#out + 1] = it
+                end
+            end
+        end
+        return out
+    end
+    function H.watch_step()
+        if #H.watches == 0 then return end
+        local main = H.world()
+        if not main then
+            H.shared_scan = nil
+            for _, w in ipairs(H.watches) do
+                w.items, w.next, w.use_shared = {}, 0, nil
+            end
+            return
+        end
+        local scan_finished = step_shared_scan(main)
+        local need_shared = false
+        for _, w in ipairs(H.watches) do
+            if not w.paused then
+                if w.wid ~= H.wid then
+                    w.wid, w.next, w.use_shared = H.wid, 0, nil
+                end
+                if scan_finished and w.use_shared then
+                    w.items = from_shared_kinds(w)
+                    w.generation = (w.generation or 0) + 1
+                elseif H.clock >= w.next then
+                    w.next = H.clock + w.every
+                    local items, ok = by_resource(w, main)
+                    if #items > 0 then
+                        w.use_shared = false
+                        w.items, w.generation = items, (w.generation or 0) + 1
+                    elseif H.in_mission() then
+                        w.use_shared = true
+                        local shared_items = from_shared_kinds(w)
+                        w.items, w.generation = shared_items, (w.generation or 0) + 1
+                        if #shared_items == 0 or not ok then
+                            need_shared = true
+                        end
+                    else
+                        w.items, w.generation = items, (w.generation or 0) + 1
+                    end
+                end
+            end
+        end
+        if need_shared and not H.shared_scan and H.clock >= H.next_shared_scan then
+            H.shared_scan = {}
+        end
+    end
+    -- the camera: the first unit of the main world that has one (looked for 400 units a frame), its position + basis + fov
+    function H.camera()
+        local C = H.cam
+        if C.frame == H.frame then return C.data end
+        C.frame, C.data, C.cam = H.frame, nil, nil
+        local main = H.world()
+        if not main then return nil end
+        if C.wid ~= H.wid then C.wid, C.unit, C.cam, C.list, C.i, C.retry = H.wid, nil, nil, nil, 0, 0 end
+        local function from(u)
+            local c = H.call("Unit.camera", u, 1)
+            if c == nil then return nil end
+            local x, y, z = xyz((H.call("Camera.world_position", c)))
+            if not x then return nil end
+            C.cam = c
+            local fx, fy, fz, rx, ry, rz, ux, uy, uz
+            local q = H.call("Camera.world_rotation", c)
+            if q ~= nil then
+                fx, fy, fz = xyz((H.call("Quaternion.forward", q)))
+                rx, ry, rz = xyz((H.call("Quaternion.right", q)))
+                ux, uy, uz = xyz((H.call("Quaternion.up", q)))
+            end
+            if not fx then fx, fy, fz = 0, 1, 0 end
+            if not rx then rx, ry, rz = 1, 0, 0 end
+            if not ux then ux, uy, uz = 0, 0, 1 end
+            local fov = H.call("Camera.vertical_fov", c)
+            return {
+                x = x, y = y, z = z,
+                fx = fx, fy = fy, fz = fz,
+                rx = rx, ry = ry, rz = rz,
+                ux = ux, uy = uy, uz = uz,
+                fov = type(fov) == "number" and fov or nil,
+                yaw = math.atan2(fx, fy)
+            }
+        end
+        if C.unit and H.unit_alive(C.unit) then C.data = from(C.unit) end
+        if C.data then return C.data end
+        if not C.list then
+            if H.clock < C.retry then return nil end
+            C.unit = nil
+            local units = H.call("World.units", main)
+            if type(units) ~= "table" then C.retry = H.clock + 4 return nil end
+            C.list, C.i = units, 0
+        end
+        local units = C.list
+        local last = math.min(#units, C.i + 400)
+        for i = C.i + 1, last do
+            local u = units[i]
+            if H.unit_alive(u) then
+                local n = H.call("Unit.num_cameras", u)
+                if type(n) == "number" and n > 0 then
+                    C.unit, C.list = u, nil
+                    C.data = from(u)
+                    return C.data
+                end
+            end
+        end
+        C.i = last
+        if last >= #units then C.list, C.retry = nil, H.clock + 4 end
+        return nil
+    end
+    function H.setting(path, ...)
+        if select("#", ...) > 0 then
+            return H.call("Application.user_setting", path, ...)
+        end
+        if type(path) == "string" then
+            local a, b, c = path:match("^([^%.]+)%.([^%.]+)%.([^%.]+)$")
+            if a then return H.call("Application.user_setting", a, b, c) end
+            local x, y = path:match("^([^%.]+)%.([^%.]+)$")
+            if x then
+                local v = H.call("Application.user_setting", x, y)
+                if v ~= nil then return v end
+            end
+            return H.call("Application.user_setting", path)
+        end
+        return nil
+    end
+
+    -- input through the engine: keys by the engine's names, a press is the frame it went down; nothing reaches a mod
+    -- while the game window is unfocused, the chat is open, a key is being captured or the F9 menu is open
+    local KEY_ALIASES = { ["page up"] = "pageup", ["page down"] = "pagedown", escape = "esc", ["return"] = "enter" }
+    local function button(dev, name)
+        if type(name) ~= "string" or name == "" then return { idx = false, down = false, was = false } end
+        local key = dev .. ":" .. name
+        local k = H.keys[key]
+        if k == nil then
+            local idx = H.call(dev .. ".button_index", name)
+            if type(idx) ~= "number" and KEY_ALIASES[name] then idx = H.call(dev .. ".button_index", KEY_ALIASES[name]) end
+            if type(idx) ~= "number" then
+                local sr = engine()
+                local ok, alt = pcall(resolve_button_id, sr and field(sr, dev), name)
+                if ok and type(alt) == "number" then idx = alt end
+            end
+            k = { idx = type(idx) == "number" and idx or false, down = false, was = false, frame = -1 }
+            H.keys[key] = k
+        end
+        if k.idx and k.frame ~= H.frame then
+            k.frame, k.was = H.frame, k.down
+            local v = H.call(dev .. ".button", k.idx)
+            k.down = v == true or (type(v) == "number" and v > 0.5)
+        end
+        return k
+    end
+    local function input_ok() return not uml_internal.is_input_blocked(false) end
+    function H.key_known(name) return button("Keyboard", name).idx ~= false end
+    function H.key_down(name) local k = button("Keyboard", name) return input_ok() and k.down == true end
+    function H.key_pressed(name) local k = button("Keyboard", name) return input_ok() and k.down == true and not k.was end
+    function H.mouse_down(name) local k = button("Mouse", name) return input_ok() and k.down == true end
+    function H.mouse_pressed(name) local k = button("Mouse", name) return input_ok() and k.down == true and not k.was end
+    function H.wheel()
+        local i = H.wheel_i
+        if i == nil then i = H.call("Mouse.axis_index", "wheel") or false H.wheel_i = i end
+        if not i or not input_ok() then return 0 end
+        local v = H.call("Mouse.axis", i)
+        if v == nil then return 0 end
+        local x, y = xyz(v)
+        return tonumber(y) or 0
+    end
+    function H.mouse_delta()
+        local i = H.mouse_axis_i
+        if i == nil then i = H.call("Mouse.axis_index", "mouse") or H.call("Mouse.axis_index", "cursor") or false H.mouse_axis_i = i end
+        if not i then return 0, 0 end
+        local v = H.call("Mouse.axis", i)
+        if v == nil then return 0, 0 end
+        local x, y = xyz(v)
+        return tonumber(x) or 0, tonumber(y) or 0
+    end
+    function H.hold_mouse() return false, "not supported" end
+    function H.peer_id() return H.call("Network.peer_id") end
+    function H.menu_open() return uml_ui_open == true end
+    function H.notify(msg, sec) return push_uml_notification(tostring(msg or ""), tonumber(sec) or 4) end
+    function H.mods()
+        local out = {}
+        for k, v in pairs(loaded_modules or {}) do
+            if v == "loaded" then out[k] = { id = k, name = k, status = v } end
+        end
+        return out
+    end
+    -- a key row's value: an engine key name, 'mouse:<button>' or 'off'
+    function H.bound_down(v)
+        if type(v) ~= "string" or v == "" or v == "off" then return false end
+        local m = v:match("^mouse:(.+)$")
+        if m then return H.mouse_down(m) end
+        return H.key_down(v)
+    end
+    function H.bound_pressed(v)
+        if type(v) ~= "string" or v == "" or v == "off" then return false end
+        local m = v:match("^mouse:(.+)$")
+        if m then return H.mouse_pressed(m) end
+        return H.key_pressed(v)
+    end
+
+    -- drawing: an immediate screen GUI in the UI world (the first world that isn't the game's), at layers below 0 -
+    -- over the game's HUD, under its map and menus
+    local RECT_FONT, RECT_MATERIAL = "core/performance_hud/debug", "core/performance_hud/gui"
+    local UI_MAT_HEX, UI_SLOT_HEX = "e2d6ed90906c1e8b", "3aa8b87e00000000"
+    local function is_world_live(w, worlds)
+        if w == nil then return false end
+        local list = type(worlds) == "table" and worlds or H.call("Application.worlds")
+        if type(list) ~= "table" then return w == H.main end
+        for i = 1, #list do
+            if list[i] == w then return true end
+        end
+        for _, v in pairs(list) do
+            if v == w then return true end
+        end
+        return false
+    end
+    local function reset_tex_guis(worlds)
+        local list = type(worlds) == "table" and worlds or H.call("Application.worlds")
+        for _, e in pairs(H.tex_guis or {}) do
+            if type(e) == "table" and e.world and e.gui and is_world_live(e.world, list) then
+                pcall(H.call, "World.destroy_gui", e.world, e.gui)
+            end
+        end
+        H.tex_guis, H.tex_gui_world, H.tex_gui_count = {}, nil, 0
+    end
+    local function reset_all_guis(worlds)
+        local list = type(worlds) == "table" and worlds or H.call("Application.worlds")
+        if H.gui and H.gui_world and is_world_live(H.gui_world, list) then
+            pcall(H.call, "World.destroy_gui", H.gui_world, H.gui)
+        end
+        H.gui, H.gui_world, H.gui_ui = nil, nil, nil
+        H.frame_gui, H.frame_gui_at, H.next_try = false, -1, 0
+        reset_tex_guis(list)
+    end
+    local function gui()
+        if H.frame_gui_at == H.frame then return H.frame_gui or nil end
+        H.frame_gui_at, H.frame_gui = H.frame, false
+        local main = H.main
+        if main == nil or H.clock - H.since < 3 then return nil end
+        local target, ui = main, false
+        local worlds = H.call("Application.worlds")
+        if type(worlds) == "table" then
+            for i = 1, #worlds do
+                local w = worlds[i]
+                if w ~= nil and w ~= main then target, ui = w, true break end
+            end
+            if not ui then
+                for _, w in pairs(worlds) do if w ~= nil and w ~= main then target, ui = w, true break end end
+            end
+            if H.gui and H.gui_ui and #worlds ~= H.worlds then reset_all_guis(worlds) end
+            H.worlds = #worlds
+        end
+        if H.gui and (H.gui_world ~= target or H.gui_ui ~= ui) then reset_all_guis(worlds) end
+        if not H.gui then
+            if H.clock < H.next_try then return nil end
+            local g = H.call("World.create_screen_gui", target, "immediate", "material", RECT_FONT, "material", RECT_MATERIAL)
+            if not g then H.next_try = H.clock + 1 return nil end
+            H.gui, H.gui_world, H.gui_ui = g, target, ui
+        end
+        H.frame_gui = H.gui
+        return H.gui
+    end
+    H.TOP = 2000
+    local function ui_layer(layer)
+        layer = tonumber(layer) or 900
+        if H.gui_ui then
+            if layer >= H.TOP then return layer - H.TOP + 1 end
+            return math.min(layer - 1000, -1)
+        end
+        return layer
+    end
+    function H.screen()
+        local w, h = H.call("Gui.resolution")
+        if type(w) == "number" and type(h) == "number" then return w, h end
+        return nil
+    end
+    function H.color(r, g, b, a)
+        local mk = fn_of("Color")
+        if not mk then return { a = a or 255, r = r, g = g, b = b } end
+        local ok, c = pcall(mk, tonumber(a) or 255, tonumber(r) or 255, tonumber(g) or 255, tonumber(b) or 255)
+        return ok and c or nil
+    end
+    function H.rect(x, y, w, h, c, layer)
+        local g, sr = gui(), engine()
+        if not g or not sr then return end
+        local V3, V2, R = field(sr, "Vector3"), field(sr, "Vector2"), field(field(sr, "Gui"), "rect")
+        if not V3 or not V2 or not R then return end
+        local ok = pcall(R, g, V3(x, y, ui_layer(layer)), V2(w, h), c)
+        if not ok and H.reset_at_frame ~= H.frame then
+            H.reset_at_frame = H.frame
+            reset_all_guis()
+        end
+    end
+    function H.triangle(x1, y1, x2, y2, x3, y3, c, layer)
+        local g, sr = gui(), engine()
+        if not g or not sr then return end
+        local V3, T = field(sr, "Vector3"), field(field(sr, "Gui"), "triangle")
+        if not V3 or not T then return end
+        local ok = pcall(T, g, V3(x1, 0, y1), V3(x2, 0, y2), V3(x3, 0, y3), ui_layer(layer), c)
+        if not ok and H.reset_at_frame ~= H.frame then
+            H.reset_at_frame = H.frame
+            reset_all_guis()
+        end
+    end
+    function H.arc(cx, cy, ri, ro, a0, a1, c, layer)
+        ri, ro = math.max(0, tonumber(ri) or 0), tonumber(ro) or 0
+        a0, a1 = tonumber(a0) or 0, tonumber(a1) or 360
+        if ro <= 0 or ro <= ri or a1 == a0 then return end
+        local g, sr = gui(), engine()
+        if not g or not sr then return end
+        local V3, T = field(sr, "Vector3"), field(field(sr, "Gui"), "triangle")
+        if not V3 or not T then return end
+        if a1 < a0 then a0, a1 = a1, a0 end
+        local span = math.min(360, a1 - a0)
+        local steps = math.max(1, math.min(32, math.ceil(span / 12)))
+        local rad_step = (span * math.pi / 180) / steps
+        local rad0 = a0 * math.pi / 180
+        local z = ui_layer(layer)
+        local ok_a = pcall(function()
+            for i = 0, steps - 1 do
+                local r1, r2 = rad0 + i * rad_step, rad0 + (i + 1) * rad_step
+                local s1, c1 = math.sin(r1), math.cos(r1)
+                local s2, c2 = math.sin(r2), math.cos(r2)
+                local ox1, oy1 = cx + ro * s1, cy + ro * c1
+                local ox2, oy2 = cx + ro * s2, cy + ro * c2
+                if ri <= 0.05 then
+                    T(g, V3(cx, 0, cy), V3(ox1, 0, oy1), V3(ox2, 0, oy2), z, c)
+                else
+                    local ix1, iy1 = cx + ri * s1, cy + ri * c1
+                    local ix2, iy2 = cx + ri * s2, cy + ri * c2
+                    T(g, V3(ix1, 0, iy1), V3(ox1, 0, oy1), V3(ox2, 0, oy2), z, c)
+                    T(g, V3(ix1, 0, iy1), V3(ox2, 0, oy2), V3(ix2, 0, iy2), z, c)
+                end
+            end
+        end)
+        if not ok_a and H.reset_at_frame ~= H.frame then
+            H.reset_at_frame = H.frame
+            reset_all_guis()
+        end
+    end
+    function H.ring(cx, cy, ri, ro, c, layer) H.arc(cx, cy, ri, ro, 0, 360, c, layer) end
+    function H.circle(cx, cy, r, c, layer) H.arc(cx, cy, 0, r, 0, 360, c, layer) end
+    function H.bitmap_uv(tex, u0, v0, u1, v1, x, y, w, h, c, layer)
+        local g, sr = gui(), engine()
+        if not g or not sr or type(tex) ~= "string" then return false end
+        local pid = H.call("IdString64.from_hex", tex)
+        if not pid or H.call("Application.can_get", "texture", pid) ~= true then return false end
+        local V3, V2, B = field(sr, "Vector3"), field(sr, "Vector2"), field(field(sr, "Gui"), "bitmap_uv")
+        if not V3 or not V2 or not B then return false end
+        local col = c or H.color(255, 255, 255, 255)
+        local z = ui_layer(layer)
+        if fn_of("Gui.material") and fn_of("Material.set_texture") then
+            local mid = H.call("IdString64.from_hex", UI_MAT_HEX)
+            local sid = H.call("IdString64.from_hex", UI_SLOT_HEX)
+            if not mid or not sid or H.call("Application.can_get", "material", mid) ~= true then return false end
+            if H.tex_gui_world ~= H.gui_world then
+                reset_tex_guis()
+                H.tex_gui_world = H.gui_world
+            end
+            H.tex_guis = H.tex_guis or {}
+            local entry = H.tex_guis[tex]
+            if not entry then
+                if (H.tex_gui_count or 0) >= 64 then
+                    reset_tex_guis()
+                    H.tex_gui_world = H.gui_world
+                end
+                local tg = H.call("World.create_screen_gui", H.gui_world, "immediate")
+                if not tg then return false end
+                local mh = H.call("Gui.material", tg, mid)
+                if not mh then
+                    pcall(H.call, "World.destroy_gui", H.gui_world, tg)
+                    return false
+                end
+                entry = { gui = tg, world = H.gui_world, mh = mh, bound_frame = -1 }
+                H.tex_guis[tex] = entry
+                H.tex_gui_count = (H.tex_gui_count or 0) + 1
+            end
+            if entry.bound_frame ~= H.frame then
+                local _, err = H.call("Material.set_texture", entry.mh, sid, pid)
+                if err ~= nil then
+                    if is_world_live(entry.world) then pcall(H.call, "World.destroy_gui", entry.world, entry.gui) end
+                    H.tex_guis[tex] = nil
+                    H.tex_gui_count = math.max(0, (H.tex_gui_count or 1) - 1)
+                    return false
+                end
+                entry.bound_frame = H.frame
+            end
+            local ok = pcall(B, entry.gui, mid, V2(u0, v0), V2(u1, v1), V3(x, y, z), V2(w, h), col)
+            if not ok then
+                if is_world_live(entry.world) then pcall(H.call, "World.destroy_gui", entry.world, entry.gui) end
+                H.tex_guis[tex] = nil
+                H.tex_gui_count = math.max(0, (H.tex_gui_count or 1) - 1)
+                return false
+            end
+            return true
+        end
+        local ok = pcall(B, g, pid, V2(u0, v0), V2(u1, v1), V3(x, y, z), V2(w, h), col)
+        if not ok and H.reset_at_frame ~= H.frame then
+            H.reset_at_frame = H.frame
+            reset_all_guis()
+        end
+        return ok == true
+    end
+    function H.bitmap(tex, x, y, w, h, c, layer)
+        return H.bitmap_uv(tex, 0, 0, 1, 1, x, y, w, h, c, layer)
+    end
+    function H.world_to_screen(x, y, z)
+        local cam_data = H.camera()
+        local cam = cam_data and H.cam.cam
+        local sr = engine()
+        local V3 = sr and field(sr, "Vector3")
+        if not cam or not V3 then return nil end
+        if type(cam_data.x) == "number" and type(cam_data.fx) == "number" then
+            local depth = (x - cam_data.x) * cam_data.fx + (y - cam_data.y) * cam_data.fy + (z - cam_data.z) * cam_data.fz
+            if depth <= 0.1 then return nil end
+        end
+        local p = H.call("Camera.world_to_screen", cam, V3(x, y, z))
+        if p == nil then return nil end
+        local sx, sy, sz = xyz(p)
+        if type(sx) == "number" and type(sy) == "number" then return sx, sy, sz end
+        return nil
+    end
+    function H.line(x1, y1, z1, x2, y2, z2, c)
+        local main, sr = H.world(), engine()
+        if not main or not sr then return end
+        local V3 = field(sr, "Vector3")
+        if not V3 then return end
+        if H.line_world ~= main or not H.line_obj then
+            H.line_obj = H.call("World.create_line_object", main)
+            H.line_world = main
+            H.line_dirty, H.line_shown, H.line_reset_frame = false, false, -1
+        end
+        if H.line_obj then
+            if H.line_reset_frame ~= H.frame then
+                local _, err_r = H.call("LineObject.reset", H.line_obj)
+                if err_r ~= nil then
+                    H.line_obj, H.line_world, H.line_dirty, H.line_shown, H.line_reset_frame = nil, nil, false, false, -1
+                    return
+                end
+                H.line_reset_frame = H.frame
+            end
+            local _, err_a = H.call("LineObject.add_line", H.line_obj, c, V3(x1, y1, z1), V3(x2, y2, z2))
+            if err_a ~= nil then
+                H.line_obj, H.line_world, H.line_dirty, H.line_shown, H.line_reset_frame = nil, nil, false, false, -1
+                return
+            end
+            H.line_dirty = true
+        end
+    end
+    function H.ray_box(from, dir, u)
+        if type(from) ~= "table" or type(dir) ~= "table" or not H.unit_alive(u) then return nil end
+        local ox, oy, oz = tonumber(from[1]) or 0, tonumber(from[2]) or 0, tonumber(from[3]) or 0
+        local dx, dy, dz = tonumber(dir[1]) or 0, tonumber(dir[2]) or 0, tonumber(dir[3]) or 0
+        local len = math.sqrt(dx * dx + dy * dy + dz * dz)
+        if len < 1e-6 then return nil end
+        local rdx, rdy, rdz = dx / len, dy / len, dz / len
+        local m, half = H.call("Unit.box", u)
+        if m ~= nil and half ~= nil then
+            local cx, cy, cz = xyz((H.call("Matrix4x4.translation", m)))
+            local hx, hy, hz = xyz(half)
+            if cx and hx and hx > 0 and hy > 0 and hz > 0 then
+                local _, _, _, yaw = H.unit_rotation(u, 1)
+                local cos_y, sin_y = math.cos(yaw or 0), math.sin(yaw or 0)
+                local rel_x, rel_y, rel_z = ox - cx, oy - cy, oz - cz
+                local lx = rel_x * cos_y + rel_y * sin_y
+                local ly = -rel_x * sin_y + rel_y * cos_y
+                local lz = rel_z
+                local ldx = rdx * cos_y + rdy * sin_y
+                local ldy = -rdx * sin_y + rdy * cos_y
+                local ldz = rdz
+                local tmin, tmax = 0, len
+                local axes_p = { lx, ly, lz }
+                local axes_d = { ldx, ldy, ldz }
+                local axes_h = { hx, hy, hz }
+                for i = 1, 3 do
+                    local p, d, h = axes_p[i], axes_d[i], axes_h[i]
+                    if math.abs(d) < 1e-8 then
+                        if p < -h or p > h then return nil end
+                    else
+                        local t1 = (-h - p) / d
+                        local t2 = (h - p) / d
+                        if t1 > t2 then t1, t2 = t2, t1 end
+                        if t1 > tmin then tmin = t1 end
+                        if t2 < tmax then tmax = t2 end
+                        if tmin > tmax then return nil end
+                    end
+                end
+                if tmax >= 0 and tmin <= len then return math.max(0, tmin) end
+                return nil
+            end
+        end
+        local ux, uy, uz = H.unit_position(u, 1)
+        if not ux then return nil end
+        local wx, wy, wz = ux - ox, uy - oy, (uz + 1.0) - oz
+        local proj = wx * rdx + wy * rdy + wz * rdz
+        if proj < 0 or proj > len then return nil end
+        local px, py, pz = wx - rdx * proj, wy - rdy * proj, wz - rdz * proj
+        if px * px + py * py + pz * pz <= 2.25 then return math.max(0, proj - 1.0) end
+        return nil
+    end
+    function H.spawn(res_hex, x, y, z)
+        local main, sr = H.world(), engine()
+        if not main or not sr or type(res_hex) ~= "string" then return nil, "no world" end
+        local V3 = field(sr, "Vector3")
+        local id = H.call("IdString64.from_hex", res_hex) or res_hex
+        if not V3 or not id then return nil, "no vector/id" end
+        local pos = V3(tonumber(x) or 0, tonumber(y) or 0, tonumber(z) or 0)
+        local u, err = H.call("World.spawn_unit", main, id, pos)
+        if not u then
+            local q = H.call("Quaternion.identity")
+            if q ~= nil then
+                u, err = H.call("World.spawn_unit", main, id, pos, q)
+            end
+        end
+        if not u then return nil, err or "spawn failed" end
+        H.spawned_units = H.spawned_units or {}
+        if #H.spawned_units >= 512 then
+            local alive = {}
+            for _, v in ipairs(H.spawned_units) do
+                if H.unit_alive(v) then alive[#alive + 1] = v end
+            end
+            H.spawned_units = alive
+        end
+        H.spawned_units[#H.spawned_units + 1] = u
+        return u
+    end
+    -- Chef's text signature is chef.text(x, y, str, px, c, layer), where px is the 5x7 scale (cap / 7).
+    -- Legacy (str, x, y, size, c, layer) is also accepted if the first argument is a string.
+    local function text_scale(px)
+        local s = tonumber(px) or 2
+        if s > 10 then s = s / 7 end
+        return math.max(0.5, s)
+    end
+    function H.text(a, b, c, d, e, f)
+        local g, sr = gui(), engine()
+        if not g or not sr then return end
+        local x, y, str, px, col, layer
+        if type(a) == "number" and type(b) == "number" then
+            x, y, str, px, col, layer = a, b, c, d, e, f
+        else
+            str, x, y, px, col, layer = a, b, c, d, e, f
+        end
+        if str == nil then return end
+        local ok_t = pcall(draw_pixel_text_on_gui, sr, g, tonumber(x) or 0, tonumber(y) or 0, tostring(str), text_scale(px), col, ui_layer(layer or 910))
+        if not ok_t and H.reset_at_frame ~= H.frame then
+            H.reset_at_frame = H.frame
+            reset_all_guis()
+        end
+    end
+    function H.text_width(str, px)
+        return #tostring(str or "") * 6 * text_scale(px)
+    end
+
+    -- once a frame, before any mod: the clock, the world, the GUI (fetched on the first draw), the unit watches
+    function H.step(dt)
+        H.frame = H.frame + 1
+        local step = tonumber(dt)
+        if not step or step ~= step or step < 0 or step > 0.5 then step = 1 / 60 end
+        H.clock = H.clock + step
+        local main = H.call("Application.main_world")
+        if main ~= H.main then
+            H.main, H.since, H.wtime, H.wid, H.line_obj, H.line_world = main, H.clock, -1, H.wid + 1, nil, nil
+            H.line_dirty, H.line_shown, H.line_reset_frame = false, false, -1
+            H.spawned_units = {}
+            reset_all_guis()
+            H.debug_names = setmetatable({}, { __mode = "k" })
+            H.unit_kinds = setmetatable({}, { __mode = "k" })
+            H.kind_units = {}
+            H.shared_scan = nil
+            H.next_shared_scan = 0
+        end
+        if main ~= nil then
+            local t = H.call("World.time", main)
+            if type(t) == "number" then
+                if t < H.wtime then
+                    H.since, H.wid = H.clock, H.wid + 1
+                    if H.line_obj and H.line_world == main then
+                        pcall(H.call, "LineObject.reset", H.line_obj)
+                        pcall(H.call, "LineObject.dispatch", main, H.line_obj)
+                    end
+                    H.line_obj, H.line_world, H.line_dirty, H.line_shown, H.line_reset_frame = nil, nil, false, false, -1
+                    for _, u in ipairs(H.spawned_units or {}) do
+                        if H.unit_alive(u) then pcall(H.call, "World.destroy_unit", main, u) end
+                    end
+                    H.spawned_units = {}
+                    reset_all_guis()
+                    H.kind_units = {}
+                    H.shared_scan = nil
+                    H.next_shared_scan = 0
+                end
+                H.wtime = t
+            end
+            if H.clock - H.units_at > 2 then
+                H.units_at = H.clock
+                local n = H.call("World.num_units", main)
+                local m = type(n) == "number" and n > 5000
+                if m ~= H.mission then H.mission, H.wid = m, H.wid + 1 end
+            end
+        end
+        local focused = is_window_focused()
+        local rw, rh = H.screen()
+        local res_changed = false
+        if type(rw) == "number" and type(rh) == "number" and rw > 0 and rh > 0 then
+            if (H.res_w and H.res_h and (H.res_w ~= rw or H.res_h ~= rh)) or H.res_lost then
+                res_changed = true
+            end
+            H.res_w, H.res_h, H.res_lost = rw, rh, false
+        elseif H.res_w and H.res_h then
+            H.res_lost = true
+        end
+        if (H.was_focused == false and focused == true) or res_changed then
+            reset_all_guis()
+            for w in pairs(uml_world_guis) do uml_world_guis[w] = nil end
+        end
+        H.was_focused = focused
+        pcall(H.watch_step)
+    end
+    function H.post_step()
+        local main = H.main
+        if H.line_obj and main ~= nil and H.line_world == main then
+            if H.line_dirty then
+                local _, err_d = H.call("LineObject.dispatch", main, H.line_obj)
+                if err_d ~= nil then
+                    H.line_obj, H.line_world, H.line_dirty, H.line_shown, H.line_reset_frame = nil, nil, false, false, -1
+                    return
+                end
+                H.line_dirty = false
+                H.line_shown = true
+            elseif H.line_shown then
+                local _, err_r = H.call("LineObject.reset", H.line_obj)
+                local err_d = err_r
+                if err_d == nil then
+                    local _, d_err = H.call("LineObject.dispatch", main, H.line_obj)
+                    err_d = d_err
+                end
+                if err_d ~= nil then
+                    H.line_obj, H.line_world, H.line_dirty, H.line_shown, H.line_reset_frame = nil, nil, false, false, -1
+                    return
+                end
+                H.line_shown = false
+                H.line_reset_frame = H.frame
+            end
+        end
+    end
+    -- a Chef mod's returned hook, with the engine's temporary vectors given back after it (as Chef does)
+    function H.run_hook(fn, ...)
+        local t1, t2, t3 = H.call("Script.temp_count")
+        local tb = H.call("Script.temp_byte_count")
+        local prev_defer = uml_internal.defer_settings_save
+        uml_internal.defer_settings_save = true
+        local ok, err = pcall(fn, ...)
+        uml_internal.defer_settings_save = prev_defer
+        if not prev_defer and uml_internal.flush_deferred_settings then
+            pcall(uml_internal.flush_deferred_settings)
+        end
+        if type(t1) == "number" then H.call("Script.set_temp_count", t1, t2, t3) end
+        if type(tb) == "number" then H.call("Script.set_temp_byte_count", tb) end
+        if not ok then error(err, 0) end
+    end
+    -- chef.bind(id, default_key, label): a key row in the mod's menu and a handle to read it
+    function H.make_bind(register_fn, get_fn, id, default_key, label)
+        local dk = type(default_key) == "string" and default_key:lower() or "off"
+        pcall(register_fn, id, { type = "key", default = dk, label = label or id })
+        local b = {}
+        function b.key()
+            local v = get_fn(id)
+            if type(v) == "string" and v ~= "" then return v end
+            return dk
+        end
+        function b.pressed() return H.bound_pressed(b.key()) end
+        function b.down() return H.bound_down(b.key()) end
+        return b
+    end
+    return H
+end
+uml_internal.chef_host = uml_internal.build_chef_host()
+uml_internal.chef_manager_options = uml_internal.chef_manager_options or {}
+
+-- Chef runs each mod in its own environment, where `chef` is that mod's helpers; globals still read from and write to
+-- the game's globals.
+function uml_internal.bind_chef_env(chunk, ctx)
+    if type(chunk) ~= "function" or type(getfenv) ~= "function" or type(setfenv) ~= "function" then return false end
+    local ok, env = pcall(getfenv, chunk)
+    if not ok or env ~= _G then return false end
+    return (pcall(setfenv, chunk, setmetatable({ chef = ctx }, { __index = _G, __newindex = _G })))
+end
+
+-- Chef runs the hooks a mod returns (M.update each frame, M.shutdown at exit). A mod that hooked the game's update()
+-- itself, or registered its own UML update hook while loading, already runs and is left alone (no double frames).
+function uml_internal.adopt_chef_hooks(mod_name, res, update_before, shutdown_before, hooks_before)
+    if type(res) ~= "table" or res == _G or rawget(res, "is_chef_loader") ~= nil or rawget(res, "installed") == false then
+        return false
+    end
+    local upd, shut = rawget(res, "update"), rawget(res, "shutdown")
+    if type(upd) ~= "function" and type(shut) ~= "function" then return false end
+    local adopted = {}
+    if type(upd) == "function" and rawget(_G, "update") == update_before and #update_order == hooks_before then
+        local H = uml_internal.chef_host
+        uml_internal.register_update_hook(mod_name .. ":chef_hooks", function(dt, ...)
+            local step_dt = tonumber(dt)
+            if not step_dt or step_dt ~= step_dt or step_dt < 0 or step_dt > 0.5 then step_dt = 1 / 60 end
+            H.run_hook(upd, step_dt, ...)
+        end, mod_name)
+        adopted[#adopted + 1] = "update"
+    end
+    if type(shut) == "function" and rawget(_G, "shutdown") == shutdown_before then
+        uml_internal.register_shutdown_hook(mod_name .. ":chef_shutdown", function(...) return shut(...) end, mod_name)
+        adopted[#adopted + 1] = "shutdown"
+    end
+    if #adopted > 0 then
+        log_write(string.format("[ChefHost] %s: running its returned %s hook(s)", tostring(mod_name), table.concat(adopted, " + ")))
+        return true
+    end
+    return false
+end
+
+-- "-- HD2-Options: <mod>" resources: the mod manager's ticked options for a mod (a returned table of values), merged
+-- into that mod's chef.options instead of being run as a mod
+function uml_internal.absorb_manager_options(target, script_content, key_label, p_num)
+    target = tostring(target or ""):gsub("%s*%-%-.*$", ""):match("^%s*(.-)%s*$")
+    if target == "" then return false end
+    local chunk = loadstring(script_content, "=options")
+    if not chunk then return false end
+    setfenv(chunk, {})
+    local ok, t = pcall(chunk)
+    if not ok or type(t) ~= "table" then return false end
+    local dst = uml_internal.chef_manager_options[target] or {}
+    uml_internal.chef_manager_options[target] = dst
+    local n = 0
+    for k, v in pairs(t) do
+        if type(k) == "string" and type(v) ~= "function" then dst[k] = v n = n + 1 end
+    end
+    log_write(string.format("[UniversalArchive] Mod manager options for %s: %d value(s) (%s in patch_%s)", target, n, tostring(key_label), tostring(p_num)))
+    return true
+end
 
 wrap_spec = function(id, spec, default_category, default_mod)
     if type(id) == "table" and spec == nil then
@@ -4319,6 +5492,21 @@ make_options_table = function(default_cat, mod_name)
     opt_table.add_category = function(cat_name)
         return make_options_table(cat_name, mod_name)
     end
+    opt_table.title = function(a, b)
+        local text = (a == opt_table) and b or a
+        if mod_name and uml_internal.chef_contexts_by_mod[mod_name] then
+            return uml_internal.chef_contexts_by_mod[mod_name].title(text)
+        end
+        return chef_api.title(text)
+    end
+    opt_table.load = function(a, b)
+        local name = (a == opt_table) and b or a
+        return uml_internal.chef_host.load_table(mod_name or "chef", type(name) == "string" and name or nil) or {}
+    end
+    opt_table.save = function(a, b, c)
+        if a == opt_table then a, b = b, c end
+        return uml_internal.chef_host.save_table(mod_name or "chef", a, b)
+    end
     setmetatable(opt_table, { __index = function(_, k) return chef_api.options[k] end })
     return opt_table
 end
@@ -4343,7 +5531,7 @@ end
 chef_api = {
     api_level = 3,
     loader_name = "UniversalModLoader",
-    loader_version = "2.0.4",
+    loader_version = "2.0.5",
     is_chef_loader = true,
     is_universal_loader = true,
     shared = chef_shared_state,
@@ -4374,16 +5562,36 @@ chef_api = {
     },
     options = {
         register = function(id, spec)
-            local target_mod = active_loading_mod_name or infer_caller_mod_name()
+            local target_mod = uml_internal.current_mod_owner() or infer_caller_mod_name()
             local fmt_mod = target_mod and format_mod_title(target_mod) or nil
+            local raw_id = (type(id) == "table" and spec == nil) and (id.id or id.name or id.key) or id
             local clean_id, clean_spec = wrap_spec(id, spec, nil, fmt_mod)
             local mom = rawget(_G, "ModOptionsMenu")
             if mom and type(mom.register_option) == "function" then
                 if type(clean_id) == "string" and clean_id ~= "" and (type(clean_spec) == "table" or clean_spec == nil) then
-                    return mom.register_option(clean_id, clean_spec)
+                    if type(clean_spec) == "table" and target_mod then
+                        clean_spec._chef_owner = clean_spec._chef_owner or target_mod
+                        clean_spec.owner_mod = clean_spec.owner_mod or target_mod
+                    end
+                    local ok_reg, reg_err = mom.register_option(clean_id, clean_spec)
+                    if ok_reg then
+                        if target_mod and raw_id ~= nil then
+                            uml_internal.chef_mod_opt_ids[target_mod] = uml_internal.chef_mod_opt_ids[target_mod] or {}
+                            uml_internal.chef_mod_opt_ids[target_mod][tostring(raw_id)] = clean_id
+                        end
+                        if type(mom.get) == "function" then
+                            local cur = mom.get(clean_id)
+                            if cur ~= nil then return cur end
+                        end
+                        if type(clean_spec) == "table" and clean_spec.default ~= nil then
+                            return clean_spec.default
+                        end
+                        return true
+                    end
+                    return nil, reg_err or "invalid option"
                 end
             end
-            return false
+            return nil, "invalid option"
         end,
         get = function(id)
             if type(id) ~= "string" or id == "" then return nil end
@@ -4393,9 +5601,7 @@ chef_api = {
         end,
         set = function(id, val)
             if type(id) ~= "string" or id == "" then return false end
-            local mom = rawget(_G, "ModOptionsMenu")
-            if mom and type(mom.set) == "function" then return mom.set(id, val) end
-            return false
+            return chef_api.set(id, val)
         end,
         on_change = function(id, fn)
             local mom = rawget(_G, "ModOptionsMenu")
@@ -4433,7 +5639,20 @@ chef_api = {
         if type(id) ~= "string" or id == "" then return false end
         chef_shared_state[id] = val
         local mom = rawget(_G, "ModOptionsMenu")
-        if mom and type(mom.set) == "function" then return mom.set(id, val) end
+        if mom then
+            if type(mom.get) == "function" and mom.get(id) == val then
+                return true
+            end
+            if active_loading_mod_name ~= nil and type(uml_internal.settings_raw_set) == "function" then
+                uml_internal.settings_raw_set(id, val)
+                local cbs = type(mom.change_callbacks) == "table" and mom.change_callbacks[id] or nil
+                if type(cbs) == "table" then
+                    for i = 1, #cbs do pcall(cbs[i], val, id) end
+                end
+                return true
+            end
+            if type(mom.set) == "function" then return mom.set(id, val) end
+        end
         return false
     end,
     on_change = function(id, fn)
@@ -4487,19 +5706,24 @@ chef_api = {
         end
         return logger
     end,
-    call_kind = function(kind, fn, ...)
-        if type(kind) == "function" then
-            local ok, res = pcall(kind, fn, ...)
+    -- Chef's call_kind(name, kind, ...): a crash-guarded engine call by name ('Table.function'), the kind naming the
+    -- call for the guard. The older UML form call_kind(kind, fn, ...) / call_kind(fn, ...) is still accepted.
+    call_kind = function(name, kind, ...)
+        if type(name) == "string" and type(kind) ~= "function" then
+            return uml_internal.chef_host.call(name, ...)
+        end
+        if type(name) == "function" then
+            local ok, res = pcall(name, kind, ...)
             if not ok then
                 record_uml_error("ChefMod:call_kind", res)
                 pcall(print, "[ChefMod] call_kind error: " .. tostring(res))
             end
             return ok, res
-        elseif type(fn) == "function" then
-            local ok, res = pcall(fn, ...)
+        elseif type(kind) == "function" then
+            local ok, res = pcall(kind, ...)
             if not ok then
-                record_uml_error("ChefMod:call_kind:" .. tostring(kind), res)
-                pcall(print, "[ChefMod] call_kind (" .. tostring(kind) .. ") error: " .. tostring(res))
+                record_uml_error("ChefMod:call_kind:" .. tostring(name), res)
+                pcall(print, "[ChefMod] call_kind (" .. tostring(name) .. ") error: " .. tostring(res))
             end
             return ok, res
         end
@@ -4531,7 +5755,7 @@ create_chef_mod_context = function(mod_name)
     ctx = {
         api_level = 3,
         loader_name = "UniversalModLoader",
-        loader_version = "2.0.4",
+        loader_version = "2.0.5",
         is_chef_loader = true,
         is_universal_loader = true,
         mod_name = mod_name,
@@ -4581,7 +5805,11 @@ create_chef_mod_context = function(mod_name)
         end,
         state = chef_api.state,
         shared = chef_shared_state,
-        own_log = function(name, ...) return chef_api.own_log(name or mod_name, ...) end,
+        own_log = function(name, ...)
+            local lg = chef_api.own_log(name or mod_name, ...)
+            ctx.log = function(fmt, ...) return lg(uml_internal.format_chef_log(ctx, fmt, ...)) end
+            return lg
+        end,
         call_kind = chef_api.call_kind,
         log = function(fmt, ...) pcall(print, "[" .. formatted_mod .. "] " .. uml_internal.format_chef_log(ctx, fmt, ...)) end,
         info = function(fmt, ...) pcall(print, "[" .. formatted_mod .. "] " .. uml_internal.format_chef_log(ctx, fmt, ...)) end,
@@ -4589,6 +5817,43 @@ create_chef_mod_context = function(mod_name)
         error = function(fmt, ...) pcall(print, "[" .. formatted_mod .. "] [ERROR] " .. uml_internal.format_chef_log(ctx, fmt, ...)) end,
         bindings = chef_api.bindings
     }
+    ctx.title = function(a, b)
+        local text = (a == ctx) and b or a
+        if type(text) ~= "string" or text == "" then return false end
+        local clean = sanitize_text(text):upper()
+        uml_internal.chef_custom_titles[mod_name] = clean
+        formatted_mod = clean
+        ctx.name = clean
+        return true
+    end
+    ctx.save_table = function(a, b, c)
+        if a == ctx then return uml_internal.chef_host.save_table(mod_name, b, c) end
+        return uml_internal.chef_host.save_table(mod_name, a, b)
+    end
+    ctx.load_table = function(a, b)
+        return uml_internal.chef_host.load_table(mod_name, (a == ctx) and b or a)
+    end
+    ctx.save = ctx.save_table
+    ctx.load = function(a, b)
+        return uml_internal.chef_host.load_table(mod_name, (a == ctx) and b or a) or {}
+    end
+    ctx.bind = function(a, b, c, d)
+        if a == ctx then a, b, c = b, c, d end
+        return uml_internal.chef_host.make_bind(reg_opt, ctx.get, a, b, c)
+    end
+    -- the mod manager's ticked options ("-- HD2-Options: <mod>" resources) for this mod
+    local mgr = uml_internal.chef_manager_options[mod_name]
+    if type(mgr) == "table" then
+        for k, v in pairs(mgr) do
+            if rawget(mod_options, k) == nil then rawset(mod_options, k, v) end
+        end
+    end
+    for k, v in pairs(chef_api) do
+        if rawget(ctx, k) == nil then
+            rawset(ctx, k, v)
+        end
+    end
+    uml_internal.chef_contexts_by_mod[mod_name] = ctx
     setmetatable(ctx, { __index = chef_api })
     return ctx
 end
@@ -4606,11 +5871,60 @@ chef_api.options.add_category = chef_api.group
 chef_api.options.register_option = chef_api.options.register
 chef_api.options.add_option = chef_api.options.register
 
+-- Chef Shared Loader host helpers (api 3) on the shared table; per-mod pieces (title, saved tables, key rows, the mod
+-- manager's options) are bound again on each mod's context below.
+do
+    local H = uml_internal.chef_host
+    chef_api.api = 3
+    chef_api.TOP = H.TOP
+    chef_api.loader = "UniversalModLoader"
+    chef_api.sep, chef_api.log_directory, chef_api.game_root = H.sep, H.log_directory, H.game_root
+    for _, name in ipairs({
+        "time", "call", "fn_of", "world", "world_id", "in_mission", "watch", "units_near", "camera",
+        "unit_alive", "unit_kind", "unit_node", "unit_position", "unit_rotation", "setting",
+        "key_known", "key_down", "key_pressed", "mouse_down", "mouse_pressed", "wheel", "mouse_delta", "hold_mouse",
+        "peer_id", "menu_open", "notify", "mods", "read_file", "screen", "color",
+        "rect", "triangle", "arc", "ring", "circle", "bitmap", "bitmap_uv", "world_to_screen", "line", "ray_box", "spawn",
+        "text", "text_width"
+    }) do
+        chef_api[name] = H[name]
+    end
+    chef_api.flush = function() return true end
+    local EXTRA_FEATURES = { menu = true, bind = true, own_log = true, save_table = true, load_table = true, save = true, load = true, title = true }
+    chef_api.has = function(name)
+        if type(name) ~= "string" then return false end
+        return EXTRA_FEATURES[name] == true or type(rawget(chef_api, name)) == "function"
+    end
+    local function owner() return uml_internal.current_mod_owner() or infer_caller_mod_name() or "chef" end
+    chef_api.title = function(text)
+        if type(text) ~= "string" or text == "" then return false end
+        uml_internal.chef_custom_titles[owner()] = sanitize_text(text):upper()
+        return true
+    end
+    chef_api.save_table = function(name, t) return H.save_table(owner(), name, t) end
+    chef_api.load_table = function(name) return H.load_table(owner(), name) end
+    chef_api.save = chef_api.save_table
+    chef_api.load = function(name) return H.load_table(owner(), name) or {} end
+    chef_api.options.title = function(a, b) return chef_api.title(type(a) == "table" and b or a) end
+    chef_api.options.load = function(a, b)
+        local nm = type(a) == "table" and b or a
+        return H.load_table(owner(), type(nm) == "string" and nm or nil) or {}
+    end
+    chef_api.options.save = function(a, b, c)
+        if a == chef_api.options then a, b = b, c end
+        return H.save_table(owner(), a, b)
+    end
+    chef_api.bind = function(id, default_key, label)
+        return H.make_bind(chef_api.options.register, chef_api.get, id, default_key, label)
+    end
+end
+
 _G.ChefSharedLoader = chef_api
 
 local chef_aliases = {
     "ChefSharedLoader",
     "chef_shared_loader",
+    "chef-shared-loader",
     "mods/chef_shared_loader/core_1",
     "mods/chef_shared_loader/core",
     "mods/chef_shared_loader",
@@ -5046,7 +6360,7 @@ local function serialize_json_value(v, depth, seen)
     return nil
 end
 
-local function save_settings_to_disk(values)
+function uml_internal.write_settings_to_disk_now(values)
     if type(values) ~= "table" then return false end
     local parts = {}
     for k, v in pairs(values) do
@@ -5069,6 +6383,25 @@ local function save_settings_to_disk(values)
         end
     end
     return saved
+end
+
+local function save_settings_to_disk(values)
+    if type(values) ~= "table" then return false end
+    if uml_internal.defer_settings_save then
+        uml_internal.deferred_settings_values = values
+        return true
+    end
+    uml_internal.deferred_settings_values = nil
+    return uml_internal.write_settings_to_disk_now(values)
+end
+
+function uml_internal.flush_deferred_settings()
+    local vals = uml_internal.deferred_settings_values
+    if type(vals) == "table" then
+        uml_internal.deferred_settings_values = nil
+        return uml_internal.write_settings_to_disk_now(vals)
+    end
+    return false
 end
 
 -- Fallback stubs for ModOptionsMenu and ModBindingsMenu
@@ -5155,7 +6488,7 @@ if rawget(_G, "ModOptionsMenu") == nil then
             if not s and not cbs then return false end
             local owner = s and s.owner_mod or uml_internal.current_mod_owner()
             if s then
-                local click_fn = s.on_click or s.callback or s.on_press or s.action
+                local click_fn = s.on_click or s.callback or s.on_press or s.action or s.run
                 if type(click_fn) == "function" then
                     local ok_c, err_c = uml_internal.call_with_owner(owner, click_fn, id, ...)
                     if not ok_c then
@@ -5272,6 +6605,18 @@ if rawget(_G, "ModOptionsMenu") == nil then
         log = function(...) end
     }
     _G.ModOptionsMenu = mom_stub
+    function uml_internal.settings_raw_get(k, default_v)
+        if type(k) ~= "string" or k == "" then return default_v end
+        local v = fallback_opts[k]
+        if v ~= nil then return v end
+        return default_v
+    end
+    function uml_internal.settings_raw_set(k, v)
+        if type(k) ~= "string" or k == "" then return false end
+        fallback_opts[k] = v
+        pcall(save_settings_to_disk, fallback_opts)
+        return true
+    end
     local locale_choices = { "Auto-Detect (Game / Steam / OS)" }
     for i = 1, #UML_OFFICIAL_LOCALES do
         locale_choices[i + 1] = UML_OFFICIAL_LOCALES[i].choice
@@ -5359,6 +6704,9 @@ if rawget(_G, "ModBindingsMenu") == nil then
                 mbm_stub.extended.count = #order_binds
             end
             local def_k = extract_default_key(default_key, extra)
+            if def_k == "off" and default_key == nil and registry_binds[id] and type(registry_binds[id].default) == "string" and registry_binds[id].default ~= "off" then
+                def_k = registry_binds[id].default
+            end
             local cat = (type(extra) == "table" and type(extra.category) == "string" and extra.category) or "Keybindings"
             local allow_menu = (type(extra) == "table" and extra.allow_in_menu == true) or false
             local owner_mod = uml_internal.current_mod_owner(
@@ -6222,7 +7570,7 @@ uml_internal.engine_api = {
 uml_internal.wrap_domain_colon_safe(uml_internal.engine_api)
 
 uml_api = {
-    version = "2.0.4",
+    version = "2.0.5",
     api = 2,
     mods = uml_registered_mods,
     config = uml_internal.config_api,
@@ -7500,13 +8848,17 @@ pcall(function()
                                                 canon_name = matched_cand or key_0x
                                             end
 
-                                            if canon_name ~= "boot" and canon_name ~= "core/boot" then
+                                            local opt_target = (not d_name) and prefix:match("^%-%-%s*HD2%-Options:%s*([^\r\n]+)") or nil
+                                            if opt_target then
+                                                uml_internal.absorb_manager_options(opt_target, script_content, key_0x, p_num)
+                                            elseif canon_name ~= "boot" and canon_name ~= "core/boot" then
                                                 local chunk, c_err = loadstring(script_content, "@" .. canon_name)
                                                 if chunk then
                                                     local preload_fn = function(...)
                                                         local prev_active = active_loading_mod_name
                                                         active_loading_mod_name = canon_name
                                                         local mod_chef = create_chef_mod_context(canon_name)
+                                                        uml_internal.bind_chef_env(chunk, mod_chef)
                                                         local ok, res = safe_run_with_watchdog(chunk, 8.0, mod_chef, canon_name)
                                                         active_loading_mod_name = prev_active
                                                         if ok then
@@ -7582,6 +8934,26 @@ end)
 -- Subsystem 14: Apply Topological Dependency Sort prior to execution
 candidate_modules = topological_sort_modules(candidate_modules, mod_dependencies)
 
+-- Pre-heal Helmet Headlamp settings file before mod execution if an older UML wrote 'off' or 'mbm_imported'
+pcall(function()
+    local appdata = os.getenv and os.getenv("APPDATA")
+    if type(appdata) ~= "string" or appdata == "" then return end
+    local hh_path = appdata .. "\\Arrowhead\\Helldivers2\\helmet_headlamp_debug_settings.txt"
+    local rf = io.open(hh_path, "rb")
+    if not rf then return end
+    local txt = rf:read("*a")
+    rf:close()
+    if type(txt) == "string" and (txt:find("=off", 1, true) or txt:find("mbm_imported=", 1, true)) then
+        local fixed = txt:gsub("headlamp_toggle=off", "headlamp_toggle=l")
+                         :gsub("headlamp_mode=off", "headlamp_mode=n")
+                         :gsub("mbm_imported=[^\r\n]*\r?\n?", "")
+        if fixed ~= txt then
+            local wf = io.open(hh_path, "wb")
+            if wf then wf:write(fixed); wf:close() end
+        end
+    end
+end)
+
 -- Safe Execution Loop with True CSL Vararg Injection, Loose Mod Loading & Hang Watchdog
 local app = stingray and stingray.Application
 local loaded_count = 0
@@ -7646,6 +9018,7 @@ for _, mod_name in ipairs(candidate_modules) do
                 set_active_sentinel(mod_name)
 
                 local chunk = nil
+                local chunk_is_source = false
                 if loose_path then
                     loose_mod_names[#loose_mod_names + 1] = mod_name
                     local f = io.open(loose_path, "rb")
@@ -7657,6 +9030,7 @@ for _, mod_name in ipairs(candidate_modules) do
                             local l_fn, l_err = loadstring(content, "@" .. loose_path)
                             if l_fn then
                                 chunk = l_fn
+                                chunk_is_source = true
                             else
                                 log_write(string.format("[LooseMod] Syntax error compiling '%s': %s", loose_path, tostring(l_err)))
                             end
@@ -7666,6 +9040,7 @@ for _, mod_name in ipairs(candidate_modules) do
 
                 if not chunk and patch_chunks[mod_name] then
                     chunk = patch_chunks[mod_name]
+                    chunk_is_source = true
                 end
 
                 if not chunk and package.preload[mod_name] then
@@ -7687,7 +9062,9 @@ for _, mod_name in ipairs(candidate_modules) do
                     local prev_active = active_loading_mod_name
                     active_loading_mod_name = mod_name
                     local mod_chef = create_chef_mod_context(mod_name)
+                    local update_before, shutdown_before, hooks_before = rawget(_G, "update"), rawget(_G, "shutdown"), #update_order
                     if chunk then
+                        if chunk_is_source then uml_internal.bind_chef_env(chunk, mod_chef) end
                         -- Subsystem 4: True CSL Vararg Parameter Injection (chunk(mod_chef, mod_name))
                         ok, res = safe_run_with_watchdog(chunk, 8.0, mod_chef, mod_name)
                     else
@@ -7712,6 +9089,12 @@ for _, mod_name in ipairs(candidate_modules) do
                         loaded_modules[mod_name] = "loaded"
                         loaded_count = loaded_count + 1
                         log_write("Loaded mod: " .. mod_name .. (loose_path and (" (loose: " .. loose_path .. ")") or (patch_discovered_mods[mod_name] and " (archive patch)" or "")))
+                        if chunk then
+                            pcall(uml_internal.adopt_chef_hooks, mod_name, res, update_before, shutdown_before, hooks_before)
+                        end
+                        if uml_internal.ffi_is_stub and uml_internal.ffi_users[mod_name] then
+                            uml_internal.inert_ffi_mods[#uml_internal.inert_ffi_mods + 1] = mod_name
+                        end
                     else
                         local err_msg = tostring(res):gsub("[\r\n]+", " ")
                         loaded_modules[mod_name] = "failed: " .. err_msg
@@ -7728,6 +9111,10 @@ for _, mod_name in ipairs(candidate_modules) do
 end
 
 log_write(string.format("Startup finished: %d loaded, %d failed, %d not installed", loaded_count, failed_count, not_installed_count))
+if #uml_internal.inert_ffi_mods > 0 then
+    log_write(string.format("[EAC] %d mod(s) loaded but need native memory access (ffi / ReadProcessMemory), which the game has blocked since update 7.2.0 (Easy Anti-Cheat); they cannot work under any loader until their authors update them: %s",
+        #uml_internal.inert_ffi_mods, table.concat(uml_internal.inert_ffi_mods, ", ")))
+end
 
 -- Run after_startup callbacks
 local ran_cb, failed_cb = 0, 0
@@ -7879,33 +9266,59 @@ pcall(function()
     if loaded_modules["mods/patpatpatrick/helmet_headlamp"] == "loaded" then
         local appdata = os.getenv("APPDATA")
         local hh_path = appdata and (appdata .. "\\Arrowhead\\Helldivers2\\helmet_headlamp_debug_settings.txt") or nil
+        local hh_toggle_id = "patpatpatrick.helmet_headlamp.toggle"
+        local hh_mode_id = "patpatpatrick.helmet_headlamp.mode"
         local hh_chat_id = "patpatpatrick.helmet_headlamp.chat_guard"
+        local init_t, init_m, init_cg = "l", "n", true
+        if hh_path then
+            local rf = io.open(hh_path, "rb")
+            if rf then
+                local txt = rf:read("*a")
+                rf:close()
+                if type(txt) == "string" then
+                    local ft = txt:match("headlamp_toggle=([^\r\n]+)")
+                    local fm = txt:match("headlamp_mode=([^\r\n]+)")
+                    local fc = txt:match("chat_guard=([^\r\n]+)")
+                    if ft and ft ~= "" and ft ~= "off" then init_t = ft end
+                    if fm and fm ~= "" and fm ~= "off" then init_m = fm end
+                    if fc == "false" then init_cg = false end
+                end
+            end
+        end
+        local mbm = rawget(_G, "ModBindingsMenu")
+        if mbm and type(mbm.register_binding) == "function" then
+            mbm.register_binding(hh_toggle_id, "Toggle Headlamp", init_t, { category = "Helmet Headlamp", owner_mod = "mods/patpatpatrick/helmet_headlamp" })
+            mbm.register_binding(hh_mode_id, "Switch Headlamp Mode", init_m, { category = "Helmet Headlamp", owner_mod = "mods/patpatpatrick/helmet_headlamp" })
+            if mom.get(hh_toggle_id) == "off" then pcall(mbm.set_binding, hh_toggle_id, init_t) end
+            if mom.get(hh_mode_id) == "off" then pcall(mbm.set_binding, hh_mode_id, init_m) end
+        end
         if not (mom.registered and mom.registered[hh_chat_id]) then
             mom.register_option(hh_chat_id, {
                 mod = "Helmet Headlamp",
                 label = "Chat Guard (Block Hotkeys in Chat)",
                 type = "toggle",
-                default = true,
+                default = init_cg,
                 description = "Ignore headlamp hotkeys while the in-game text chat box is open."
             })
         end
         local function write_hh_cfg()
             if not hh_path then return end
-            local f = io.open(hh_path, "w")
+            local f = io.open(hh_path, "wb")
             if not f then return end
-            local t_key = tostring(mom.get("patpatpatrick.helmet_headlamp.toggle") or "l")
-            local m_key = tostring(mom.get("patpatpatrick.helmet_headlamp.mode") or "n")
+            local t_key = tostring(mom.get(hh_toggle_id) or "l")
+            local m_key = tostring(mom.get(hh_mode_id) or "n")
+            if t_key == "off" then t_key = "" end
+            if m_key == "off" then m_key = "" end
             local cg = (mom.get(hh_chat_id) ~= false) and "true" or "false"
             f:write("headlamp_toggle=" .. t_key .. "\n")
             f:write("headlamp_mode=" .. m_key .. "\n")
             f:write("chat_guard=" .. cg .. "\n")
-            f:write("mbm_imported=headlamp_toggle\n")
             f:write("#end\n")
             f:close()
         end
         mom.on_change(hh_chat_id, function() pcall(write_hh_cfg) end)
-        mom.on_change("patpatpatrick.helmet_headlamp.toggle", function() pcall(write_hh_cfg) end)
-        mom.on_change("patpatpatrick.helmet_headlamp.mode", function() pcall(write_hh_cfg) end)
+        mom.on_change(hh_toggle_id, function() pcall(write_hh_cfg) end)
+        mom.on_change(hh_mode_id, function() pcall(write_hh_cfg) end)
     end
 end)
 
@@ -7922,10 +9335,12 @@ end
 
 local function master_update(dt, ...)
     frame_counter = frame_counter + 1
+    pcall(uml_internal.chef_host.step, dt)
     pcall(handle_uml_menu_input, dt)
     if type(prev_master_update) == "function" and prev_master_update ~= master_update then
         prev_master_update(dt, ...)
     end
+    pcall(uml_internal.chef_host.post_step)
     if uml_ui_open or #uml_notifications > 0 then
         uml_last_drawn_frame = frame_counter
         pcall(draw_in_game_menu)
@@ -7964,7 +9379,7 @@ pcall(function()
         local res_path = appdata .. "/UniversalModLoader/in_game_test_results.json"
         local f_res = io.open(res_path, "w")
         if f_res then
-            f_res:write(string.format('{\n  "status": "PASSED",\n  "version": "2.0.4",\n  "apis": true,\n  "f9_menu": true,\n  "options": true,\n  "loaded_count": %d,\n  "failed_count": %d\n}\n', loaded_count, failed_count))
+            f_res:write(string.format('{\n  "status": "PASSED",\n  "version": "2.0.5",\n  "apis": true,\n  "f9_menu": true,\n  "options": true,\n  "loaded_count": %d,\n  "failed_count": %d\n}\n', loaded_count, failed_count))
             f_res:close()
             log_write("[TEST_MODE] In-Game Test Diagnostics Written to " .. tostring(res_path))
         end
