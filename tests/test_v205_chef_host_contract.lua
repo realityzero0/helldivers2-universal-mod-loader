@@ -62,6 +62,9 @@ function M.update(dt)
     chef.rect(100, 100, 40, 8, chef.color(255, 255, 255, 255), 900)
     chef.triangle(0, 0, 10, 0, 5, 10, chef.color(255, 0, 0, 255), 900)
 end
+function M.render()
+    M.renders = (M.renders or 0) + 1
+end
 function M.shutdown() M.closed = true end
 rawset(_G, 'CONTRACT_CHEF_HUD', M)
 return M
@@ -497,6 +500,22 @@ test("Chef update hooks clamp huge Alt-Tab dt spikes", function()
     wtime = wtime + 0.02
     _G.update(25.0)
     assert(type(m.last_dt) == "number" and m.last_dt > 0 and m.last_dt <= 0.5, "expected clamped dt, got " .. tostring(m.last_dt))
+end)
+test("returned M.render hook and chef.on('render') run during engine render()", function()
+    local m = rawget(_G, "CONTRACT_CHEF_HUD")
+    local extra_renders = 0
+    _G.ChefSharedLoader.on("render", function() extra_renders = extra_renders + 1 end)
+    local before = m.renders or 0
+    _G.render()
+    _G.render()
+    assert((m.renders or 0) == before + 2, "expected returned M.render to run twice, got " .. tostring((m.renders or 0) - before))
+    assert(extra_renders == 2, "expected chef.on('render') to run twice, got " .. tostring(extra_renders))
+end)
+test("chef.watch().stop() stops and removes the watch cleanly without error", function()
+    local w = _G.ChefSharedLoader.watch({ ["00000000cafebabe"] = true }, 1)
+    assert(type(w.stop) == "function", "watch handle must expose stop()")
+    w.stop()
+    assert(w.stopped == true and w.paused == true and #w.items == 0)
 end)
 test("nothing was written to the real %APPDATA%", function()
     local real = real_getenv("APPDATA")

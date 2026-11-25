@@ -1,4 +1,4 @@
--- Universal Mod Loader v2.0.5 for Helldivers 2 (Steam Builds 25988413 / 26088801 / 26251122+ / Lua 5.1)
+-- Universal Mod Loader v2.0.6 for Helldivers 2 (Steam Builds 25988413 / 26088801 / 26251122+ / Lua 5.1)
 -- Replaces engine boot resource 0xF476DF93691895FA in bundle 9ba626afa44a3aa3
 -- Unifies All Helldivers 2 Modding Standards:
 --   1. Bingus Shared Loader (CowboyBingus / v17 / v20 / v21 / API 1 + BingusRuntime v1)
@@ -55,6 +55,11 @@ local active_loading_mod_name = nil
 local uml_internal = {
     update_order_set = {},
     update_hook_owners = {},
+    render_hooks = {},
+    render_order = {},
+    render_order_set = {},
+    render_hook_owners = {},
+    render_hook_errors = {},
     shutdown_order_set = {},
     shutdown_hook_owners = {},
     mom_cb_owners = {},
@@ -109,6 +114,26 @@ function uml_internal.register_update_hook(id, fn, owner_mod, interval_sec)
         if id:find(":timer_", 1, true) then
             uml_internal.dead_timer_pending = true
         end
+    end
+    return true
+end
+
+function uml_internal.register_render_hook(id, fn, owner_mod)
+    if type(id) ~= "string" or id == "" then return false end
+    if type(fn) ~= "function" and fn ~= nil then return false end
+    if fn ~= nil then
+        owner_mod = uml_internal.current_mod_owner(owner_mod)
+        if not uml_internal.render_order_set[id] then
+            uml_internal.render_order_set[id] = true
+            uml_internal.render_order[#uml_internal.render_order + 1] = id
+        end
+        uml_internal.render_hooks[id] = fn
+        uml_internal.render_hook_errors[id] = nil
+        if owner_mod then uml_internal.render_hook_owners[id] = owner_mod end
+    else
+        uml_internal.render_hooks[id] = nil
+        uml_internal.render_hook_errors[id] = nil
+        uml_internal.render_hook_owners[id] = nil
     end
     return true
 end
@@ -196,7 +221,7 @@ local function open_log()
         if f then
             log_handle = f
             active_log_path = path
-            f:write(string.format("\n--- Universal Mod Loader v2.0.5 Booted at %s ---\n", os.date and os.date("%Y-%m-%d %H:%M:%S") or "now"))
+            f:write(string.format("\n--- Universal Mod Loader v2.0.6 Booted at %s ---\n", os.date and os.date("%Y-%m-%d %H:%M:%S") or "now"))
             f:flush()
             return log_handle
         end
@@ -491,20 +516,20 @@ end
 set_active_uml_locale("auto")
 
 local UML_UI_STRINGS = {
-    ["en"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
-    ["en-GB"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
-    ["fr"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - SOUS-MENUS MODS", pane_mods = "[VOLET: LISTE MODS]", pane_opts = "[VOLET: OPTIONS]", mods = "MODS (%d)  [1-0 ACCES]", submenu = "SOUS-MENU: %s  |  ELEMENT %d/%d  |  PAGE %d/%d (%d/PG)", on = "< OUI >", off = "< NON >", desc_mod = "MOD SELECTIONNE: %s (%d OPTIONS) - APPUYEZ SUR DROITE, ESPACE OU 1-0 POUR MODIFIER LES OPTIONS. [-]/[=] POUR TAILLE UI." },
-    ["de"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - MOD-UNTERMENUS", pane_mods = "[BEREICH: MOD-LISTE]", pane_opts = "[BEREICH: OPTIONEN]", mods = "MODS (%d)  [1-0 WAHL]", submenu = "UNTERMENU: %s  |  EINTRAG %d/%d  |  SEITE %d/%d (%d/S.)", on = "< EIN >", off = "< AUS >", desc_mod = "AKTIVER MOD: %s (%d OPTIONEN) - RECHTS, LEERTASTE ODER 1-0 ZUM BEARBEITEN DRUCKEN. [-]/[=] FUR UI-SKALIERUNG." },
-    ["it"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - SOTTOMENU MOD", pane_mods = "[PANNELLO: MOD]", pane_opts = "[PANNELLO: OPZIONI]", mods = "MOD (%d)  [1-0 SALTA]", submenu = "SOTTOMENU: %s  |  VOCE %d/%d  |  PAG %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "MOD SELEZIONATA: %s (%d OPZIONI) - PREMI DESTRA, SPAZIO O 1-0 PER MODIFICARE LE OPZIONI. [-]/[=] SCALA UI." },
-    ["es"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  ELEMENTO %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PULSA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
-    ["es-419"]  = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  ELEMENTO %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PRESIONA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
-    ["pt-BR"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - SUBMENUS DE MODS", pane_mods = "[PAINEL: MODS]", pane_opts = "[PAINEL: OPCOES]", mods = "MODS (%d)  [1-0 ATALHO]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAG %d/%d (%d/PG)", on = "< LIG >", off = "< DES >", desc_mod = "MOD SELECIONADO: %s (%d OPCOES) - PRESSIONE DIREITA, ESPACO OU 1-0 PARA EDITAR OPCOES. [-]/[=] ESCALA UI." },
-    ["pl"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - PODMENU MODOW", pane_mods = "[PANEL: LISTA MODOW]", pane_opts = "[PANEL: OPCJE]", mods = "MODY (%d)  [1-0 SKOK]", submenu = "PODMENU: %s  |  POZYCJA %d/%d  |  STR %d/%d (%d/STR)", on = "< WL >", off = "< WYL >", desc_mod = "WYBRANY MOD: %s (%d OPCJI) - NACISNIJ PRAWO, SPACJE LUB 1-0 ABY EDYTOWAC OPCJE. [-]/[=] SKALA UI." },
-    ["ru"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - PODMENYU MODOV", pane_mods = "[PANEL: SPISOK MODOV]", pane_opts = "[PANEL: NASTROYKI]", mods = "MODY (%d)  [1-0 VYBOR]", submenu = "PODMENYU: %s  |  ELEMENT %d/%d  |  STR %d/%d (%d/STR)", on = "< VKL >", off = "< VYKL >", desc_mod = "VYBRAN MOD: %s (%d OPTSIY) - NAZHMITE VPRAVO, PROBEL ILI 1-0 DLYA NASTROYKI. [-]/[=] MASSHTAB UI." },
-    ["ja"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - MOD SUBMENUS (JA)", pane_mods = "[PANE: MOD ICHIRAN]", pane_opts = "[PANE: SETTEI]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  KOMOKU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SENTAKU MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
-    ["ko"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - MOD SUBMENUS (KO)", pane_mods = "[PANE: MOD MOKROK]", pane_opts = "[PANE: SEOLJEONG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  HANGMOK %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SEONTAEK MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
-    ["zh-Hans"] = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - MOD SUBMENUS (ZHS)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XIANGMU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
-    ["zh-Hant"] = { hdr = "UNIVERSAL MOD LOADER v2.0.5 - MOD SUBMENUS (ZHT)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XIANGMU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["en"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.6 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
+    ["en-GB"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.6 - MOD SUBMENUS", pane_mods = "[PANE: MOD LIST]", pane_opts = "[PANE: MOD OPTIONS]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SELECTED MOD: %s (%d OPTIONS) - PRESS RIGHT ARROW, SPACE, OR 1-0 TO EDIT THIS MOD'S OPTIONS. PRESS [-] OR [=] TO ADJUST UI SCALE." },
+    ["fr"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.6 - SOUS-MENUS MODS", pane_mods = "[VOLET: LISTE MODS]", pane_opts = "[VOLET: OPTIONS]", mods = "MODS (%d)  [1-0 ACCES]", submenu = "SOUS-MENU: %s  |  ELEMENT %d/%d  |  PAGE %d/%d (%d/PG)", on = "< OUI >", off = "< NON >", desc_mod = "MOD SELECTIONNE: %s (%d OPTIONS) - APPUYEZ SUR DROITE, ESPACE OU 1-0 POUR MODIFIER LES OPTIONS. [-]/[=] POUR TAILLE UI." },
+    ["de"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.6 - MOD-UNTERMENUS", pane_mods = "[BEREICH: MOD-LISTE]", pane_opts = "[BEREICH: OPTIONEN]", mods = "MODS (%d)  [1-0 WAHL]", submenu = "UNTERMENU: %s  |  EINTRAG %d/%d  |  SEITE %d/%d (%d/S.)", on = "< EIN >", off = "< AUS >", desc_mod = "AKTIVER MOD: %s (%d OPTIONEN) - RECHTS, LEERTASTE ODER 1-0 ZUM BEARBEITEN DRUCKEN. [-]/[=] FUR UI-SKALIERUNG." },
+    ["it"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.6 - SOTTOMENU MOD", pane_mods = "[PANNELLO: MOD]", pane_opts = "[PANNELLO: OPZIONI]", mods = "MOD (%d)  [1-0 SALTA]", submenu = "SOTTOMENU: %s  |  VOCE %d/%d  |  PAG %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "MOD SELEZIONATA: %s (%d OPZIONI) - PREMI DESTRA, SPAZIO O 1-0 PER MODIFICARE LE OPZIONI. [-]/[=] SCALA UI." },
+    ["es"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.6 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  ELEMENTO %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PULSA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
+    ["es-419"]  = { hdr = "UNIVERSAL MOD LOADER v2.0.6 - SUBMENUS DE MODS", pane_mods = "[PANEL: LISTA MODS]", pane_opts = "[PANEL: OPCIONES]", mods = "MODS (%d)  [1-0 SALTAR]", submenu = "SUBMENU: %s  |  ELEMENTO %d/%d  |  PAG %d/%d (%d/PG)", on = "< SI >", off = "< NO >", desc_mod = "MOD SELECCIONADO: %s (%d OPCIONES) - PRESIONA DERECHA, ESPACIO O 1-0 PARA EDITAR OPCIONES. [-]/[=] ESCALA UI." },
+    ["pt-BR"]   = { hdr = "UNIVERSAL MOD LOADER v2.0.6 - SUBMENUS DE MODS", pane_mods = "[PAINEL: MODS]", pane_opts = "[PAINEL: OPCOES]", mods = "MODS (%d)  [1-0 ATALHO]", submenu = "SUBMENU: %s  |  ITEM %d/%d  |  PAG %d/%d (%d/PG)", on = "< LIG >", off = "< DES >", desc_mod = "MOD SELECIONADO: %s (%d OPCOES) - PRESSIONE DIREITA, ESPACO OU 1-0 PARA EDITAR OPCOES. [-]/[=] ESCALA UI." },
+    ["pl"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.6 - PODMENU MODOW", pane_mods = "[PANEL: LISTA MODOW]", pane_opts = "[PANEL: OPCJE]", mods = "MODY (%d)  [1-0 SKOK]", submenu = "PODMENU: %s  |  POZYCJA %d/%d  |  STR %d/%d (%d/STR)", on = "< WL >", off = "< WYL >", desc_mod = "WYBRANY MOD: %s (%d OPCJI) - NACISNIJ PRAWO, SPACJE LUB 1-0 ABY EDYTOWAC OPCJE. [-]/[=] SKALA UI." },
+    ["ru"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.6 - PODMENYU MODOV", pane_mods = "[PANEL: SPISOK MODOV]", pane_opts = "[PANEL: NASTROYKI]", mods = "MODY (%d)  [1-0 VYBOR]", submenu = "PODMENYU: %s  |  ELEMENT %d/%d  |  STR %d/%d (%d/STR)", on = "< VKL >", off = "< VYKL >", desc_mod = "VYBRAN MOD: %s (%d OPTSIY) - NAZHMITE VPRAVO, PROBEL ILI 1-0 DLYA NASTROYKI. [-]/[=] MASSHTAB UI." },
+    ["ja"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.6 - MOD SUBMENUS (JA)", pane_mods = "[PANE: MOD ICHIRAN]", pane_opts = "[PANE: SETTEI]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  KOMOKU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SENTAKU MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["ko"]      = { hdr = "UNIVERSAL MOD LOADER v2.0.6 - MOD SUBMENUS (KO)", pane_mods = "[PANE: MOD MOKROK]", pane_opts = "[PANE: SEOLJEONG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  HANGMOK %d/%d  |  PAGE %d/%d (%d/PG)", on = "< ON >", off = "< OFF >", desc_mod = "SEONTAEK MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["zh-Hans"] = { hdr = "UNIVERSAL MOD LOADER v2.0.6 - MOD SUBMENUS (ZHS)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XIANGMU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
+    ["zh-Hant"] = { hdr = "UNIVERSAL MOD LOADER v2.0.6 - MOD SUBMENUS (ZHT)", pane_mods = "[PANE: MOD LIEBIAO]", pane_opts = "[PANE: XUANXIANG]", mods = "MODS (%d)  [1-0 JUMP]", submenu = "SUBMENU: %s  |  XIANGMU %d/%d  |  PAGE %d/%d (%d/PG)", on = "< KAI >", off = "< GUAN >", desc_mod = "DANGQIAN MOD: %s (%d OPTIONS) - PRESS RIGHT, SPACE, OR 1-0 TO EDIT OPTIONS. [-]/[=] UI SCALE." },
 }
 
 -- Unicode -> ASCII Transliteration Tables (Latin-1, Latin Extended-A, Cyrillic, Fullwidth, Punctuation)
@@ -3334,6 +3359,25 @@ end
 _G.__uml_inner_init = init
 
 render = function(...)
+    for i = 1, #uml_internal.render_order do
+        local id = uml_internal.render_order[i]
+        local fn = uml_internal.render_hooks[id]
+        if fn and type(fn) == "function" then
+            local ok, err = uml_internal.call_with_owner(uml_internal.render_hook_owners[id], fn, ...)
+            if not ok then
+                local cnt = (uml_internal.render_hook_errors[id] or 0) + 1
+                uml_internal.render_hook_errors[id] = cnt
+                record_uml_error("on_render:" .. tostring(id), err)
+                if cnt <= 3 then
+                    pcall(print, "[UniversalLoader] render hook " .. tostring(id) .. " error: " .. tostring(err))
+                end
+                if cnt >= 10 then
+                    uml_internal.render_hooks[id] = nil
+                    pcall(print, "[UniversalLoader] [CIRCUIT BREAKER] render hook " .. tostring(id) .. " disabled after 10 errors.")
+                end
+            end
+        end
+    end
     uml_internal.dispatch_bml_hooks("render", ...)
     return prev_render(...)
 end
@@ -4696,9 +4740,17 @@ function uml_internal.build_chef_host()
             norm[clean] = true
             H.watched_kinds[clean] = true
         end
-        local w = { kinds = norm, every = tonumber(every) or 2, next = 0, items = {}, generation = 0, paused = false }
+        local w = { kinds = norm, every = tonumber(every) or 2, next = 0, items = {}, generation = 0, paused = false, stopped = false }
         w.pause = function() w.paused = true end
-        w.resume = function() w.paused = false end
+        w.resume = function() if not w.stopped then w.paused = false end end
+        w.stop = function()
+            w.stopped = true
+            w.paused = true
+            w.items = {}
+            for i = #H.watches, 1, -1 do
+                if H.watches[i] == w then table.remove(H.watches, i) end
+            end
+        end
         H.watches[#H.watches + 1] = w
         return w
     end
@@ -5400,23 +5452,30 @@ function uml_internal.bind_chef_env(chunk, ctx)
     return (pcall(setfenv, chunk, setmetatable({ chef = ctx }, { __index = _G, __newindex = _G })))
 end
 
--- Chef runs the hooks a mod returns (M.update each frame, M.shutdown at exit). A mod that hooked the game's update()
--- itself, or registered its own UML update hook while loading, already runs and is left alone (no double frames).
-function uml_internal.adopt_chef_hooks(mod_name, res, update_before, shutdown_before, hooks_before)
+-- Chef runs the hooks a mod returns (M.update, M.render, M.shutdown). A mod that hooked the game's callbacks
+-- itself, or registered its own UML hook while loading, already runs and is left alone (no double frames).
+function uml_internal.adopt_chef_hooks(mod_name, res, update_before, shutdown_before, hooks_before, render_before, render_hooks_before)
     if type(res) ~= "table" or res == _G or rawget(res, "is_chef_loader") ~= nil or rawget(res, "installed") == false then
         return false
     end
-    local upd, shut = rawget(res, "update"), rawget(res, "shutdown")
-    if type(upd) ~= "function" and type(shut) ~= "function" then return false end
+    local upd, rend, shut = rawget(res, "update"), rawget(res, "render"), rawget(res, "shutdown")
+    if type(upd) ~= "function" and type(rend) ~= "function" and type(shut) ~= "function" then return false end
+    local H = uml_internal.chef_host
     local adopted = {}
     if type(upd) == "function" and rawget(_G, "update") == update_before and #update_order == hooks_before then
-        local H = uml_internal.chef_host
         uml_internal.register_update_hook(mod_name .. ":chef_hooks", function(dt, ...)
             local step_dt = tonumber(dt)
             if not step_dt or step_dt ~= step_dt or step_dt < 0 or step_dt > 0.5 then step_dt = 1 / 60 end
             H.run_hook(upd, step_dt, ...)
         end, mod_name)
         adopted[#adopted + 1] = "update"
+    end
+    if type(rend) == "function" and (render_before == nil or rawget(_G, "render") == render_before)
+        and (render_hooks_before == nil or #uml_internal.render_order == render_hooks_before) then
+        uml_internal.register_render_hook(mod_name .. ":chef_render", function(...)
+            H.run_hook(rend, ...)
+        end, mod_name)
+        adopted[#adopted + 1] = "render"
     end
     if type(shut) == "function" and rawget(_G, "shutdown") == shutdown_before then
         uml_internal.register_shutdown_hook(mod_name .. ":chef_shutdown", function(...) return shut(...) end, mod_name)
@@ -5531,7 +5590,7 @@ end
 chef_api = {
     api_level = 3,
     loader_name = "UniversalModLoader",
-    loader_version = "2.0.5",
+    loader_version = "2.0.6",
     is_chef_loader = true,
     is_universal_loader = true,
     shared = chef_shared_state,
@@ -5545,6 +5604,9 @@ chef_api = {
         if event_name == "update" then
             local id = active_loading_mod_name and (active_loading_mod_name .. "_chef_update") or ("chef_update_" .. tostring(#update_order + 1))
             return uml_internal.register_update_hook(id, callback, active_loading_mod_name)
+        elseif event_name == "render" then
+            local id = active_loading_mod_name and (active_loading_mod_name .. "_chef_render") or ("chef_render_" .. tostring(#uml_internal.render_order + 1))
+            return uml_internal.register_render_hook(id, callback, active_loading_mod_name)
         elseif event_name == "shutdown" then
             local id = active_loading_mod_name and (active_loading_mod_name .. "_chef_shut") or ("chef_shut_" .. tostring(#shutdown_order + 1))
             return uml_internal.register_shutdown_hook(id, callback, active_loading_mod_name)
@@ -5755,7 +5817,7 @@ create_chef_mod_context = function(mod_name)
     ctx = {
         api_level = 3,
         loader_name = "UniversalModLoader",
-        loader_version = "2.0.5",
+        loader_version = "2.0.6",
         is_chef_loader = true,
         is_universal_loader = true,
         mod_name = mod_name,
@@ -7570,7 +7632,7 @@ uml_internal.engine_api = {
 uml_internal.wrap_domain_colon_safe(uml_internal.engine_api)
 
 uml_api = {
-    version = "2.0.5",
+    version = "2.0.6",
     api = 2,
     mods = uml_registered_mods,
     config = uml_internal.config_api,
@@ -8338,6 +8400,28 @@ local function unregister_mod_hooks(mod_name)
     end
     local shut_prefix = "uml_shut_" .. mod_name
     local chef_shut = mod_name .. "_chef_shut"
+    local chef_rend = mod_name .. "_chef_render"
+    local function matches_render_id(k)
+        return k == mod_name or k == chef_rend
+            or k:sub(1, #id_prefix) == id_prefix
+            or aliases[uml_internal.render_hook_owners[k]]
+    end
+    for k in pairs(uml_internal.render_hooks) do
+        if matches_render_id(k) then
+            uml_internal.render_hooks[k] = nil
+            uml_internal.render_hook_errors[k] = nil
+            uml_internal.render_hook_owners[k] = nil
+        end
+    end
+    for i = #uml_internal.render_order, 1, -1 do
+        local k = uml_internal.render_order[i]
+        if matches_render_id(k) then
+            table.remove(uml_internal.render_order, i)
+            uml_internal.render_order_set[k] = nil
+            uml_internal.render_hook_errors[k] = nil
+            uml_internal.render_hook_owners[k] = nil
+        end
+    end
     local function matches_shut_id(k)
         return k == mod_name or k == shut_prefix or k == chef_shut
             or k:sub(1, #id_prefix) == id_prefix
@@ -9062,7 +9146,7 @@ for _, mod_name in ipairs(candidate_modules) do
                     local prev_active = active_loading_mod_name
                     active_loading_mod_name = mod_name
                     local mod_chef = create_chef_mod_context(mod_name)
-                    local update_before, shutdown_before, hooks_before = rawget(_G, "update"), rawget(_G, "shutdown"), #update_order
+                    local snap = { rawget(_G, "update"), rawget(_G, "shutdown"), #update_order, rawget(_G, "render"), #uml_internal.render_order }
                     if chunk then
                         if chunk_is_source then uml_internal.bind_chef_env(chunk, mod_chef) end
                         -- Subsystem 4: True CSL Vararg Parameter Injection (chunk(mod_chef, mod_name))
@@ -9090,7 +9174,7 @@ for _, mod_name in ipairs(candidate_modules) do
                         loaded_count = loaded_count + 1
                         log_write("Loaded mod: " .. mod_name .. (loose_path and (" (loose: " .. loose_path .. ")") or (patch_discovered_mods[mod_name] and " (archive patch)" or "")))
                         if chunk then
-                            pcall(uml_internal.adopt_chef_hooks, mod_name, res, update_before, shutdown_before, hooks_before)
+                            pcall(uml_internal.adopt_chef_hooks, mod_name, res, snap[1], snap[2], snap[3], snap[4], snap[5])
                         end
                         if uml_internal.ffi_is_stub and uml_internal.ffi_users[mod_name] then
                             uml_internal.inert_ffi_mods[#uml_internal.inert_ffi_mods + 1] = mod_name
@@ -9379,7 +9463,7 @@ pcall(function()
         local res_path = appdata .. "/UniversalModLoader/in_game_test_results.json"
         local f_res = io.open(res_path, "w")
         if f_res then
-            f_res:write(string.format('{\n  "status": "PASSED",\n  "version": "2.0.5",\n  "apis": true,\n  "f9_menu": true,\n  "options": true,\n  "loaded_count": %d,\n  "failed_count": %d\n}\n', loaded_count, failed_count))
+            f_res:write(string.format('{\n  "status": "PASSED",\n  "version": "2.0.6",\n  "apis": true,\n  "f9_menu": true,\n  "options": true,\n  "loaded_count": %d,\n  "failed_count": %d\n}\n', loaded_count, failed_count))
             f_res:close()
             log_write("[TEST_MODE] In-Game Test Diagnostics Written to " .. tostring(res_path))
         end

@@ -1,5 +1,18 @@
 # Changelog — Helldivers 2 Universal Mod Loader
 
+## [2.0.6] - Chef Render Hook Adoption (Helldiver POV Fix) & Watch Handle Cleanup
+
+### Bug Fixes
+1. **Chef Shared Loader `M.render` & `chef.on("render", ...)` Support (Fixes Helldiver POV - First Person Camera)**
+   * Added circuit-breaker-protected `uml_internal.register_render_hook()` dispatched in engine `render()` before `prev_render(...)` (with automatic hot-reload cleanup in `unregister_mod_hooks`).
+   * Updated `uml_internal.adopt_chef_hooks()` to adopt returned **`M.render`** hooks (wrapped in `H.run_hook` so Stingray temporary vectors/bytes are released cleanly) alongside `M.update` and `M.shutdown`.
+   * Wired `chef.on("render", callback)` to `register_render_hook()` instead of falling through to the `hd2rt` event bus.
+   * Resolves **Helldiver POV - First Person Camera** (`mods/helldiver_pov/first_person`) and any other Chef API 3 mod that relies on `M.render` / `chef.on("render")` to position the camera or draw during render.
+2. **Chef `chef.watch()` Handle `.stop()` Method (Fixes Sentry Animation Probe Shutdown Error)**
+   * Added `w.stop()` to watch handles returned by `chef.watch()`, cleanly stopping and removing the watch from `H.watches` on mod shutdown (`attempt to call field 'stop' (a nil value)` in `mods/reee/sentry_animation_probe`).
+
+---
+
 ## [2.0.5] - Full Chef Shared Loader v1.5.3 Host, Helmet Headlamp 1.6.0 & Mod Compatibility Suite
 
 ### Mod Compatibility & Runtime Enhancements
